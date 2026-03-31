@@ -8,7 +8,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "setup-db": "node setup-db.mjs",
+    "check-schema": "node check-schema.mjs"
   },
   "keywords": [],
   "author": "",

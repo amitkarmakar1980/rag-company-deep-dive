@@ -338,6 +338,25 @@ export async function submitFeedback(
   return data;
 }
 
+// Regeneration helpers
+export async function deleteReportForRequest(requestId: string): Promise<void> {
+  // report_sections cascade-delete when report is deleted
+  const { error } = await supabaseAdmin
+    .from("reports")
+    .delete()
+    .eq("request_id", requestId);
+  if (error && error.code !== "PGRST116") throw error;
+}
+
+export async function deleteSourcesForRequest(requestId: string): Promise<void> {
+  // chunks → embeddings cascade-delete when sources are deleted
+  const { error } = await supabaseAdmin
+    .from("sources")
+    .delete()
+    .eq("request_id", requestId);
+  if (error) throw error;
+}
+
 // Vector search (for retrieval)
 export async function semanticSearch(
   requestId: string,

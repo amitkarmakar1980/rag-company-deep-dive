@@ -3,6 +3,7 @@ import { submitFeedback } from "@/lib/db/operations";
 
 export async function POST(req: NextRequest) {
   try {
+    // sectionKey is optional — null/omitted means report-level feedback
     const { reportId, sectionKey, feedbackType } = await req.json();
 
     if (!["useful", "not_useful"].includes(feedbackType)) {
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await submitFeedback(reportId, sectionKey, feedbackType);
+    await submitFeedback(reportId, sectionKey ?? "overall", feedbackType);
 
     return NextResponse.json({ success: true });
   } catch (error) {

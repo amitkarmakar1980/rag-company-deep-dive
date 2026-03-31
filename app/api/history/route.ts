@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 
 export async function GET(_req: NextRequest) {
   try {
+    const supabase = createRouteClient();
     const {
-      data: { session },
-    } = await supabaseAdmin.auth.getSession();
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!user) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
@@ -18,15 +20,14 @@ export async function GET(_req: NextRequest) {
       .from("deep_dive_requests")
       .select(
         `
-        id:id,
+        id,
         role_title,
         created_at,
-        company_id:company_id,
         companies(name),
         reports(recommendation)
       `
       )
-      .eq("user_id", session.user.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(20);
 

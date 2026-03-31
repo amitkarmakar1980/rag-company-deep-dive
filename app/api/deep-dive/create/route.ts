@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/db/supabase";
+import { NextRequest, NextResponse, after } from "next/server";
+import { createRouteClient } from "@/lib/db/supabase-server";
 import {
   getOrCreateCompany,
   createDeepDiveRequest,
@@ -17,12 +17,13 @@ export async function POST(req: NextRequest) {
       customUrls,
     } = await req.json();
 
-    // Get current user
+    // Get current user from session cookie
+    const supabase = createRouteClient();
     const {
-      data: { session },
-    } = await supabaseAdmin.auth.getSession();
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (!session) {
+    if (!user) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // Create deep dive request
     const request = await createDeepDiveRequest(
-      session.user.id,
+      user.id,
       company.id,
       roleTitle,
       jobDescription,
@@ -42,9 +43,19 @@ export async function POST(req: NextRequest) {
       profileContext
     );
 
-    // Trigger ingestion in background (you'd queue this)
-    // For MVP, we'll do it synchronously but this should be async
-    triggerIngestion(request.id, company.id, companyName, companyUrl, customUrls, jobDescription, profileContext);
+    // Run ingestion + report generation after the response is sent
+    // This keeps the function alive on Vercel without blocking the client
+    after(async () => {
+      await runPipeline(
+        request.id,
+        company.id,
+        companyName,
+        companyUrl,
+        customUrls,
+        jobDescription,
+        profileContext
+      );
+    });
 
     return NextResponse.json({
       requestId: request.id,
@@ -59,8 +70,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Start ingestion process
-async function triggerIngestion(
+async function runPipeline(
   requestId: string,
   companyId: string,
   companyName: string,
@@ -72,10 +82,7 @@ async function triggerIngestion(
   try {
     await updateDeepDiveStatus(requestId, "fetching_sources");
 
-    // This would normally be a background job
-    // For MVP, we'll import inline
     const { ingestSources } = await import("@/lib/ingestion/ingest");
-
     const result = await ingestSources(
       requestId,
       companyId,
@@ -88,17 +95,14 @@ async function triggerIngestion(
 
     if (result.success) {
       await updateDeepDiveStatus(requestId, "generating_report");
-
-      // Trigger report generation
       const { assembleReport } = await import("@/lib/report/assembleReport");
       await assembleReport(requestId);
-
       await updateDeepDiveStatus(requestId, "completed");
     } else {
       await updateDeepDiveStatus(requestId, "failed");
     }
   } catch (error) {
-    console.error("Ingestion trigger error:", error);
+    console.error("Pipeline error:", error);
     await updateDeepDiveStatus(requestId, "failed");
   }
 }

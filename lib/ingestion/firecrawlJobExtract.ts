@@ -1,5 +1,6 @@
 import { fetchPageWithFirecrawl } from "./firecrawl";
 import { generateStructuredCompletion } from "@/lib/ai/openai";
+import { cleanContent } from "./clean";
 
 /**
  * Attempts to extract job details from a job description page using Firecrawl.
@@ -22,22 +23,26 @@ export async function fetchAndExtractJobDetails(
       : (typeof html === 'string' && html.length > 100 ? html : undefined);
     if (!rawText) return null;
 
-    // Clean the extracted text
-    let cleanedText = cleanContent(rawText);
-    // Truncate to 10,000 characters (approx. 3,000 tokens)
-    if (cleanedText.length > 10000) {
-      cleanedText = cleanedText.slice(0, 10000);
-    }
+      // Clean the extracted text
+      let cleanedText = cleanContent(rawText);
 
-    // LOGGING: Output the cleaned and truncated text and prompt to the server console
-    console.log("[JD Extraction] Cleaned & truncated text for LLM:", cleanedText.slice(0, 1000));
-    const prompt = `Extract the following fields from the job description below. Respond ONLY with valid JSON in this format:\n{\n  "companyName": string, // company name\n  "roleTitle": string, // job title\n  "companyUrl": string, // company website (if present)\n  "jobDescription": string // full job description text\n}\n\nJob Description:\n"""\n${cleanedText}\n"""`;
-    console.log("[JD Extraction] LLM prompt:", prompt.slice(0, 1000));
+      // Remove leading JSON blobs or boilerplate before the real job description
+      // This will remove any leading lines that look like JSON objects or arrays
+      cleanedText = cleanedText.replace(/^(\s*`?\{[\s\S]+?\}`?\s*)+/g, "");
 
-  try {
-    const result = await generateStructuredCompletion(prompt);
-    // Fallback: add companyUrl from URL if missing
-    if (!result.companyUrl) {
+      // Try to find the first occurrence of a job description heading
+      const jobDescMatch = cleanedText.match(/(Job description|Overview|Responsibilities|Role|About the job|Position summary|^#\s*Job|^##\s*Job)/i);
+      if (jobDescMatch && jobDescMatch.index !== undefined) {
+        cleanedText = cleanedText.slice(jobDescMatch.index);
+      }
+
+      // Truncate to 10,000 characters (approx. 3,000 tokens)
+      if (cleanedText.length > 10000) {
+        cleanedText = cleanedText.slice(0, 10000);
+      }
+      // Remove leading JSON blobs or boilerplate before the real job description
+      // This will remove any leading lines that look like JSON objects or arrays
+      cleanedText = cleanedText.replace(/^(\s*`?\{[\s\S]+?\}`?\s*)+/g, "");
       try {
         const u = new URL(url);
         result.companyUrl = u.origin;

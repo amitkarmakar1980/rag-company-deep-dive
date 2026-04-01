@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
-const FIRECRAWL_BASE_URL = "https://api.firecrawl.dev/v1";
+const FIRECRAWL_BASE_URL = "https://api.firecrawl.dev/v2";
 
 export interface FirecrawlResponse {
   success: boolean;
@@ -21,6 +21,8 @@ export interface FirecrawlResponse {
 export async function fetchPageWithFirecrawl(
   url: string
 ): Promise<FirecrawlResponse> {
+  // TEMP LOG: Print the Firecrawl API key (first 8 chars only for safety)
+  console.log("[Firecrawl] Using API key:", FIRECRAWL_API_KEY ? FIRECRAWL_API_KEY.slice(0, 8) + "..." : "undefined");
   if (!FIRECRAWL_API_KEY) {
     // Fallback to simple axios fetch if API key not set
     return fetchPageWithAxios(url);
@@ -35,7 +37,8 @@ export async function fetchPageWithFirecrawl(
       },
       {
         headers: {
-          "X-Api-Key": FIRECRAWL_API_KEY,
+          Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+          "Content-Type": "application/json",
         },
         timeout: 30000,
       }

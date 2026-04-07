@@ -1,5 +1,6 @@
 
 import Link from "next/link";
+import { HomepageResumePanel } from "@/components/HomepageResumePanel";
 
 export default function Home() {
   return (
@@ -20,6 +21,11 @@ export default function Home() {
           >
             Generate a Deep Dive
           </Link>
+        </div>
+
+        {/* Resume panel — saves to localStorage, used on all deep dives */}
+        <div className="mt-10 max-w-2xl mx-auto">
+          <HomepageResumePanel />
         </div>
 
         <div className="mt-20 grid md:grid-cols-2 gap-12">

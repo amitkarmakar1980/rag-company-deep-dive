@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { StructuredReport } from "@/lib/types";
+import { StructuredReport, CandidateOverlayData } from "@/lib/types";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -52,6 +52,42 @@ export async function generateFullReport(prompt: string): Promise<StructuredRepo
   }
 
   return parsed;
+}
+
+/**
+ * Generate the candidate overlay (personalization layer) from resume + role context.
+ * This is a separate, lighter LLM call that does NOT redo company/role analysis.
+ */
+export async function generateCandidateOverlay(prompt: string): Promise<CandidateOverlayData> {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an executive career coach and interview strategist. Return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
+      },
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    temperature: 0.4,
+    max_tokens: 4000,
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) throw new Error("Empty response from LLM");
+
+  const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+
+  try {
+    return JSON.parse(cleaned) as CandidateOverlayData;
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error("No JSON found in overlay response");
+    return JSON.parse(match[0]) as CandidateOverlayData;
+  }
 }
 
 /**

@@ -46,6 +46,7 @@ YOUR TASK: Produce a complete structured intelligence brief. You must:
 3. Optimize for interview usefulness. Every section should make the candidate smarter about what matters in this specific situation.
 4. Be direct and calibrated. If evidence is thin, say what you can infer and flag the gap — do not invent.
 5. Write like a strategy analyst, not a chat assistant. Crisp bullets, executive prose where prose is appropriate.
+6. SWOT sections (company_swot and role_swot) MUST have a minimum of 5 distinct, specific points in EACH quadrant (strengths, weaknesses, opportunities, threats). Do not stop at 2-3. Push for depth — surface non-obvious signals.
 
 ---
 
@@ -108,10 +109,34 @@ RETURN A SINGLE VALID JSON OBJECT matching this exact schema. Do not include any
   },
 
   "company_swot": {
-    "strengths": [{ "point": "<strength>", "evidence": "<source or signal>" }],
-    "weaknesses": [{ "point": "<weakness>", "evidence": "<source or signal>" }],
-    "opportunities": [{ "point": "<opportunity>", "evidence": "<source or signal>" }],
-    "threats": [{ "point": "<threat>", "evidence": "<source or signal>" }]
+    "strengths": [
+      { "point": "<strength — min 5 required>", "evidence": "<source or signal>" },
+      { "point": "<strength>", "evidence": "<source or signal>" },
+      { "point": "<strength>", "evidence": "<source or signal>" },
+      { "point": "<strength>", "evidence": "<source or signal>" },
+      { "point": "<strength>", "evidence": "<source or signal>" }
+    ],
+    "weaknesses": [
+      { "point": "<weakness — min 5 required>", "evidence": "<source or signal>" },
+      { "point": "<weakness>", "evidence": "<source or signal>" },
+      { "point": "<weakness>", "evidence": "<source or signal>" },
+      { "point": "<weakness>", "evidence": "<source or signal>" },
+      { "point": "<weakness>", "evidence": "<source or signal>" }
+    ],
+    "opportunities": [
+      { "point": "<opportunity — min 5 required>", "evidence": "<source or signal>" },
+      { "point": "<opportunity>", "evidence": "<source or signal>" },
+      { "point": "<opportunity>", "evidence": "<source or signal>" },
+      { "point": "<opportunity>", "evidence": "<source or signal>" },
+      { "point": "<opportunity>", "evidence": "<source or signal>" }
+    ],
+    "threats": [
+      { "point": "<threat — min 5 required>", "evidence": "<source or signal>" },
+      { "point": "<threat>", "evidence": "<source or signal>" },
+      { "point": "<threat>", "evidence": "<source or signal>" },
+      { "point": "<threat>", "evidence": "<source or signal>" },
+      { "point": "<threat>", "evidence": "<source or signal>" }
+    ]
   },
 
   "role_snapshot": {
@@ -123,10 +148,34 @@ RETURN A SINGLE VALID JSON OBJECT matching this exact schema. Do not include any
   },
 
   "role_swot": {
-    "strengths": [{ "point": "<strength of this role/charter>", "evidence": "<optional>" }],
-    "weaknesses": [{ "point": "<weakness or ambiguity in charter>", "evidence": "<optional>" }],
-    "opportunities": [{ "point": "<opportunity for impact in this role>", "evidence": "<optional>" }],
-    "threats": [{ "point": "<execution risk or threat to this role>", "evidence": "<optional>" }]
+    "strengths": [
+      { "point": "<strength of this role/charter — min 5 required>", "evidence": "<optional>" },
+      { "point": "<strength>", "evidence": "<optional>" },
+      { "point": "<strength>", "evidence": "<optional>" },
+      { "point": "<strength>", "evidence": "<optional>" },
+      { "point": "<strength>", "evidence": "<optional>" }
+    ],
+    "weaknesses": [
+      { "point": "<weakness or ambiguity in charter — min 5 required>", "evidence": "<optional>" },
+      { "point": "<weakness>", "evidence": "<optional>" },
+      { "point": "<weakness>", "evidence": "<optional>" },
+      { "point": "<weakness>", "evidence": "<optional>" },
+      { "point": "<weakness>", "evidence": "<optional>" }
+    ],
+    "opportunities": [
+      { "point": "<opportunity for impact in this role — min 5 required>", "evidence": "<optional>" },
+      { "point": "<opportunity>", "evidence": "<optional>" },
+      { "point": "<opportunity>", "evidence": "<optional>" },
+      { "point": "<opportunity>", "evidence": "<optional>" },
+      { "point": "<opportunity>", "evidence": "<optional>" }
+    ],
+    "threats": [
+      { "point": "<execution risk or threat to this role — min 5 required>", "evidence": "<optional>" },
+      { "point": "<threat>", "evidence": "<optional>" },
+      { "point": "<threat>", "evidence": "<optional>" },
+      { "point": "<threat>", "evidence": "<optional>" },
+      { "point": "<threat>", "evidence": "<optional>" }
+    ]
   },
 
   "why_role_exists_now": {

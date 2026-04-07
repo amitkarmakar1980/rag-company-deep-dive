@@ -155,6 +155,77 @@ export interface SectionGenerationInput {
   };
 }
 
+// ─── Candidate Overlay Types ────────────────────────────────────────────────
+
+export type CandidateFitLevel = "strong" | "moderate" | "stretch" | "mismatch";
+export type OverlayStatus = "pending" | "generating" | "completed" | "failed";
+
+export interface CandidateAlignment {
+  alignment: string;
+  resume_evidence: string;
+}
+
+export interface CandidateConcern {
+  concern: string;
+  likely_question: string;
+  severity: "high" | "medium" | "low";
+}
+
+export interface CandidateGap {
+  gap: string;
+  reframe: string;
+  talking_point: string;
+}
+
+export interface StoryRecommendation {
+  theme: string;
+  suggested_story: string;
+  maps_to_requirement: string;
+}
+
+export interface CandidateOverlayData {
+  candidate_role_match: {
+    overall_fit: CandidateFitLevel;
+    match_score: number; // 1–10
+    rationale: string;
+    key_alignments: CandidateAlignment[];
+    key_gaps: string[];
+  };
+  strengths_to_emphasize: {
+    strengths: Array<{
+      strength: string;
+      evidence_from_resume: string;
+      why_it_matters_for_role: string;
+    }>;
+  };
+  interviewer_concerns: {
+    concerns: CandidateConcern[];
+  };
+  gap_management: {
+    gaps: CandidateGap[];
+  };
+  story_recommendations: {
+    stories: StoryRecommendation[];
+  };
+  positioning_strategy: {
+    headline: string;
+    narrative_arc: string;
+    tell_me_about_yourself: string;
+    what_to_avoid: string[];
+  };
+}
+
+export interface CandidateOverlay {
+  id: string;
+  request_id: string;
+  resume_id: string;
+  overlay_json: CandidateOverlayData | null;
+  status: OverlayStatus;
+  error_message?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── Structured Report Section Types ───────────────────────────────────────
 
 export interface SWOTItem {

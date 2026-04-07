@@ -96,6 +96,31 @@ CREATE TABLE IF NOT EXISTS feedback_events (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Candidate resumes (uploaded per user; reusable across multiple deep dives)
+CREATE TABLE IF NOT EXISTS candidate_resumes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  raw_text TEXT NOT NULL,
+  status VARCHAR(50) DEFAULT 'pending',  -- pending | parsed | failed
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Candidate overlay — personalization layer generated from resume + base report
+CREATE TABLE IF NOT EXISTS candidate_overlays (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id UUID NOT NULL REFERENCES deep_dive_requests(id) ON DELETE CASCADE,
+  resume_id UUID NOT NULL REFERENCES candidate_resumes(id),
+  overlay_json JSONB,
+  status VARCHAR(50) DEFAULT 'pending',  -- pending | generating | completed | failed
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(request_id, resume_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_candidate_resumes_user_id ON candidate_resumes(user_id);
+CREATE INDEX IF NOT EXISTS idx_candidate_overlays_request_id ON candidate_overlays(request_id);
+
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_companies_normalized_name ON companies(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_deep_dive_requests_user_id ON deep_dive_requests(user_id);

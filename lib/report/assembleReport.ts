@@ -18,33 +18,37 @@ const BROAD_RETRIEVAL_QUERY =
   "competitive market growth momentum executive vision";
 
 const SECTION_TITLES: Record<keyof StructuredReport, string> = {
+  interview_decision_summary: "Interview Decision Summary",
+  five_minute_brief: "5-Minute Interview Brief",
   executive_summary: "Executive Summary",
   assessment_snapshot: "Assessment Snapshot",
+  strategic_bet_analysis: "Strategic Importance of This Role",
+  likely_interview_agenda: "Likely Interview Agenda",
+  questions_to_ask: "Questions to Ask",
+  risks_red_flags: "Risks & Red Flags",
+  unknowns_to_validate: "Unknowns to Validate Live",
   company_snapshot: "Company Snapshot",
   company_swot: "Company SWOT",
   role_snapshot: "Role Snapshot",
   role_swot: "Role SWOT",
   why_role_exists_now: "Why This Role Exists Now",
-  strategic_bet_analysis: "Why This Role Could Be a Strategic Bet",
-  candidate_positioning: "Candidate Positioning",
-  questions_to_ask: "Questions to Ask",
-  risks_red_flags: "Risks & Red Flags",
-  evidence_gaps: "Evidence Gaps",
 };
 
 const SECTION_ORDER: (keyof StructuredReport)[] = [
+  "interview_decision_summary",
+  "five_minute_brief",
   "executive_summary",
   "assessment_snapshot",
+  "strategic_bet_analysis",
+  "likely_interview_agenda",
+  "questions_to_ask",
+  "risks_red_flags",
+  "unknowns_to_validate",
   "company_snapshot",
   "company_swot",
   "role_snapshot",
   "role_swot",
   "why_role_exists_now",
-  "strategic_bet_analysis",
-  "candidate_positioning",
-  "questions_to_ask",
-  "risks_red_flags",
-  "evidence_gaps",
 ];
 
 export async function assembleReport(requestId: string): Promise<Report | null> {
@@ -142,7 +146,7 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
         // Store the structured data as JSON string in the content_markdown column
         JSON.stringify(sectionData),
         // Only attach citations to evidence-heavy sections
-        ["company_snapshot", "company_swot", "role_snapshot", "why_role_exists_now"].includes(
+        ["company_snapshot", "company_swot", "role_snapshot", "role_swot", "why_role_exists_now", "strategic_bet_analysis"].includes(
           sectionKey
         )
           ? citationsForSection

@@ -213,6 +213,15 @@ export interface CandidateOverlayData {
     tell_me_about_yourself: string;
     what_to_avoid: string[];
   };
+  objection_handling: {
+    objections: Array<{
+      objection: string;
+      why_they_think_this: string;
+      how_to_respond: string;
+      proof_points: string[];
+      what_not_to_say: string;
+    }>;
+  };
 }
 
 export interface CandidateOverlay {
@@ -265,6 +274,7 @@ export interface QuestionItem {
   why_it_matters: string;
   strong_answer: string;
   weak_answer: string;
+  follow_up?: string;
 }
 
 export interface RiskFlag {
@@ -281,11 +291,53 @@ export type StrategicClassification =
   | "Tactical Fill"
   | "Unclear";
 
+export type PursueRecommendation =
+  | "Aggressive Pursue"
+  | "Selective Pursue"
+  | "Cautious Pursue"
+  | "Pass";
+
+export interface InterviewAgendaDimension {
+  dimension: string;
+  what_they_validate: string;
+  what_they_worry_about: string;
+  proof_needed: string;
+  what_to_demonstrate: string;
+}
+
+export interface UnknownToValidate {
+  what_is_unclear: string;
+  why_it_matters: string;
+  question_to_ask: string;
+  reassuring_answer: string;
+  concerning_answer: string;
+}
+
 export interface StructuredReport {
+  // ── Decision layer (top of page) ───────────────────────────────────────
+  interview_decision_summary: {
+    pursue_recommendation: PursueRecommendation;
+    why: string;
+    best_positioning_angle: string;
+    biggest_interviewer_concern: string;
+    top_3_questions: string[];
+    interview_watchout: string;
+    red_flag_to_validate: string;
+  };
+  five_minute_brief: {
+    what_company_cares_about: string;
+    why_role_exists: string;
+    likely_success_metric: string;
+    best_candidate_angle: string;
+    biggest_concern_to_address: string;
+    top_3_smart_questions: string[];
+    most_important_risk: string;
+  };
+  // ── Core analysis ───────────────────────────────────────────────────────
   executive_summary: {
     recommendation: RecommendationType;
     recommendation_rationale: string;
-    key_bullets: string[]; // 5–7 max
+    key_bullets: string[];
     pursuit_stance: string;
   };
   assessment_snapshot: {
@@ -296,6 +348,31 @@ export interface StructuredReport {
     candidate_fit: ScoreDetail;
     evidence_strength: ScoreDetail;
   };
+  strategic_bet_analysis: {
+    classification: StrategicClassification;
+    confidence: ConfidenceLevel;
+    why_we_believe_this: string[];
+    supporting_evidence: string[];
+    what_could_disprove: string[];
+    candidate_implication: {
+      scope_impact: string;
+      visibility: string;
+      career_upside: string;
+      interview_adaptation: string;
+    };
+  };
+  likely_interview_agenda: {
+    dimensions: InterviewAgendaDimension[];
+  };
+  questions_to_ask: {
+    must_ask: QuestionItem[];
+    good_questions: QuestionItem[];
+  };
+  risks_red_flags: RiskFlag[];
+  unknowns_to_validate: {
+    unknowns: UnknownToValidate[];
+  };
+  // ── Deep context (collapsible) ──────────────────────────────────────────
   company_snapshot: {
     business_model: string;
     strategic_priorities: string[];
@@ -317,32 +394,5 @@ export interface StructuredReport {
     primary_driver: string;
     supporting_signals: string[];
     confidence: ConfidenceLevel;
-  };
-  strategic_bet_analysis: {
-    classification: StrategicClassification;
-    confidence_score: number; // 0–1
-    rationale: string[];
-    risks_caveats: string[];
-    interview_implication: string;
-  };
-  candidate_positioning: {
-    framing_strategy: string;
-    strengths_to_emphasize: string[];
-    potential_gaps: string[];
-    gap_reframes: string[];
-    what_not_to_overclaim: string[];
-  };
-  questions_to_ask: {
-    strategy: QuestionItem[];
-    role_scope: QuestionItem[];
-    team_execution: QuestionItem[];
-    success_metrics: QuestionItem[];
-    risks_constraints: QuestionItem[];
-  };
-  risks_red_flags: RiskFlag[];
-  evidence_gaps: {
-    gaps: string[];
-    additional_sources_needed: string[];
-    overall_evidence_quality: EvidenceQuality;
   };
 }

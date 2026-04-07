@@ -44,6 +44,7 @@ YOUR TASK: Produce a candidate personalization overlay. You must:
 3. Optimize for interview usefulness, not confidence-boosting. Every point should improve their actual performance.
 4. Match specificity to the role level. Director/VP candidates are judged on scope, strategic clarity, and leadership of ambiguous problems — not task execution.
 5. The "tell_me_about_yourself" must be a complete, usable 3–4 sentence narrative the candidate can actually say in an interview.
+6. For objection_handling, surface the 3–5 hardest objections this specific candidate will face — not generic ones. Ground them in what's actually missing or unusual in their background relative to this role.
 
 ---
 
@@ -108,6 +109,18 @@ RETURN A SINGLE VALID JSON OBJECT matching this exact schema. No text outside th
     "narrative_arc": "<3-4 sentences: where they've been, what thread connects it, why this role is the logical next chapter>",
     "tell_me_about_yourself": "<a complete, interview-ready 3-4 sentence answer they can say verbatim — specific, not generic>",
     "what_to_avoid": ["<specific thing this candidate might say/do that would hurt them in this interview>"]
+  },
+
+  "objection_handling": {
+    "objections": [
+      {
+        "objection": "<the specific objection an interviewer might raise — phrased as they would think it, e.g. 'They've never managed a P&L this large'>",
+        "why_they_think_this": "<what in the resume or background pattern triggers this concern>",
+        "how_to_respond": "<a direct, confident response strategy — not defensive, not dismissive. Acknowledge, reframe, redirect.>",
+        "proof_points": ["<specific result or experience from resume that directly counters this objection>"],
+        "what_not_to_say": "<the response that would confirm their fear — what to avoid saying>"
+      }
+    ]
   }
 }
 

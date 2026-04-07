@@ -5,9 +5,13 @@ import { SectionShell, BulletList, ProseBlock, ConfidencePill } from "./report/S
 import { ExecutiveSummarySection } from "./report/ExecutiveSummary";
 import { AssessmentSnapshotSection } from "./report/AssessmentSnapshot";
 import { SWOTCard } from "./report/SWOTCard";
-import { StrategicBetSection } from "./report/StrategicBetCard";
 import { QuestionsSection } from "./report/QuestionsCard";
 import { RisksSection } from "./report/RisksCard";
+import { InterviewDecisionSummary } from "./report/InterviewDecisionSummary";
+import { FiveMinuteBrief } from "./report/FiveMinuteBrief";
+import { StrategicImportanceCard } from "./report/StrategicImportanceCard";
+import { LikelyInterviewAgenda } from "./report/LikelyInterviewAgenda";
+import { UnknownsToValidate } from "./report/UnknownsToValidate";
 
 interface Citation {
   source_id: string;
@@ -63,6 +67,66 @@ export function ReportSectionCard({
 
   // Route to section-specific renderer
   switch (sectionKey) {
+    case "interview_decision_summary":
+      return (
+        <SectionShell
+          id={sectionKey}
+          title={title}
+          subtitle="Pursue recommendation, positioning angle, top questions, and key watchouts"
+          feedback={feedback}
+        >
+          <InterviewDecisionSummary data={data as StructuredReport["interview_decision_summary"]} />
+        </SectionShell>
+      );
+
+    case "five_minute_brief":
+      return (
+        <SectionShell
+          id={sectionKey}
+          title={title}
+          subtitle="Optimized for pre-interview skimming — everything you need in 5 minutes"
+          feedback={feedback}
+        >
+          <FiveMinuteBrief data={data as StructuredReport["five_minute_brief"]} />
+        </SectionShell>
+      );
+
+    case "strategic_bet_analysis":
+      return (
+        <SectionShell
+          id={sectionKey}
+          title={title}
+          subtitle="Classification of this role's strategic significance and what it means for you"
+          feedback={feedback}
+        >
+          <StrategicImportanceCard data={data as StructuredReport["strategic_bet_analysis"]} />
+        </SectionShell>
+      );
+
+    case "likely_interview_agenda":
+      return (
+        <SectionShell
+          id={sectionKey}
+          title={title}
+          subtitle="What interviewers are validating, worrying about, and need to see"
+          feedback={feedback}
+        >
+          <LikelyInterviewAgenda data={data as StructuredReport["likely_interview_agenda"]} />
+        </SectionShell>
+      );
+
+    case "unknowns_to_validate":
+      return (
+        <SectionShell
+          id={sectionKey}
+          title={title}
+          subtitle="Important uncertainties — what to ask live and how to interpret the answers"
+          feedback={feedback}
+        >
+          <UnknownsToValidate data={data as StructuredReport["unknowns_to_validate"]} />
+        </SectionShell>
+      );
+
     case "executive_summary":
       return (
         <SectionShell
@@ -98,6 +162,7 @@ export function ReportSectionCard({
           evidenceBacked={evidenceBacked}
           feedback={feedback}
           collapsible
+          defaultCollapsed
         >
           <ProseBlock label="Business Model" value={d.business_model} />
           <BulletGroup label="Strategic Priorities" items={d.strategic_priorities} />
@@ -117,6 +182,7 @@ export function ReportSectionCard({
           subtitle="Relevant to role context and interview positioning"
           feedback={feedback}
           collapsible
+          defaultCollapsed
         >
           <SWOTCard data={data as StructuredReport["company_swot"]} />
         </SectionShell>
@@ -131,6 +197,7 @@ export function ReportSectionCard({
           subtitle="Inferred charter, success metrics, and first-year expectations"
           feedback={feedback}
           collapsible
+          defaultCollapsed
         >
           <ProseBlock label="Likely Charter" value={d.likely_charter} />
           <BulletGroup label="Success Metrics (12 months)" items={d.success_metrics} />
@@ -150,6 +217,7 @@ export function ReportSectionCard({
           subtitle="Strengths, weaknesses, opportunities, and threats specific to this role's charter"
           feedback={feedback}
           collapsible
+          defaultCollapsed
         >
           <SWOTCard data={data as StructuredReport["role_swot"]} />
         </SectionShell>
@@ -172,37 +240,6 @@ export function ReportSectionCard({
             <ConfidencePill level={d.confidence} />
           </div>
           {citations && <CitationList citations={citations} />}
-        </SectionShell>
-      );
-    }
-
-    case "strategic_bet_analysis":
-      return (
-        <SectionShell
-          id={sectionKey}
-          title={title}
-          subtitle="Classification of this role's strategic significance to the company"
-          feedback={feedback}
-        >
-          <StrategicBetSection data={data as StructuredReport["strategic_bet_analysis"]} />
-        </SectionShell>
-      );
-
-    case "candidate_positioning": {
-      const d = data as StructuredReport["candidate_positioning"];
-      return (
-        <SectionShell
-          id={sectionKey}
-          title={title}
-          subtitle="How to frame your background and navigate this specific interview"
-          feedback={feedback}
-          collapsible
-        >
-          <ProseBlock label="Framing Strategy" value={d.framing_strategy} />
-          <BulletGroup label="Strengths to Lead With" items={d.strengths_to_emphasize} />
-          <BulletGroup label="Potential Gaps to Expect" items={d.potential_gaps} />
-          <BulletGroup label="How to Address Gaps" items={d.gap_reframes} />
-          <BulletGroup label="What Not to Overclaim" items={d.what_not_to_overclaim} />
         </SectionShell>
       );
     }

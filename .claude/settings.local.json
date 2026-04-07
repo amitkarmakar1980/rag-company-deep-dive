@@ -5,7 +5,8 @@
       "Bash(node -e \"console.log\\(require\\(''./node_modules/@supabase/auth-helpers-nextjs/package.json''\\).version\\)\")",
       "Bash(node -e \"const m = require\\(''@supabase/auth-helpers-nextjs''\\); console.log\\(m.createServerClient.toString\\(\\).slice\\(0, 200\\)\\)\")",
       "Bash(node -e \"const {createServerClient} = require\\(''@supabase/auth-helpers-nextjs''\\); console.log\\(createServerClient.length\\); console.log\\(createServerClient.toString\\(\\).slice\\(0, 500\\)\\)\")",
-      "Bash(node -e \"const m = require\\(''next/server''\\); console.log\\(''after'' in m\\)\")"
+      "Bash(node -e \"const m = require\\(''next/server''\\); console.log\\(''after'' in m\\)\")",
+      "Bash(npx tsc:*)"
     ]
   }
 }

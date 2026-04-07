@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createRouteClient } from "@/lib/db/supabase-server";
 import {
   getOrCreateCompany,
@@ -18,16 +18,13 @@ export async function POST(req: NextRequest) {
     } = await req.json();
 
     // Get current user from session cookie
-    const supabase = createRouteClient();
+    const supabase = createRouteClient(req);
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     // Get or create company
@@ -43,10 +40,11 @@ export async function POST(req: NextRequest) {
       profileContext
     );
 
-    // Run ingestion + report generation after the response is sent
-    // This keeps the function alive on Vercel without blocking the client
-    after(async () => {
-      await runPipeline(
+    // Fire-and-forget: kick off pipeline without blocking the response.
+    // setImmediate defers execution until after the response is flushed.
+    // Works in both dev and production (Node.js runtime).
+    setImmediate(() => {
+      runPipeline(
         request.id,
         company.id,
         companyName,
@@ -54,17 +52,19 @@ export async function POST(req: NextRequest) {
         customUrls,
         jobDescription,
         profileContext
+      ).catch((err) =>
+        console.error("[Pipeline] Unhandled top-level error:", err)
       );
     });
 
-    return NextResponse.json({
-      requestId: request.id,
-      status: "pending",
-    });
+    return NextResponse.json({ requestId: request.id, status: "pending" });
   } catch (error) {
     console.error("Create deep dive error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to create deep dive" },
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to create deep dive",
+      },
       { status: 500 }
     );
   }
@@ -79,10 +79,13 @@ async function runPipeline(
   jobDescription: string | undefined,
   profileContext: string | undefined
 ) {
+  console.log(`[Pipeline] START requestId=${requestId} company=${companyName}`);
   try {
     await updateDeepDiveStatus(requestId, "fetching_sources");
+    console.log("[Pipeline] Status → fetching_sources");
 
     const { ingestSources } = await import("@/lib/ingestion/ingest");
+    console.log("[Pipeline] Calling ingestSources...");
     const result = await ingestSources(
       requestId,
       companyId,
@@ -92,17 +95,29 @@ async function runPipeline(
       jobDescription,
       profileContext
     );
+    console.log(
+      `[Pipeline] ingestSources result: success=${result.success} sources=${result.sourcesCreated} chunks=${result.chunksCreated} error=${result.error ?? "none"}`
+    );
 
     if (result.success) {
       await updateDeepDiveStatus(requestId, "generating_report");
+      console.log("[Pipeline] Status → generating_report");
+
       const { assembleReport } = await import("@/lib/report/assembleReport");
+      console.log("[Pipeline] Calling assembleReport...");
       await assembleReport(requestId);
+      console.log("[Pipeline] assembleReport complete");
+
       await updateDeepDiveStatus(requestId, "completed");
+      console.log("[Pipeline] Status → completed ✓");
     } else {
+      console.error(`[Pipeline] ingestSources failed: ${result.error}`);
       await updateDeepDiveStatus(requestId, "failed");
     }
   } catch (error) {
-    console.error("Pipeline error:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[Pipeline] EXCEPTION:", msg);
+    console.error(error);
     await updateDeepDiveStatus(requestId, "failed");
   }
 }

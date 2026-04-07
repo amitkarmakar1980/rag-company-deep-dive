@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    const supabase = createRouteClient();
+    const supabase = createRouteClient(req);
     const {
       data: { user },
     } = await supabase.auth.getUser();

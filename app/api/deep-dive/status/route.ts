@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDeepDiveRequest, getReport } from "@/lib/db/operations";
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: NextRequest) {
   try {
-    const requestId = params.id;
+    const requestId = req.nextUrl.searchParams.get("id");
+
+    if (!requestId) {
+      return NextResponse.json({ error: "Missing id parameter" }, { status: 400 });
+    }
 
     const request = await getDeepDiveRequest(requestId);
     if (!request) {

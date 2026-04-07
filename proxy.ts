@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/auth-helpers-nextjs";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   let res = NextResponse.next({ request: req });
 
   const supabase = createServerClient(

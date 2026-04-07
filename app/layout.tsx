@@ -1,5 +1,7 @@
+
 import type { Metadata } from "next";
 import "./globals.css";
+import { Header } from "@/components/Header";
 
 export const metadata: Metadata = {
   title: "Company Deep-Dive Engine - Candidate Decision Intelligence",
@@ -14,7 +16,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="antialiased bg-white text-gray-900">{children}</body>
+      <body className="antialiased bg-stone-50 text-gray-900" suppressHydrationWarning>
+        <Header />
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse, after } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import {
@@ -9,14 +9,14 @@ import {
 } from "@/lib/db/operations";
 
 export async function POST(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const requestId = params.id;
+    const { id: requestId } = await params;
 
     // Verify auth
-    const supabase = createRouteClient();
+    const supabase = createRouteClient(req);
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -59,8 +59,8 @@ export async function POST(
     await updateDeepDiveStatus(requestId, "pending");
 
     // Run full pipeline after response is sent
-    after(async () => {
-      try {
+    setImmediate(() => {
+      (async () => { try {
         await updateDeepDiveStatus(requestId, "fetching_sources");
         const { ingestSources } = await import("@/lib/ingestion/ingest");
         const result = await ingestSources(
@@ -85,7 +85,7 @@ export async function POST(
       } catch (err) {
         console.error("Regeneration pipeline error:", err);
         await updateDeepDiveStatus(requestId, "failed");
-      }
+      }})();
     });
 
     return NextResponse.json({ requestId, status: "pending" });

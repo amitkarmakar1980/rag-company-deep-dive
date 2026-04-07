@@ -3,10 +3,10 @@ import { getReportById, getReportSections, getRequestSources } from "@/lib/db/op
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const reportId = params.id;
+    const { id: reportId } = await params;
 
     const report = await getReportById(reportId);
     if (!report) {

@@ -40,6 +40,7 @@ export async function ingestSources(
   let stats = { success: true, sourcesCreated: 0, chunksCreated: 0 };
 
   try {
+    console.log(`[Ingest] START requestId=${requestId} jd=${!!jobDescription} profile=${!!profileContext} companyUrl=${companyUrl}`);
     // Assemble sources to fetch
     if (jobDescription) {
       sources.push({
@@ -69,30 +70,33 @@ export async function ingestSources(
     for (const urlSource of urlSources) {
       const response = await fetchPageWithFirecrawl(urlSource.url);
 
-      if (response.success && response.data?.content) {
+      // Firecrawl v2 returns `markdown`; axios fallback returns `content`
+      const pageContent = response.data?.markdown || (response.data as any)?.content;
+      if (response.success && pageContent) {
         sources.push({
           type: urlSource.type as any,
-          content: response.data.content,
-          title: response.data.metadata?.title || urlSource.url,
+          content: pageContent,
+          title: response.data?.metadata?.title || urlSource.url,
           url: urlSource.url,
           priority: urlSource.priority,
         });
       }
     }
 
+    console.log(`[Ingest] ${sources.length} sources to process`);
+
     // Process each source
     for (const source of sources) {
-      await processSource(
-        requestId,
-        companyId,
-        source,
-        stats
-      );
+      console.log(`[Ingest] Processing source: type=${source.type} title="${source.title}"`);
+      await processSource(requestId, companyId, source, stats);
+      console.log(`[Ingest] Source done. totals: sources=${stats.sourcesCreated} chunks=${stats.chunksCreated}`);
     }
 
+    console.log(`[Ingest] COMPLETE sources=${stats.sourcesCreated} chunks=${stats.chunksCreated}`);
     return stats;
   } catch (error) {
-    console.error("Ingestion error:", error);
+    console.error("[Ingest] ERROR:", error instanceof Error ? error.message : error);
+    console.error(error);
     return {
       success: false,
       sourcesCreated: stats.sourcesCreated,

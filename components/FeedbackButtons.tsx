@@ -5,16 +5,12 @@ import { useState } from "react";
 interface FeedbackButtonsProps {
   reportId: string;
   sectionKey: string;
+  compact?: boolean;
 }
 
-export function FeedbackButtons({
-  reportId,
-  sectionKey,
-}: FeedbackButtonsProps) {
+export function FeedbackButtons({ reportId, sectionKey, compact = false }: FeedbackButtonsProps) {
   const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState<"useful" | "not_useful" | null>(
-    null
-  );
+  const [submitted, setSubmitted] = useState<"useful" | "not_useful" | null>(null);
 
   const handleFeedback = async (feedbackType: "useful" | "not_useful") => {
     setLoading(true);
@@ -30,30 +26,50 @@ export function FeedbackButtons({
     }
   };
 
+  if (submitted) {
+    return (
+      <p
+        className="text-xs text-gray-400"
+        role="status"
+        aria-live="polite"
+      >
+        {submitted === "useful" ? "Marked as useful" : "Thanks for the feedback"}
+      </p>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="text-gray-600">Was this helpful?</span>
+    <div
+      className="flex items-center gap-2"
+      role="group"
+      aria-label="Section feedback"
+    >
+      {!compact && (
+        <span className="text-xs text-gray-400" aria-hidden>
+          Helpful?
+        </span>
+      )}
       <button
         onClick={() => handleFeedback("useful")}
-        disabled={loading || submitted !== null}
-        className={`px-3 py-1 rounded ${
-          submitted === "useful"
-            ? "bg-green-100 text-green-700"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        } disabled:opacity-50`}
+        disabled={loading}
+        aria-label="Mark section as useful"
+        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md bg-white text-gray-500 border border-gray-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 disabled:opacity-40 transition-colors"
       >
-        ✓ Useful
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+        </svg>
+        Useful
       </button>
       <button
         onClick={() => handleFeedback("not_useful")}
-        disabled={loading || submitted !== null}
-        className={`px-3 py-1 rounded ${
-          submitted === "not_useful"
-            ? "bg-red-100 text-red-700"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        } disabled:opacity-50`}
+        disabled={loading}
+        aria-label="Mark section as not useful"
+        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-md bg-white text-gray-500 border border-gray-300 hover:bg-red-50 hover:text-red-700 hover:border-red-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 disabled:opacity-40 transition-colors"
       >
-        ✗ Not useful
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+        Not useful
       </button>
     </div>
   );

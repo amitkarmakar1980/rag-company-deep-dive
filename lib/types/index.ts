@@ -77,7 +77,11 @@ export interface Embedding {
 }
 
 // Report types
-export type RecommendationType = "pursue" | "pursue_cautiously" | "avoid" | "need_more_signal";
+export type RecommendationType =
+  | "pursue"
+  | "pursue_cautiously"
+  | "avoid"
+  | "need_more_signal";
 
 export interface ReportScore {
   company_momentum: number;
@@ -148,5 +152,126 @@ export interface SectionGenerationInput {
     company_name: string;
     job_description?: string;
     profile_context?: string;
+  };
+}
+
+// ─── Structured Report Section Types ───────────────────────────────────────
+
+export interface SWOTItem {
+  point: string;
+  evidence?: string;
+}
+
+export interface SWOTSection {
+  strengths: SWOTItem[];
+  weaknesses: SWOTItem[];
+  opportunities: SWOTItem[];
+  threats: SWOTItem[];
+}
+
+export type SignalLabel = "Strong" | "Mixed" | "Weak";
+export type RiskLabel = "Low" | "Medium" | "High";
+export type ConfidenceLevel = "high" | "medium" | "low";
+export type EvidenceBasis = "strong" | "partial" | "inferred";
+export type EvidenceQuality = "strong" | "partial" | "weak";
+
+export interface ScoreDetail {
+  score: number; // 1–10
+  label: SignalLabel;
+  rationale: string;
+  confidence: ConfidenceLevel;
+}
+
+export interface RiskScoreDetail {
+  score: number; // 1–10 (lower is better)
+  label: RiskLabel;
+  rationale: string;
+  confidence: ConfidenceLevel;
+}
+
+export interface QuestionItem {
+  question: string;
+  why_it_matters: string;
+  strong_answer: string;
+  weak_answer: string;
+}
+
+export interface RiskFlag {
+  flag: string;
+  signal: string;
+  severity: "high" | "medium" | "low";
+  impact: string;
+}
+
+export type StrategicClassification =
+  | "Strategic Core Bet"
+  | "Important Enabler"
+  | "Opportunistic Build"
+  | "Tactical Fill"
+  | "Unclear";
+
+export interface StructuredReport {
+  executive_summary: {
+    recommendation: RecommendationType;
+    recommendation_rationale: string;
+    key_bullets: string[]; // 5–7 max
+    pursuit_stance: string;
+  };
+  assessment_snapshot: {
+    company_momentum: ScoreDetail;
+    org_clarity: ScoreDetail;
+    role_leverage: ScoreDetail;
+    execution_risk: RiskScoreDetail;
+    candidate_fit: ScoreDetail;
+    evidence_strength: ScoreDetail;
+  };
+  company_snapshot: {
+    business_model: string;
+    strategic_priorities: string[];
+    momentum_signals: string[];
+    pressure_points: string[];
+    competitive_context: string;
+    evidence_basis: EvidenceBasis;
+  };
+  company_swot: SWOTSection;
+  role_snapshot: {
+    likely_charter: string;
+    success_metrics: string[];
+    key_stakeholders: string[];
+    likely_challenges: string[];
+    first_year_expectations: string[];
+  };
+  role_swot: SWOTSection;
+  why_role_exists_now: {
+    primary_driver: string;
+    supporting_signals: string[];
+    confidence: ConfidenceLevel;
+  };
+  strategic_bet_analysis: {
+    classification: StrategicClassification;
+    confidence_score: number; // 0–1
+    rationale: string[];
+    risks_caveats: string[];
+    interview_implication: string;
+  };
+  candidate_positioning: {
+    framing_strategy: string;
+    strengths_to_emphasize: string[];
+    potential_gaps: string[];
+    gap_reframes: string[];
+    what_not_to_overclaim: string[];
+  };
+  questions_to_ask: {
+    strategy: QuestionItem[];
+    role_scope: QuestionItem[];
+    team_execution: QuestionItem[];
+    success_metrics: QuestionItem[];
+    risks_constraints: QuestionItem[];
+  };
+  risks_red_flags: RiskFlag[];
+  evidence_gaps: {
+    gaps: string[];
+    additional_sources_needed: string[];
+    overall_evidence_quality: EvidenceQuality;
   };
 }

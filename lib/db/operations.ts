@@ -226,7 +226,8 @@ export async function createReport(
     role_leverage: number;
     execution_risk: number;
     candidate_fit: number;
-  }
+  },
+  summaryJson?: Record<string, any>
 ): Promise<Report> {
   const { data, error } = await supabaseAdmin
     .from("reports")
@@ -239,6 +240,7 @@ export async function createReport(
         role_leverage_score: scores.role_leverage,
         execution_risk_score: scores.execution_risk,
         candidate_fit_score: scores.candidate_fit,
+        summary_json: summaryJson ?? null,
         created_at: new Date().toISOString(),
       },
     ])

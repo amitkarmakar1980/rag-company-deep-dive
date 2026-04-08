@@ -45,6 +45,7 @@ export async function GET(
         url: s.url,
         publishedAt: s.published_at,
       })),
+      tokenUsage: report.summary_json?.token_usage ?? null,
       createdAt: report.created_at,
     });
   } catch (error) {

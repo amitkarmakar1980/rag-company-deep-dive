@@ -90,7 +90,7 @@ export async function generateOverlay(overlayId: string): Promise<void> {
       baseRoleSnapshot
     );
 
-    const overlayData: CandidateOverlayData = await generateCandidateOverlay(prompt);
+    const { data: overlayData } = await generateCandidateOverlay(prompt);
 
     // 6. Persist result
     await supabaseAdmin

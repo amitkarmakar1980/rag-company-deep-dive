@@ -17,8 +17,9 @@ import {
 } from "@/components/report/CandidateOverlaySections";
 import { ObjectionHandlingSection } from "@/components/report/ObjectionHandling";
 import { SectionShell } from "@/components/report/SectionShell";
-import { RecommendationType, ReportScore, CandidateOverlayData } from "@/lib/types";
+import { RecommendationType, ReportScore, CandidateOverlayData, ReportTokenUsage } from "@/lib/types";
 import { useResumeStore } from "@/lib/hooks/useResumeStore";
+import { TokenUsagePanel } from "@/components/report/TokenUsagePanel";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,7 @@ interface Report {
     url?: string;
     publishedAt?: string;
   }>;
+  tokenUsage: ReportTokenUsage | null;
   createdAt: string;
 }
 
@@ -650,6 +652,11 @@ export default function ReportPage() {
             </h2>
             <SourcesPanel sources={report.sources} />
           </section>
+        )}
+
+        {/* Token usage */}
+        {report.tokenUsage && viewMode === "full" && (
+          <TokenUsagePanel usage={report.tokenUsage} />
         )}
 
         {/* Overall feedback */}

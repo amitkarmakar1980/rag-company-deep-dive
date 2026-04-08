@@ -295,6 +295,316 @@ RETURN A SINGLE VALID JSON OBJECT matching this exact schema. Do not include any
 Produce only the JSON. No preamble, no explanation, no markdown fences.`;
 }
 
+// ─── Tiered prompts ──────────────────────────────────────────────────────────
+
+/**
+ * Deep analysis prompt — sent to o3.
+ * Produces only the 5 sections that require multi-step strategic reasoning:
+ * company_swot, role_swot, strategic_bet_analysis, why_role_exists_now, risks_red_flags.
+ */
+export function getDeepAnalysisPrompt(
+  context: RetrievalContext,
+  companyName: string,
+  roleTitle: string,
+  jobDescription: string | undefined,
+  profileContext: string | undefined
+): string {
+  const jdSection = jobDescription
+    ? `\n\nJOB DESCRIPTION:\n${jobDescription}`
+    : "";
+  const profileSection = profileContext
+    ? `\n\nCANDIDATE PROFILE / CONTEXT:\n${profileContext}`
+    : "";
+
+  return `You are an elite strategic analyst. You will receive company intelligence and produce a rigorous strategic deep-dive on a company and role.
+
+COMPANY: ${companyName}
+ROLE: ${roleTitle}${jdSection}${profileSection}
+
+EVIDENCE FROM PUBLIC SOURCES (${context.chunks.length} chunks):
+${formatChunks(context)}
+
+---
+
+YOUR TASK: Produce deep strategic analysis for 5 sections only. You must:
+
+1. Ground every claim in specific evidence. Distinguish FACT, INFERENCE, and HYPOTHESIS explicitly in evidence fields.
+2. SWOT quadrants require a MINIMUM of 5 points each — non-obvious, evidence-linked, specific to this company and moment in time. Generic points (e.g. "strong brand") are unacceptable without specific evidence.
+3. strategic_bet_analysis must arrive at a clear, defensible classification with reasons that would hold up to scrutiny.
+4. risks_red_flags must name real, specific risks — not generic category risks. Tie each to a signal from the evidence.
+5. why_role_exists_now requires an original thesis — what specifically changed in the last 12–18 months that created this need.
+
+RETURN A SINGLE VALID JSON OBJECT with exactly these 5 keys. No other text.
+
+{
+  "company_swot": {
+    "strengths": [
+      { "point": "<specific strength — non-obvious, evidence-linked>", "evidence": "<source or signal>" },
+      { "point": "<strength>", "evidence": "<source or signal>" },
+      { "point": "<strength>", "evidence": "<source or signal>" },
+      { "point": "<strength>", "evidence": "<source or signal>" },
+      { "point": "<strength>", "evidence": "<source or signal>" }
+    ],
+    "weaknesses": [
+      { "point": "<specific weakness>", "evidence": "<source or signal>" },
+      { "point": "<weakness>", "evidence": "<source or signal>" },
+      { "point": "<weakness>", "evidence": "<source or signal>" },
+      { "point": "<weakness>", "evidence": "<source or signal>" },
+      { "point": "<weakness>", "evidence": "<source or signal>" }
+    ],
+    "opportunities": [
+      { "point": "<specific opportunity>", "evidence": "<source or signal>" },
+      { "point": "<opportunity>", "evidence": "<source or signal>" },
+      { "point": "<opportunity>", "evidence": "<source or signal>" },
+      { "point": "<opportunity>", "evidence": "<source or signal>" },
+      { "point": "<opportunity>", "evidence": "<source or signal>" }
+    ],
+    "threats": [
+      { "point": "<specific threat>", "evidence": "<source or signal>" },
+      { "point": "<threat>", "evidence": "<source or signal>" },
+      { "point": "<threat>", "evidence": "<source or signal>" },
+      { "point": "<threat>", "evidence": "<source or signal>" },
+      { "point": "<threat>", "evidence": "<source or signal>" }
+    ]
+  },
+
+  "role_swot": {
+    "strengths": [
+      { "point": "<role charter strength — min 5>", "evidence": "<optional>" },
+      { "point": "<strength>", "evidence": "<optional>" },
+      { "point": "<strength>", "evidence": "<optional>" },
+      { "point": "<strength>", "evidence": "<optional>" },
+      { "point": "<strength>", "evidence": "<optional>" }
+    ],
+    "weaknesses": [
+      { "point": "<role ambiguity or structural weakness — min 5>", "evidence": "<optional>" },
+      { "point": "<weakness>", "evidence": "<optional>" },
+      { "point": "<weakness>", "evidence": "<optional>" },
+      { "point": "<weakness>", "evidence": "<optional>" },
+      { "point": "<weakness>", "evidence": "<optional>" }
+    ],
+    "opportunities": [
+      { "point": "<impact opportunity from this role — min 5>", "evidence": "<optional>" },
+      { "point": "<opportunity>", "evidence": "<optional>" },
+      { "point": "<opportunity>", "evidence": "<optional>" },
+      { "point": "<opportunity>", "evidence": "<optional>" },
+      { "point": "<opportunity>", "evidence": "<optional>" }
+    ],
+    "threats": [
+      { "point": "<execution risk to this role — min 5>", "evidence": "<optional>" },
+      { "point": "<threat>", "evidence": "<optional>" },
+      { "point": "<threat>", "evidence": "<optional>" },
+      { "point": "<threat>", "evidence": "<optional>" },
+      { "point": "<threat>", "evidence": "<optional>" }
+    ]
+  },
+
+  "strategic_bet_analysis": {
+    "classification": "Strategic Core Bet" | "Important Enabler" | "Opportunistic Build" | "Tactical Fill" | "Unclear",
+    "confidence": "high" | "medium" | "low",
+    "why_we_believe_this": ["<3-5 evidence-backed reasons — be specific and non-obvious>"],
+    "supporting_evidence": ["<2-4 concrete signals from the evidence>"],
+    "what_could_disprove": ["<2-3 things that would change or weaken this classification>"],
+    "candidate_implication": {
+      "scope_impact": "<honest assessment of scope given this classification>",
+      "visibility": "<expected senior leadership visibility — will this person be seen?>",
+      "career_upside": "<realistic career upside if successful — specific, not generic>",
+      "interview_adaptation": "<how the candidate should adapt their pitch>"
+    }
+  },
+
+  "why_role_exists_now": {
+    "primary_driver": "<1-2 sentences — original thesis on what changed in the last 12-18 months that created this specific need>",
+    "supporting_signals": ["<2-4 concrete signals from evidence that support this thesis>"],
+    "confidence": "high" | "medium" | "low"
+  },
+
+  "risks_red_flags": [
+    {
+      "flag": "<concise risk name>",
+      "signal": "<specific evidence or pattern that triggered this — not generic>",
+      "severity": "high" | "medium" | "low",
+      "impact": "<what this concretely means for someone taking this role>"
+    }
+  ]
+}
+
+Produce only the JSON. No preamble, no explanation, no markdown fences.`;
+}
+
+/**
+ * Interview layer prompt — sent to gpt-4o-mini.
+ * Produces the 9 interview-prep and synthesis sections.
+ * Runs in parallel with the deep analysis prompt — does NOT depend on it.
+ */
+export function getInterviewLayerPrompt(
+  context: RetrievalContext,
+  companyName: string,
+  roleTitle: string,
+  jobDescription: string | undefined,
+  profileContext: string | undefined
+): string {
+  const jdSection = jobDescription
+    ? `\n\nJOB DESCRIPTION:\n${jobDescription}`
+    : "";
+  const profileSection = profileContext
+    ? `\n\nCANDIDATE PROFILE / CONTEXT:\n${profileContext}`
+    : "";
+
+  return `You are an elite interview-prep analyst for senior product, strategy, and general management candidates at Director+ and VP level. Synthesize company intelligence and role context into a high-quality prep brief.
+
+COMPANY: ${companyName}
+ROLE: ${roleTitle}${jdSection}${profileSection}
+
+EVIDENCE FROM PUBLIC SOURCES (${context.chunks.length} chunks):
+${formatChunks(context)}
+
+---
+
+YOUR TASK: Produce 9 interview-prep and synthesis sections. You must:
+
+1. Optimize for interview decision-making — every point must answer "so what for the candidate?"
+2. Be decisive. State your judgment. Do not hedge.
+3. Avoid repeating insights across sections. Each section adds unique value.
+4. Use crisp, specific language. No filler phrases.
+5. Questions must be executive-caliber — specific, diagnostic, hard to deflect.
+6. interview_decision_summary and five_minute_brief synthesize everything — write them last in your reasoning, make them concise and immediately actionable.
+
+RETURN A SINGLE VALID JSON OBJECT with exactly these 9 keys. No other text.
+
+{
+  "executive_summary": {
+    "recommendation": "pursue" | "pursue_cautiously" | "avoid" | "need_more_signal",
+    "recommendation_rationale": "<2-3 sentences — decisive core reason. State your actual view.>",
+    "key_bullets": ["<5-7 highest-signal insights — specific, non-obvious, candidate-relevant>"],
+    "pursuit_stance": "<pursue aggressively | pursue selectively | proceed cautiously | avoid>"
+  },
+
+  "assessment_snapshot": {
+    "company_momentum": {
+      "score": <1-10>,
+      "label": "Strong" | "Mixed" | "Weak",
+      "rationale": "<1 sentence — what specific signal drives this score?>",
+      "confidence": "high" | "medium" | "low"
+    },
+    "org_clarity": {
+      "score": <1-10>,
+      "label": "Strong" | "Mixed" | "Weak",
+      "rationale": "<1 sentence>",
+      "confidence": "high" | "medium" | "low"
+    },
+    "role_leverage": {
+      "score": <1-10>,
+      "label": "Strong" | "Mixed" | "Weak",
+      "rationale": "<1 sentence — what makes this role high or low leverage?>",
+      "confidence": "high" | "medium" | "low"
+    },
+    "execution_risk": {
+      "score": <1-10, where 10 = highest risk>,
+      "label": "Low" | "Medium" | "High",
+      "rationale": "<1 sentence — what is the specific risk?>",
+      "confidence": "high" | "medium" | "low"
+    },
+    "candidate_fit": {
+      "score": <1-10>,
+      "label": "Strong" | "Mixed" | "Weak",
+      "rationale": "<1 sentence — if no profile provided, score 5 and note that>",
+      "confidence": "high" | "medium" | "low"
+    },
+    "evidence_strength": {
+      "score": <1-10>,
+      "label": "Strong" | "Mixed" | "Weak",
+      "rationale": "<1 sentence on evidence quality and what is missing>",
+      "confidence": "high" | "medium" | "low"
+    }
+  },
+
+  "likely_interview_agenda": {
+    "dimensions": [
+      {
+        "dimension": "<e.g. Domain Credibility | Strategic Judgment | Scale & Execution | Cross-functional Influence>",
+        "what_they_validate": "<what the interviewer is trying to confirm — specific to this role>",
+        "what_they_worry_about": "<the specific concern they likely hold>",
+        "proof_needed": "<what evidence or story would satisfy them>",
+        "what_to_demonstrate": "<concrete behavior or framing the candidate should show>"
+      }
+    ]
+  },
+
+  "questions_to_ask": {
+    "must_ask": [
+      {
+        "question": "<executive-quality question — specific, not generic>",
+        "why_it_matters": "<what this reveals about the role, company, or team>",
+        "strong_answer": "<what a confident, clear answer sounds like>",
+        "weak_answer": "<what a vague, defensive, or concerning answer sounds like>",
+        "follow_up": "<optional deeper follow-up>"
+      },
+      { "question": "<must-ask 2>", "why_it_matters": "", "strong_answer": "", "weak_answer": "", "follow_up": "<optional>" },
+      { "question": "<must-ask 3>", "why_it_matters": "", "strong_answer": "", "weak_answer": "", "follow_up": "<optional>" }
+    ],
+    "good_questions": [
+      { "question": "<good question 1>", "why_it_matters": "", "strong_answer": "", "weak_answer": "" },
+      { "question": "<good question 2>", "why_it_matters": "", "strong_answer": "", "weak_answer": "" },
+      { "question": "<good question 3>", "why_it_matters": "", "strong_answer": "", "weak_answer": "" },
+      { "question": "<good question 4>", "why_it_matters": "", "strong_answer": "", "weak_answer": "" },
+      { "question": "<good question 5>", "why_it_matters": "", "strong_answer": "", "weak_answer": "" }
+    ]
+  },
+
+  "unknowns_to_validate": {
+    "unknowns": [
+      {
+        "what_is_unclear": "<specific ambiguity>",
+        "why_it_matters": "<what depends on this>",
+        "question_to_ask": "<precise interview question>",
+        "reassuring_answer": "<what a good answer sounds like>",
+        "concerning_answer": "<what a bad or evasive answer sounds like>"
+      }
+    ]
+  },
+
+  "company_snapshot": {
+    "business_model": "<1-2 sentences on how the company makes money and competes>",
+    "strategic_priorities": ["<3-5 current inferred priorities — evidence-linked>"],
+    "momentum_signals": ["<2-4 concrete forward momentum signals>"],
+    "pressure_points": ["<2-4 real headwinds or tensions>"],
+    "competitive_context": "<1-2 sentences on market position>",
+    "evidence_basis": "strong" | "partial" | "inferred"
+  },
+
+  "role_snapshot": {
+    "likely_charter": "<2-3 sentences on what this role is actually hired to do>",
+    "success_metrics": ["<3-5 concrete measurable outcomes in 12 months>"],
+    "key_stakeholders": ["<3-5 specific stakeholder relationships>"],
+    "likely_challenges": ["<3-5 real execution challenges tied to context>"],
+    "first_year_expectations": ["<3-5 specific Y1 deliverables or milestones>"]
+  },
+
+  "interview_decision_summary": {
+    "pursue_recommendation": "Aggressive Pursue" | "Selective Pursue" | "Cautious Pursue" | "Pass",
+    "why": "<2-3 sentences — decisive reasoning. State your actual view.>",
+    "best_positioning_angle": "<1-2 sentences — strongest angle the candidate should lead with>",
+    "biggest_interviewer_concern": "<1 sentence — most likely objection from interviewer's side>",
+    "top_3_questions": ["<most important question to ask>", "<question 2>", "<question 3>"],
+    "interview_watchout": "<1 sentence — the one thing the candidate must avoid>",
+    "red_flag_to_validate": "<1 sentence — most important uncertainty to validate live>"
+  },
+
+  "five_minute_brief": {
+    "what_company_cares_about": "<1-2 sentences — what is driving company priorities right now>",
+    "why_role_exists": "<1 sentence — the core hiring thesis>",
+    "likely_success_metric": "<1 sentence — clearest signal of 12-month success>",
+    "best_candidate_angle": "<1 sentence — strongest positioning angle for any candidate>",
+    "biggest_concern_to_address": "<1 sentence — what the interviewer will probe hardest>",
+    "top_3_smart_questions": ["<question 1>", "<question 2>", "<question 3>"],
+    "most_important_risk": "<1 sentence — most material risk for someone taking this role>"
+  }
+}
+
+Produce only the JSON. No preamble, no explanation, no markdown fences.`;
+}
+
 // ─── Legacy section prompts (kept for reference, no longer called) ──────────
 
 export function getCompanySnapshotPrompt(

@@ -6,12 +6,18 @@ import {
 } from "@/lib/db/operations";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import { generateEmbedding } from "@/lib/ai/embeddings";
-import { generateFullReport } from "@/lib/ai/openai";
-import { getFullReportPrompt } from "@/lib/ai/prompts";
+import { generateDeepAnalysis, generateInterviewLayer } from "@/lib/ai/openai";
+import { getDeepAnalysisPrompt, getInterviewLayerPrompt } from "@/lib/ai/prompts";
 import { semanticSearch, rerank } from "@/lib/retrieval/search";
-import { RetrievalContext, Report, StructuredReport, RecommendationType } from "@/lib/types";
+import {
+  RetrievalContext,
+  Report,
+  StructuredReport,
+  RecommendationType,
+  ReportTokenUsage,
+} from "@/lib/types";
 
-// Broad query that retrieves context relevant to all sections in one pass
+// Broad retrieval query — used by both parallel calls
 const BROAD_RETRIEVAL_QUERY =
   "company strategy priorities product platform leadership org structure " +
   "role responsibilities hiring team metrics success risks opportunities " +
@@ -57,16 +63,14 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
   if (!request) throw new Error("Request not found");
 
   const sources = await getRequestSources(requestId);
-  // Warn but continue — LLM will still generate based on JD/profile text if present
   if (sources.length === 0) {
     console.warn(`[assembleReport] No sources found for request ${requestId} — generating with empty context`);
   }
 
-  // 2. Broad semantic retrieval — top 25 chunks across all topics
+  // 2. Semantic retrieval — shared across both parallel calls
   const queryEmbedding = await generateEmbedding(BROAD_RETRIEVAL_QUERY);
   const rawResults = await semanticSearch(requestId, queryEmbedding, 25, 0.4);
 
-  // Fetch company name (getDeepDiveRequest doesn't join companies)
   const { data: company } = await supabaseAdmin
     .from("companies")
     .select("name")
@@ -93,8 +97,8 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     },
   };
 
-  // 3. Single LLM call — generate full structured report
-  const prompt = getFullReportPrompt(
+  // 3. Build both prompts from the same context
+  const deepPrompt = getDeepAnalysisPrompt(
     context,
     companyName,
     request.role_title,
@@ -102,15 +106,55 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     request.profile_context ?? undefined
   );
 
-  let structured: StructuredReport;
+  const interviewPrompt = getInterviewLayerPrompt(
+    context,
+    companyName,
+    request.role_title,
+    request.job_description ?? undefined,
+    request.profile_context ?? undefined
+  );
+
+  // 4. Fire both LLM calls in parallel
+  console.log(`[assembleReport] Firing parallel LLM calls: o3 (deep) + gpt-4o-mini (interview layer)`);
+
+  let deepResult: Awaited<ReturnType<typeof generateDeepAnalysis>>;
+  let interviewResult: Awaited<ReturnType<typeof generateInterviewLayer>>;
+
   try {
-    structured = await generateFullReport(prompt);
+    [deepResult, interviewResult] = await Promise.all([
+      generateDeepAnalysis(deepPrompt),
+      generateInterviewLayer(interviewPrompt),
+    ]);
   } catch (err) {
-    console.error("Full report generation failed:", err);
+    console.error("[assembleReport] Parallel LLM calls failed:", err);
     throw err;
   }
 
-  // 4. Derive scores for the reports table from the LLM's own assessment
+  console.log(
+    `[assembleReport] Done — deep: ${deepResult.usage.input_tokens}in/${deepResult.usage.output_tokens}out ` +
+    `(${deepResult.usage.reasoning_tokens ?? 0} reasoning) | ` +
+    `interview: ${interviewResult.usage.input_tokens}in/${interviewResult.usage.output_tokens}out`
+  );
+
+  // 5. Merge into a single StructuredReport
+  const structured: StructuredReport = {
+    ...deepResult.data,
+    ...interviewResult.data,
+  };
+
+  // 6. Build token usage summary
+  const tokenUsage: ReportTokenUsage = {
+    calls: [deepResult.usage, interviewResult.usage],
+    total_tokens:
+      deepResult.usage.input_tokens +
+      deepResult.usage.output_tokens +
+      interviewResult.usage.input_tokens +
+      interviewResult.usage.output_tokens,
+    total_cost_usd:
+      deepResult.usage.estimated_cost_usd + interviewResult.usage.estimated_cost_usd,
+  };
+
+  // 7. Derive scores from the interview layer's assessment_snapshot
   const snap = structured.assessment_snapshot;
   const scores = {
     company_momentum: snap.company_momentum.score,
@@ -124,10 +168,12 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     structured.executive_summary.recommendation
   );
 
-  // 5. Create the report record
-  const report = await createReport(requestId, recommendation, scores);
+  // 8. Create the report record — store token usage in summary_json
+  const report = await createReport(requestId, recommendation, scores, {
+    token_usage: tokenUsage,
+  });
 
-  // 6. Store each section as JSON in content_markdown
+  // 9. Store each section
   const citationsForSection = context.chunks.map((c) => ({
     source_id: c.source_id,
     url: c.source_url,
@@ -143,18 +189,13 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
         report.id,
         sectionKey,
         SECTION_TITLES[sectionKey],
-        // Store the structured data as JSON string in the content_markdown column
         JSON.stringify(sectionData),
-        // Only attach citations to evidence-heavy sections
-        ["company_snapshot", "company_swot", "role_snapshot", "role_swot", "why_role_exists_now", "strategic_bet_analysis"].includes(
-          sectionKey
-        )
+        ["company_snapshot", "company_swot", "role_snapshot", "role_swot", "why_role_exists_now", "strategic_bet_analysis"].includes(sectionKey)
           ? citationsForSection
           : undefined
       );
     } catch (err) {
       console.error(`Failed to store section ${sectionKey}:`, err);
-      // Continue — don't fail the whole report for one section
     }
   }
 

@@ -1,22 +1,143 @@
 import OpenAI from "openai";
-import { StructuredReport, CandidateOverlayData } from "@/lib/types";
+import { StructuredReport, CandidateOverlayData, LLMCallUsage } from "@/lib/types";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// ─── Model constants ──────────────────────────────────────────────────────────
+
 /**
- * Generate the full structured report in a single LLM call.
- * Returns a parsed StructuredReport or throws on failure.
+ * Deep analysis tier — used for SWOT, strategic classification, risk assessment,
+ * and why-role-exists. These sections require multi-step reasoning and evidence
+ * synthesis; the quality difference between o3 and a standard model is material.
  */
-export async function generateFullReport(prompt: string): Promise<StructuredReport> {
+export const DEEP_MODEL = "o3";
+
+/**
+ * Standard synthesis tier — used for interview prep sections, summaries, and
+ * structured formatting. Fast and cost-efficient; complexity is synthesis, not
+ * strategic reasoning.
+ */
+export const STANDARD_MODEL = "gpt-4o-mini";
+
+/**
+ * Overlay model — candidate personalization. Requires nuanced career coaching
+ * judgment. Stays on gpt-4o (not mini) for quality on gap/objection analysis.
+ */
+export const OVERLAY_MODEL = "gpt-4o";
+
+// ─── Pricing (USD per 1M tokens, approximate) ────────────────────────────────
+// Update if OpenAI changes pricing.
+const PRICING: Record<string, { input: number; output: number }> = {
+  o3:             { input: 10.00, output: 40.00 },
+  "gpt-4o":       { input:  2.50, output: 10.00 },
+  "gpt-4o-mini":  { input:  0.15, output:  0.60 },
+  "gpt-4-turbo":  { input: 10.00, output: 30.00 },
+};
+
+function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
+  const p = PRICING[model] ?? { input: 5, output: 15 };
+  return parseFloat(
+    ((inputTokens / 1_000_000) * p.input + (outputTokens / 1_000_000) * p.output).toFixed(6)
+  );
+}
+
+function buildUsage(
+  model: string,
+  purpose: string,
+  usage: OpenAI.Completions.CompletionUsage | undefined
+): LLMCallUsage {
+  const input = usage?.prompt_tokens ?? 0;
+  const output = usage?.completion_tokens ?? 0;
+  // o3 exposes reasoning_tokens inside completion_tokens_details
+  const reasoning =
+    (usage as any)?.completion_tokens_details?.reasoning_tokens ?? undefined;
+
+  return {
+    model,
+    purpose,
+    input_tokens: input,
+    output_tokens: output,
+    reasoning_tokens: reasoning,
+    estimated_cost_usd: estimateCost(model, input, output),
+  };
+}
+
+// ─── JSON extraction helper ───────────────────────────────────────────────────
+
+function extractJSON<T>(raw: string, context: string): T {
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error(`No JSON found in ${context} response`);
+    try {
+      return JSON.parse(match[0]) as T;
+    } catch {
+      console.error(`Invalid JSON in ${context}:`, match[0].slice(0, 500));
+      throw new Error(`Invalid JSON in ${context} response`);
+    }
+  }
+}
+
+// ─── Deep sections (o3) ───────────────────────────────────────────────────────
+
+export type DeepAnalysisResult = Pick<
+  StructuredReport,
+  "company_swot" | "role_swot" | "strategic_bet_analysis" | "why_role_exists_now" | "risks_red_flags"
+>;
+
+export async function generateDeepAnalysis(
+  prompt: string
+): Promise<{ data: DeepAnalysisResult; usage: LLMCallUsage }> {
   const response = await openai.chat.completions.create({
-    model: "gpt-4o",
+    model: DEEP_MODEL,
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    // o3 uses max_completion_tokens (not max_tokens)
+    max_completion_tokens: 4000,
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) throw new Error("Empty response from deep analysis model");
+
+  return {
+    data: extractJSON<DeepAnalysisResult>(content, "deep analysis"),
+    usage: buildUsage(DEEP_MODEL, "Deep Analysis (SWOT + Strategy)", response.usage),
+  };
+}
+
+// ─── Interview layer (gpt-4o-mini) ───────────────────────────────────────────
+
+export type InterviewLayerResult = Pick<
+  StructuredReport,
+  | "executive_summary"
+  | "assessment_snapshot"
+  | "likely_interview_agenda"
+  | "questions_to_ask"
+  | "unknowns_to_validate"
+  | "company_snapshot"
+  | "role_snapshot"
+  | "interview_decision_summary"
+  | "five_minute_brief"
+>;
+
+export async function generateInterviewLayer(
+  prompt: string
+): Promise<{ data: InterviewLayerResult; usage: LLMCallUsage }> {
+  const response = await openai.chat.completions.create({
+    model: STANDARD_MODEL,
     messages: [
       {
         role: "system",
         content:
-          "You are a structured intelligence engine. You return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
+          "You are a structured intelligence engine. Return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
       },
       {
         role: "user",
@@ -24,43 +145,25 @@ export async function generateFullReport(prompt: string): Promise<StructuredRepo
       },
     ],
     temperature: 0.4,
-    max_tokens: 6000,
+    max_tokens: 5000,
   });
 
   const content = response.choices[0].message.content;
-  if (!content) throw new Error("Empty response from LLM");
+  if (!content) throw new Error("Empty response from interview layer model");
 
-  // Strip any accidental markdown fences
-  const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-
-  let parsed: StructuredReport;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch (e) {
-    // Try extracting outermost JSON object
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) {
-      console.error("No JSON found in response:", cleaned.slice(0, 500));
-      throw new Error("Could not extract JSON from LLM response");
-    }
-    try {
-      parsed = JSON.parse(match[0]);
-    } catch (e2) {
-      console.error("Failed to parse extracted JSON:", match[0].slice(0, 500));
-      throw new Error("Invalid JSON in LLM response");
-    }
-  }
-
-  return parsed;
+  return {
+    data: extractJSON<InterviewLayerResult>(content, "interview layer"),
+    usage: buildUsage(STANDARD_MODEL, "Interview Layer (prep sections)", response.usage),
+  };
 }
 
-/**
- * Generate the candidate overlay (personalization layer) from resume + role context.
- * This is a separate, lighter LLM call that does NOT redo company/role analysis.
- */
-export async function generateCandidateOverlay(prompt: string): Promise<CandidateOverlayData> {
+// ─── Candidate overlay (gpt-4o) ───────────────────────────────────────────────
+
+export async function generateCandidateOverlay(
+  prompt: string
+): Promise<{ data: CandidateOverlayData; usage: LLMCallUsage }> {
   const response = await openai.chat.completions.create({
-    model: "gpt-4o",
+    model: OVERLAY_MODEL,
     messages: [
       {
         role: "system",
@@ -77,23 +180,37 @@ export async function generateCandidateOverlay(prompt: string): Promise<Candidat
   });
 
   const content = response.choices[0].message.content;
-  if (!content) throw new Error("Empty response from LLM");
+  if (!content) throw new Error("Empty response from overlay model");
 
-  const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-
-  try {
-    return JSON.parse(cleaned) as CandidateOverlayData;
-  } catch {
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("No JSON found in overlay response");
-    return JSON.parse(match[0]) as CandidateOverlayData;
-  }
+  return {
+    data: extractJSON<CandidateOverlayData>(content, "candidate overlay"),
+    usage: buildUsage(OVERLAY_MODEL, "Candidate Overlay (personalization)", response.usage),
+  };
 }
 
-/**
- * Legacy: structured completion for individual section prompts.
- * Still used by older code paths during transition.
- */
+// ─── Legacy (kept for any remaining callers) ──────────────────────────────────
+
+/** @deprecated Use generateDeepAnalysis + generateInterviewLayer instead */
+export async function generateFullReport(prompt: string): Promise<StructuredReport> {
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a structured intelligence engine. You return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
+      },
+      { role: "user", content: prompt },
+    ],
+    temperature: 0.4,
+    max_tokens: 6000,
+  });
+
+  const content = response.choices[0].message.content;
+  if (!content) throw new Error("Empty response from LLM");
+  return extractJSON<StructuredReport>(content, "full report");
+}
+
 export async function generateStructuredCompletion(
   prompt: string,
   _jsonSchema?: Record<string, any>
@@ -103,13 +220,9 @@ export async function generateStructuredCompletion(
     messages: [
       {
         role: "system",
-        content:
-          "You are a business analysis engine. Respond with valid JSON only. Do not fabricate details.",
+        content: "You are a business analysis engine. Respond with valid JSON only. Do not fabricate details.",
       },
-      {
-        role: "user",
-        content: prompt,
-      },
+      { role: "user", content: prompt },
     ],
     temperature: 0.5,
     max_tokens: 2000,
@@ -117,16 +230,7 @@ export async function generateStructuredCompletion(
 
   const content = response.choices[0].message.content;
   if (!content) throw new Error("No content in response");
-
-  const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("Could not extract JSON from LLM response");
-
-  try {
-    return JSON.parse(jsonMatch[0]);
-  } catch {
-    throw new Error("Invalid JSON in LLM response");
-  }
+  return extractJSON(content, "structured completion");
 }
 
 export async function generateText(prompt: string): Promise<string> {

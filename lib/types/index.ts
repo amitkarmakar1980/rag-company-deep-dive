@@ -117,6 +117,25 @@ export interface ReportSection {
   }>;
 }
 
+// ─── Token Usage Types ──────────────────────────────────────────────────────
+
+export interface LLMCallUsage {
+  model: string;
+  purpose: string;
+  input_tokens: number;
+  output_tokens: number;
+  /** Reasoning tokens (o3/o-series only — billed as output) */
+  reasoning_tokens?: number;
+  /** Estimated cost in USD */
+  estimated_cost_usd: number;
+}
+
+export interface ReportTokenUsage {
+  calls: LLMCallUsage[];
+  total_tokens: number;
+  total_cost_usd: number;
+}
+
 // Feedback types
 export type FeedbackType = "useful" | "not_useful";
 

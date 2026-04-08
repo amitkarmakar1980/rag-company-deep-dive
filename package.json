@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "next lint",
     "setup-db": "node setup-db.mjs",
-    "check-schema": "node check-schema.mjs"
+    "check-schema": "node check-schema.mjs",
+    "docs:update": "node scripts/update-product-docs.mjs"
   },
   "keywords": [],
   "author": "",

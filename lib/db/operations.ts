@@ -205,6 +205,39 @@ export async function createChunk(
   return data;
 }
 
+export async function createChunks(
+  sourceId: string,
+  chunks: Array<{
+    chunkIndex: number;
+    text: string;
+    tokenCount: number;
+    metadata?: Record<string, any>;
+  }>
+): Promise<Chunk[]> {
+  if (chunks.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("chunks")
+    .insert(
+      chunks.map((chunk) => ({
+        source_id: sourceId,
+        chunk_index: chunk.chunkIndex,
+        text: chunk.text,
+        token_count: chunk.tokenCount,
+        metadata_json: chunk.metadata,
+      }))
+    )
+    .select();
+
+  if (error) throw error;
+
+  return ((data || []) as Chunk[]).sort(
+    (left: Chunk, right: Chunk) => left.chunk_index - right.chunk_index
+  );
+}
+
 export async function getSourceChunks(sourceId: string): Promise<Chunk[]> {
   const { data, error } = await supabaseAdmin
     .from("chunks")

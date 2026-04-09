@@ -4,9 +4,11 @@ import { chunkContent } from "./chunk";
 import { generateEmbeddings } from "@/lib/ai/embeddings";
 import {
   createSource,
-  createChunk as dbCreateChunk,
+  createChunks as dbCreateChunks,
 } from "@/lib/db/operations";
 import { supabaseAdmin } from "@/lib/db/supabase";
+
+const SOURCE_PROCESSING_CONCURRENCY = 3;
 
 export interface SourceInput {
   type:
@@ -37,7 +39,7 @@ export async function ingestSources(
   error?: string;
 }> {
   const sources: SourceInput[] = [];
-  let stats = { success: true, sourcesCreated: 0, chunksCreated: 0 };
+  const stats = { success: true, sourcesCreated: 0, chunksCreated: 0 };
 
   try {
     console.log(`[Ingest] START requestId=${requestId} jd=${!!jobDescription} profile=${!!profileContext} companyUrl=${companyUrl}`);
@@ -91,12 +93,13 @@ export async function ingestSources(
 
     console.log(`[Ingest] ${sources.length} sources to process`);
 
-    // Process each source
-    for (const source of sources) {
+    await runWithConcurrency(sources, SOURCE_PROCESSING_CONCURRENCY, async (source) => {
       console.log(`[Ingest] Processing source: type=${source.type} title="${source.title}"`);
-      await processSource(requestId, companyId, source, stats);
+      const sourceStats = await processSource(requestId, companyId, source);
+      stats.sourcesCreated += sourceStats.sourcesCreated;
+      stats.chunksCreated += sourceStats.chunksCreated;
       console.log(`[Ingest] Source done. totals: sources=${stats.sourcesCreated} chunks=${stats.chunksCreated}`);
-    }
+    });
 
     console.log(`[Ingest] COMPLETE sources=${stats.sourcesCreated} chunks=${stats.chunksCreated}`);
     return stats;
@@ -115,14 +118,13 @@ export async function ingestSources(
 async function processSource(
   requestId: string,
   companyId: string,
-  sourceInput: SourceInput,
-  stats: { success: boolean; sourcesCreated: number; chunksCreated: number }
-): Promise<void> {
+  sourceInput: SourceInput
+): Promise<{ sourcesCreated: number; chunksCreated: number }> {
   const cleanedContent = cleanContent(sourceInput.content);
 
   if (!cleanedContent.trim()) {
     console.warn("Source produced no content after cleaning:", sourceInput.url);
-    return;
+    return { sourcesCreated: 0, chunksCreated: 0 };
   }
 
   const contentHash = calculateContentHash(cleanedContent);
@@ -141,8 +143,6 @@ async function processSource(
     0.8 + (sourceInput.priority || 0) * 0.02
   );
 
-  stats.sourcesCreated++;
-
   // Chunk content
   const chunks = chunkContent(cleanedContent);
 
@@ -151,8 +151,13 @@ async function processSource(
   const embeddings = await generateEmbeddings(chunkTexts);
 
   // Store chunks in parallel, then batch-insert embeddings
-  const dbChunks = await Promise.all(
-    chunks.map((chunk) => dbCreateChunk(source.id, chunk.index, chunk.text, chunk.tokenCount))
+  const dbChunks = await dbCreateChunks(
+    source.id,
+    chunks.map((chunk) => ({
+      chunkIndex: chunk.index,
+      text: chunk.text,
+      tokenCount: chunk.tokenCount,
+    }))
   );
 
   const embeddingRows = dbChunks.map((dbChunk, i) => ({
@@ -163,5 +168,30 @@ async function processSource(
   // Batch insert all embeddings in one DB call
   await supabaseAdmin.from("embeddings").insert(embeddingRows);
 
-  stats.chunksCreated += dbChunks.length;
+  return {
+    sourcesCreated: 1,
+    chunksCreated: dbChunks.length,
+  };
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) {
+    return;
+  }
+
+  let currentIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (currentIndex < items.length) {
+        const item = items[currentIndex++];
+        await worker(item);
+      }
+    })
+  );
 }

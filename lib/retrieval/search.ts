@@ -51,34 +51,63 @@ export async function semanticSearch(
   }
 
   // Fetch full source and chunk data
-  const results: RetrievalResult[] = [];
-
-  if (matches && Array.isArray(matches)) {
-    for (const match of matches) {
-      const { data: chunk } = await supabaseAdmin
-        .from("chunks")
-        .select("*")
-        .eq("id", match.chunk_id)
-        .single();
-
-      const { data: source } = await supabaseAdmin
-        .from("sources")
-        .select("*")
-        .eq("id", chunk.source_id)
-        .single();
-
-      if (chunk && source) {
-        results.push({
-          chunk,
-          source,
-          similarity: match.similarity,
-          rank: results.length,
-        });
-      }
-    }
+  if (!matches || !Array.isArray(matches) || matches.length === 0) {
+    return [];
   }
 
-  return results;
+  const chunkIds = matches.map((match) => match.chunk_id);
+  const { data: chunks, error: chunkError } = await supabaseAdmin
+    .from("chunks")
+    .select("*")
+    .in("id", chunkIds);
+
+  if (chunkError) {
+    console.error("Chunk lookup error:", chunkError);
+    return [];
+  }
+
+  const typedChunks = (chunks || []) as Chunk[];
+  const chunkById = new Map(
+    typedChunks.map((chunk: Chunk) => [chunk.id, chunk])
+  );
+  const sourceIds = Array.from(
+    new Set(typedChunks.map((chunk: Chunk) => chunk.source_id))
+  );
+
+  if (sourceIds.length === 0) {
+    return [];
+  }
+
+  const { data: sources, error: sourceError } = await supabaseAdmin
+    .from("sources")
+    .select("*")
+    .in("id", sourceIds);
+
+  if (sourceError) {
+    console.error("Source lookup error:", sourceError);
+    return [];
+  }
+
+  const typedSources = (sources || []) as Source[];
+  const sourceById = new Map(
+    typedSources.map((source: Source) => [source.id, source])
+  );
+
+  return matches.flatMap((match, index) => {
+    const chunk = chunkById.get(match.chunk_id);
+    const source = chunk ? sourceById.get(chunk.source_id) : undefined;
+
+    if (!chunk || !source) {
+      return [];
+    }
+
+    return [{
+      chunk,
+      source,
+      similarity: match.similarity,
+      rank: index,
+    }];
+  });
 }
 
 export function rerank(

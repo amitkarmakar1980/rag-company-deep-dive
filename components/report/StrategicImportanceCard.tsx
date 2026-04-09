@@ -39,7 +39,26 @@ const CONFIDENCE_LABELS: Record<ConfidenceLevel, string> = {
 };
 
 export function StrategicImportanceCard({ data }: Props) {
+  // Defensive cast — reports generated before the type rewrite may have
+  // the old shape: { confidence_score, rationale[], risks_caveats[], interview_implication }
+  const raw = data as any;
   const cfg = CLASS_CONFIG[data.classification] ?? CLASS_CONFIG["Unclear"];
+
+  // New shape: data.confidence (string). Old shape: data.confidence_score (number 0–1).
+  const confidenceLabel =
+    data.confidence
+      ? CONFIDENCE_LABELS[data.confidence] ?? data.confidence
+      : raw.confidence_score != null
+        ? `${Math.round(raw.confidence_score * 100)}% confidence`
+        : null;
+
+  // New arrays
+  const whyWeBelieve: string[] = data.why_we_believe_this ?? raw.rationale ?? [];
+  const supportingEvidence: string[] = data.supporting_evidence ?? [];
+  const whatCouldDisprove: string[] = data.what_could_disprove ?? raw.risks_caveats ?? [];
+
+  // New nested object
+  const implication = data.candidate_implication;
 
   return (
     <div className="space-y-5">
@@ -52,46 +71,46 @@ export function StrategicImportanceCard({ data }: Props) {
             </span>
             <p className={`text-sm ${cfg.text} leading-relaxed`}>{cfg.desc}</p>
           </div>
-          <span className="text-xs text-gray-400 font-medium">{CONFIDENCE_LABELS[data.confidence]}</span>
+          {confidenceLabel && (
+            <span className="text-xs text-gray-400 font-medium">{confidenceLabel}</span>
+          )}
         </div>
       </div>
 
       {/* Evidence grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <BulletBlock
-          label="Why We Believe This"
-          items={data.why_we_believe_this}
-          dotColor="bg-emerald-500"
-        />
-        <BulletBlock
-          label="Supporting Evidence"
-          items={data.supporting_evidence}
-          dotColor="bg-sky-500"
-        />
-        <BulletBlock
-          label="What Could Disprove This"
-          items={data.what_could_disprove}
-          dotColor="bg-red-400"
-        />
+        <BulletBlock label="Why We Believe This" items={whyWeBelieve} dotColor="bg-emerald-500" />
+        <BulletBlock label="Supporting Evidence" items={supportingEvidence} dotColor="bg-sky-500" />
+        <BulletBlock label="What Could Disprove This" items={whatCouldDisprove} dotColor="bg-red-400" />
       </div>
 
-      {/* Candidate implication */}
-      <div className="bg-gray-900 rounded-xl p-5 space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">What This Means for You</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[
-            { label: "Scope & Impact", value: data.candidate_implication.scope_impact },
-            { label: "Visibility", value: data.candidate_implication.visibility },
-            { label: "Career Upside", value: data.candidate_implication.career_upside },
-            { label: "How to Adapt Your Pitch", value: data.candidate_implication.interview_adaptation },
-          ].map(({ label, value }) => (
-            <div key={label}>
-              <p className="text-xs font-semibold text-gray-500 mb-0.5">{label}</p>
-              <p className="text-sm text-gray-100 leading-relaxed">{value}</p>
-            </div>
-          ))}
+      {/* Candidate implication — only rendered when present (new schema reports) */}
+      {implication && (
+        <div className="bg-gray-900 rounded-xl p-5 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">What This Means for You</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { label: "Scope & Impact", value: implication.scope_impact },
+              { label: "Visibility", value: implication.visibility },
+              { label: "Career Upside", value: implication.career_upside },
+              { label: "How to Adapt Your Pitch", value: implication.interview_adaptation },
+            ].map(({ label, value }) => value ? (
+              <div key={label}>
+                <p className="text-xs font-semibold text-gray-500 mb-0.5">{label}</p>
+                <p className="text-sm text-gray-100 leading-relaxed">{value}</p>
+              </div>
+            ) : null)}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Fallback for old-schema reports: show interview_implication if present */}
+      {!implication && raw.interview_implication && (
+        <div className="bg-gray-900 rounded-xl p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">What This Means in the Interview</p>
+          <p className="text-sm text-gray-100 leading-relaxed">{raw.interview_implication}</p>
+        </div>
+      )}
     </div>
   );
 }

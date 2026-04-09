@@ -32,7 +32,7 @@ export function FiveMinuteBrief({ data }: Props) {
       <div className="bg-gray-900 rounded-xl px-5 py-4">
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Top 3 Smart Questions</p>
         <ol className="space-y-2">
-          {data.top_3_smart_questions.map((q, i) => (
+          {(data.top_3_smart_questions ?? []).map((q, i) => (
             <li key={i} className="flex items-start gap-3">
               <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-700 text-gray-300 text-xs font-bold flex items-center justify-center mt-0.5">
                 {i + 1}

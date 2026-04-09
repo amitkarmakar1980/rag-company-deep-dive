@@ -640,6 +640,30 @@ export default function ReportPage() {
   const visibleSections = (key: string) =>
     viewMode === "full" || BRIEF_SECTION_KEYS.has(key);
 
+  // Helper: merge overlay candidate_role_match into assessment_snapshot content
+  const getAssessmentSnapshotContent = (section: typeof report.sections[0]): string => {
+    if (!hasOverlay || !overlay.data) return section.content;
+    try {
+      const parsed = JSON.parse(section.content);
+      const om = overlay.data.candidate_role_match;
+      const fitToLabel: Record<string, string> = {
+        strong: "Strong",
+        moderate: "Mixed",
+        stretch: "Weak",
+        mismatch: "Weak",
+      };
+      parsed.candidate_role_match = {
+        score: om.match_score,
+        label: fitToLabel[om.overall_fit] ?? "Mixed",
+        rationale: om.rationale,
+        confidence: "high",
+      };
+      return JSON.stringify(parsed);
+    } catch {
+      return section.content;
+    }
+  };
+
   // Helper: render a base section card
   const renderBaseSection = (key: string) => {
     const section = sectionByKey[key];
@@ -669,12 +693,17 @@ export default function ReportPage() {
       }
     }
 
+    const content =
+      key === "assessment_snapshot"
+        ? getAssessmentSnapshotContent(section)
+        : section.content;
+
     return (
       <ReportSectionCard
         key={section.id}
         sectionKey={section.key}
         title={section.title}
-        content={section.content}
+        content={content}
         citations={section.citations}
         feedback={
           <FeedbackButtons reportId={report.id} sectionKey={section.key} compact />
@@ -801,10 +830,14 @@ export default function ReportPage() {
         {renderBaseSection("interview_decision_summary")}
         {renderBaseSection("five_minute_brief")}
         {renderBaseSection("assessment_snapshot")}
+
+        {/* ── CANDIDATE ROLE MATCH (second card after assessment, needs resume) ── */}
+        {renderOverlaySection(OVERLAY_SECTIONS[0])}
+
         {renderBaseSection("strategic_bet_analysis")}
 
-        {/* ── CANDIDATE OVERLAY (after strategic context, before agenda) ── */}
-        {OVERLAY_SECTIONS.map(renderOverlaySection)}
+        {/* ── REMAINING CANDIDATE OVERLAY (after strategic context, before agenda) ── */}
+        {OVERLAY_SECTIONS.slice(1).map(renderOverlaySection)}
 
         {/* ── INTERVIEW PREP ── */}
         {renderBaseSection("likely_interview_agenda")}

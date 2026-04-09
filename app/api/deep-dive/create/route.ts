@@ -126,11 +126,12 @@ async function runPipeline(
       if (resumeText?.trim()) {
         try {
           const { supabaseAdmin } = await import("@/lib/db/supabase");
-          const { data: resumeRecord } = await supabaseAdmin
+          const { data: resumeRecord, error: resumeErr } = await supabaseAdmin
             .from("candidate_resumes")
-            .insert({ user_id: userId, request_id: requestId, raw_text: resumeText.trim() })
+            .insert({ user_id: userId, request_id: requestId, raw_text: resumeText.trim(), status: "parsed" })
             .select("id")
             .single();
+          if (resumeErr) console.error("[Pipeline] Resume insert error:", resumeErr.message);
 
           if (resumeRecord) {
             const { data: overlayRecord } = await supabaseAdmin

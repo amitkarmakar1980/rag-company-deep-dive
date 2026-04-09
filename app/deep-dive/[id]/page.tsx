@@ -448,21 +448,28 @@ export default function ReportPage() {
     overlayPollRef.current = setInterval(pollOverlay, 3000);
   }, [pollOverlay]);
 
-  const checkExistingOverlay = useCallback(async () => {
+  const checkExistingOverlay = useCallback(async (storedResumeText?: string) => {
     try {
       const res = await fetch(`/api/overlay/${requestId}`);
       if (!res.ok) return;
       const data = await res.json();
 
       if (!data.exists) {
-        if (data.resumeOnFile) {
-          // Resume was submitted with this report but overlay failed to generate — auto-retry
+        // Determine the best resume source to use for auto-personalization
+        const body = data.resumeOnFile
+          ? JSON.stringify({ requestId, reuseExisting: true })          // resume in DB — reuse it
+          : storedResumeText
+          ? JSON.stringify({ requestId, resumeText: storedResumeText }) // resume in localStorage
+          : null;                                                        // no resume at all
+
+        if (body) {
+          // Auto-trigger overlay — no click needed
           setOverlay({ status: "generating", data: null, error: null });
           fetch("/api/resume/upload", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({ requestId, reuseExisting: true }),
+            body,
           })
             .then((r) => r.ok ? r.json() : Promise.reject(`Upload returned ${r.status}`))
             .then(() => startOverlayPolling())
@@ -471,7 +478,7 @@ export default function ReportPage() {
               setOverlay({ status: "failed", data: null, error: "Personalization failed" });
             });
         }
-        // No resume on file at all — panel will offer user-triggered option
+        // No resume anywhere — panel will offer user-triggered option
         return;
       }
 
@@ -514,14 +521,14 @@ export default function ReportPage() {
         if (!reportRes.ok) throw new Error("Failed to fetch report");
         const reportData = await reportRes.json();
         setReport(reportData);
-        checkExistingOverlay();
+        checkExistingOverlay(storedResume?.text);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
-  }, [requestId, checkExistingOverlay]);
+  }, [requestId, checkExistingOverlay, storedResume]);
 
   useEffect(() => {
     fetchStatus();

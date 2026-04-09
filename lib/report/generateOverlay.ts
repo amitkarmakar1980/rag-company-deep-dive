@@ -101,6 +101,43 @@ export async function generateOverlay(overlayId: string): Promise<void> {
       })
       .eq("id", overlayId);
 
+    // 7. Write candidate_fit_score back to the report + update the section JSON
+    const matchScore = overlayData?.candidate_role_match?.match_score;
+    if (typeof matchScore === "number" && reportRow) {
+      await supabaseAdmin
+        .from("reports")
+        .update({ candidate_fit_score: matchScore })
+        .eq("id", reportRow.id);
+
+      // Also patch the assessment_snapshot section so the rendered score is live
+      const { data: snapSection } = await supabaseAdmin
+        .from("report_sections")
+        .select("id, content_markdown")
+        .eq("report_id", reportRow.id)
+        .eq("section_key", "assessment_snapshot")
+        .single();
+
+      if (snapSection?.content_markdown) {
+        try {
+          const snap = JSON.parse(snapSection.content_markdown);
+          if (snap?.candidate_fit) {
+            const fit = overlayData.candidate_role_match;
+            snap.candidate_fit.score = matchScore;
+            snap.candidate_fit.signal = fit.overall_fit === "strong" ? "Strong" : fit.overall_fit === "mismatch" ? "Weak" : "Mixed";
+            snap.candidate_fit.rationale = fit.rationale ?? snap.candidate_fit.rationale;
+            await supabaseAdmin
+              .from("report_sections")
+              .update({ content_markdown: JSON.stringify(snap) })
+              .eq("id", snapSection.id);
+          }
+        } catch {
+          // Non-fatal — section will show old score but report table is correct
+        }
+      }
+
+      console.log(`[generateOverlay] Updated candidate_fit_score=${matchScore} on report ${reportRow.id}`);
+    }
+
     console.log(`[generateOverlay] Completed overlay ${overlayId}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -88,17 +88,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  // If reuseExisting, find the existing resume record for this request
+  // If reuseExisting, find the existing resume record for this request via candidate_overlays
   if (reuseExisting && !resumeText?.trim()) {
-    const { data: existing } = await supabaseAdmin
-      .from("candidate_resumes")
-      .select("id, raw_text")
+    const { data: existingOverlay } = await supabaseAdmin
+      .from("candidate_overlays")
+      .select("resume_id")
       .eq("request_id", requestId)
       .order("created_at", { ascending: false })
       .limit(1)
       .single();
 
-    if (!existing?.raw_text) {
+    if (!existingOverlay?.resume_id) {
       return NextResponse.json({ error: "No existing resume found for this request" }, { status: 404 });
     }
 
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
       .from("candidate_overlays")
       .insert({
         request_id: requestId,
-        resume_id: existing.id,
+        resume_id: existingOverlay.resume_id,
         status: "pending",
         overlay_json: null,
         error_message: null,
@@ -116,6 +116,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (overlayErr || !overlay) {
+      console.error("[resume/upload] Failed to create reuse overlay:", overlayErr);
       return NextResponse.json({ error: "Failed to create overlay record" }, { status: 500 });
     }
 
@@ -125,7 +126,7 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    return NextResponse.json({ overlayId: overlay.id, resumeId: existing.id });
+    return NextResponse.json({ overlayId: overlay.id, resumeId: existingOverlay.resume_id });
   }
 
   if (!resumeText?.trim()) {
@@ -138,7 +139,7 @@ export async function POST(req: NextRequest) {
   // Create resume record
   const { data: resume, error: resumeErr } = await supabaseAdmin
     .from("candidate_resumes")
-    .insert({ user_id: userId, request_id: requestId, raw_text: resumeText.trim(), status: "parsed" })
+    .insert({ user_id: userId, raw_text: resumeText.trim(), status: "parsed" })
     .select("id")
     .single();
 

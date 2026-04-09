@@ -111,7 +111,7 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
   }
 
   const queryEmbedding = await generateEmbedding(BROAD_RETRIEVAL_QUERY);
-  const rawResults = await semanticSearch(requestId, queryEmbedding, 25, 0.4);
+  const rawResults = await semanticSearch(requestId, queryEmbedding, 18, 0.4);
 
   const { data: company } = await supabaseAdmin
     .from("companies")
@@ -266,21 +266,23 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     "strategic_bet_analysis",
   ]);
 
-  for (const sectionKey of SECTION_ORDER) {
-    const sectionData = structured[sectionKey];
-    if (!sectionData) continue;
-    try {
-      await createReportSection(
-        finalReport.id,
-        sectionKey,
-        SECTION_TITLES[sectionKey],
-        JSON.stringify(sectionData),
-        CITATION_SECTIONS.has(sectionKey) ? citationsForSection : undefined
-      );
-    } catch (err) {
-      console.error(`Failed to store section ${sectionKey}:`, err);
-    }
-  }
+  await Promise.all(
+    SECTION_ORDER.map(async (sectionKey) => {
+      const sectionData = structured[sectionKey];
+      if (!sectionData) return;
+      try {
+        await createReportSection(
+          finalReport.id,
+          sectionKey,
+          SECTION_TITLES[sectionKey],
+          JSON.stringify(sectionData),
+          CITATION_SECTIONS.has(sectionKey) ? citationsForSection : undefined
+        );
+      } catch (err) {
+        console.error(`Failed to store section ${sectionKey}:`, err);
+      }
+    })
+  );
 
   console.log(`[assembleReport] Complete — report ${finalReport.id}`);
   return finalReport;

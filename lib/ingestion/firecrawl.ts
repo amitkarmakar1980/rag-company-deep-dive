@@ -125,11 +125,10 @@ export async function buildSourceUrls(
     sources.push({ url: companyUrl, type: "company_homepage", priority: 10 });
 
     const domain = new URL(companyUrl).hostname;
+    // Only fetch the two most signal-rich secondary pages (newsroom > blog)
     sources.push(
-      { url: `https://${domain}/blog`,     type: "blog",     priority: 8 },
       { url: `https://${domain}/newsroom`, type: "newsroom", priority: 9 },
-      { url: `https://${domain}/press`,    type: "newsroom", priority: 9 },
-      { url: `https://${domain}/news`,     type: "blog",     priority: 7 }
+      { url: `https://${domain}/blog`,     type: "blog",     priority: 8 }
     );
   }
 

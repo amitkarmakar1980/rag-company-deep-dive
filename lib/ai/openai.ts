@@ -12,7 +12,7 @@ const openai = new OpenAI({
  * and why-role-exists. These sections require multi-step reasoning and evidence
  * synthesis; the quality difference between o3 and a standard model is material.
  */
-export const DEEP_MODEL = "o3";
+export const DEEP_MODEL = "o4-mini";
 
 /**
  * Standard synthesis tier — used for interview prep sections, summaries, and
@@ -30,6 +30,7 @@ export const OVERLAY_MODEL = "gpt-4o";
 // ─── Pricing (USD per 1M tokens, approximate) ────────────────────────────────
 // Update if OpenAI changes pricing.
 const PRICING: Record<string, { input: number; output: number }> = {
+  "o4-mini":      { input:  1.10, output:  4.40 },
   o3:             { input: 10.00, output: 40.00 },
   "gpt-4o":       { input:  2.50, output: 10.00 },
   "gpt-4o-mini":  { input:  0.15, output:  0.60 },

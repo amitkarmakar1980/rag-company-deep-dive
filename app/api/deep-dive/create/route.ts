@@ -119,15 +119,13 @@ async function runPipeline(
       await assembleReport(requestId);
       console.log("[Pipeline] assembleReport complete");
 
-      await updateDeepDiveStatus(requestId, "completed");
-      console.log("[Pipeline] Status → completed ✓");
-
-      // If resume was provided at submission time, auto-personalize
+      // If resume was provided, create the overlay record BEFORE marking completed.
+      // This prevents a race: the page polls, sees "completed", checks for overlay —
+      // and finds it already pending/generating rather than missing.
+      let overlayId: string | undefined;
       if (resumeText?.trim()) {
-        console.log("[Pipeline] Resume present — auto-generating candidate overlay...");
         try {
           const { supabaseAdmin } = await import("@/lib/db/supabase");
-          // Save resume record
           const { data: resumeRecord } = await supabaseAdmin
             .from("candidate_resumes")
             .insert({ user_id: userId, request_id: requestId, raw_text: resumeText.trim() })
@@ -135,22 +133,29 @@ async function runPipeline(
             .single();
 
           if (resumeRecord) {
-            // Create overlay record
             const { data: overlayRecord } = await supabaseAdmin
               .from("candidate_overlays")
               .insert({ request_id: requestId, resume_id: resumeRecord.id, status: "pending" })
               .select("id")
               .single();
-
-            if (overlayRecord) {
-              const { generateOverlay } = await import("@/lib/report/generateOverlay");
-              await generateOverlay(overlayRecord.id);
-              console.log("[Pipeline] Candidate overlay complete ✓");
-            }
+            overlayId = overlayRecord?.id;
           }
         } catch (overlayErr) {
-          // Overlay failure must not fail the overall pipeline
-          console.error("[Pipeline] Overlay auto-generation failed (non-fatal):", overlayErr);
+          console.error("[Pipeline] Failed to create overlay record (non-fatal):", overlayErr);
+        }
+      }
+
+      await updateDeepDiveStatus(requestId, "completed");
+      console.log("[Pipeline] Status → completed ✓");
+
+      // Now run the overlay LLM call (page is already polling for the pending record)
+      if (overlayId) {
+        try {
+          const { generateOverlay } = await import("@/lib/report/generateOverlay");
+          await generateOverlay(overlayId);
+          console.log("[Pipeline] Candidate overlay complete ✓");
+        } catch (overlayErr) {
+          console.error("[Pipeline] Overlay generation failed (non-fatal):", overlayErr);
         }
       }
     } else {

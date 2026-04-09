@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
       companyUrl,
       profileContext,
       customUrls,
-      resumeText,
     } = await req.json();
 
     // Get current user from session cookie
@@ -49,42 +48,7 @@ export async function POST(req: NextRequest) {
       profileContext
     );
 
-    // If a resume was provided, create resume + overlay records so that
-    // overlay generation can begin immediately after the base report finishes.
-    let overlayId: string | undefined;
-    if (resumeText && typeof resumeText === "string" && resumeText.trim().length > 0) {
-      const { data: resume } = await supabaseAdmin
-        .from("candidate_resumes")
-        .insert({ user_id: user.id, raw_text: resumeText.trim(), status: "parsed" })
-        .select("id")
-        .single();
-
-      if (resume) {
-        const { data: overlay } = await supabaseAdmin
-          .from("candidate_overlays")
-          .upsert(
-            {
-              request_id: request.id,
-              resume_id: resume.id,
-              status: "pending",
-              overlay_json: null,
-              error_message: null,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "request_id,resume_id", ignoreDuplicates: false }
-          )
-          .select("id")
-          .single();
-
-        if (overlay) {
-          overlayId = overlay.id;
-        }
-      }
-    }
-
     // Fire-and-forget: kick off pipeline without blocking the response.
-    // setImmediate defers execution until after the response is flushed.
-    // Works in both dev and production (Node.js runtime).
     setImmediate(() => {
       runPipeline(
         request.id,
@@ -93,8 +57,7 @@ export async function POST(req: NextRequest) {
         companyUrl,
         customUrls,
         jobDescription,
-        profileContext,
-        overlayId
+        profileContext
       ).catch((err) =>
         console.error("[Pipeline] Unhandled top-level error:", err)
       );
@@ -120,8 +83,7 @@ async function runPipeline(
   companyUrl: string | undefined,
   customUrls: string[] | undefined,
   jobDescription: string | undefined,
-  profileContext: string | undefined,
-  overlayId?: string
+  profileContext: string | undefined
 ) {
   console.log(`[Pipeline] START requestId=${requestId} company=${companyName}`);
   try {
@@ -154,15 +116,6 @@ async function runPipeline(
 
       await updateDeepDiveStatus(requestId, "completed");
       console.log("[Pipeline] Status → completed ✓");
-
-      // If a resume was submitted with the form, kick off overlay generation now
-      if (overlayId) {
-        console.log(`[Pipeline] Starting overlay generation overlayId=${overlayId}`);
-        const { generateOverlay } = await import("@/lib/report/generateOverlay");
-        generateOverlay(overlayId).catch((err) =>
-          console.error("[Pipeline] Overlay generation failed:", err)
-        );
-      }
     } else {
       console.error(`[Pipeline] ingestSources failed: ${result.error}`);
       await updateDeepDiveStatus(requestId, "failed");

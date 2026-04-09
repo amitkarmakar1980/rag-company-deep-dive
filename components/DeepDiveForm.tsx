@@ -317,7 +317,8 @@ export function DeepDiveForm() {
           customUrls: formData.customUrls
             ? formData.customUrls.split("\n").filter((u) => u.trim())
             : undefined,
-          resumeText: stored?.text || undefined,
+          // Intentionally NOT sending resumeText — personalization is opt-in
+          // on the report page, never automatic
         }),
       });
       if (!res.ok) throw new Error("Failed to create deep dive");

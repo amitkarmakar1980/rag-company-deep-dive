@@ -45,8 +45,6 @@ export async function POST(
 
     const hasDeepAnalysis = !!checkpoint?.deep_analysis;
     const hasInterviewLayer = !!checkpoint?.interview_layer;
-    const hasSections = !!(existingReport && !checkpoint); // report exists with no pending checkpoint = fully complete (weird edge case)
-
     console.log(
       `[Regenerate] requestId=${requestId} sources=${sourceCount} ` +
       `deepDone=${hasDeepAnalysis} interviewDone=${hasInterviewLayer}`

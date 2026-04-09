@@ -125,7 +125,7 @@ export default function HistoryPage() {
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 animate-pulse">
+              <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 shadow-[0_1px_4px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)] animate-pulse">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-gray-100" />
                   <div className="flex-1 space-y-2">
@@ -166,7 +166,7 @@ export default function HistoryPage() {
                 .sort((a, b) => SECTION_DISPLAY_ORDER.indexOf(a) - SECTION_DISPLAY_ORDER.indexOf(b));
 
               const card = (
-                <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all group">
+                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-[0_1px_4px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.1),0_8px_24px_rgba(0,0,0,0.06)] hover:border-gray-300 transition-all duration-200 group">
                   <div className="flex items-start gap-4">
 
                     {/* Favicon */}

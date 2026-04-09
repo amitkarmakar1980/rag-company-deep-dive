@@ -87,28 +87,6 @@ const BRIEF_SECTION_KEYS = new Set([
   "assessment_snapshot",
 ]);
 
-/**
- * Full ordered list of base report section keys.
- * Overlay sections are interleaved after strategic_bet_analysis.
- */
-const FULL_SECTION_ORDER = [
-  "executive_summary",
-  "interview_decision_summary",
-  "five_minute_brief",
-  "assessment_snapshot",
-  "strategic_bet_analysis",
-  // overlay sections injected here by the renderer
-  "likely_interview_agenda",
-  "questions_to_ask",
-  "risks_red_flags",
-  "unknowns_to_validate",
-  "company_snapshot",
-  "company_swot",
-  "role_snapshot",
-  "role_swot",
-  "why_role_exists_now",
-];
-
 // Candidate overlay section config — order matters
 const OVERLAY_SECTIONS: Array<{
   key: keyof CandidateOverlayData;

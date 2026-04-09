@@ -270,35 +270,6 @@ export function ReportSectionCard({
         </SectionShell>
       );
 
-    case "evidence_gaps": {
-      const d = data as StructuredReport["evidence_gaps"];
-      const qualityColor =
-        d.overall_evidence_quality === "strong"
-          ? "text-emerald-700"
-          : d.overall_evidence_quality === "partial"
-          ? "text-amber-700"
-          : "text-red-700";
-      return (
-        <SectionShell
-          id={sectionKey}
-          title={title}
-          subtitle="Known unknowns and what additional research would improve this brief"
-          feedback={feedback}
-          collapsible
-          defaultCollapsed
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-xs text-gray-400">Overall evidence quality:</span>
-            <span className={`text-sm font-semibold ${qualityColor} capitalize`}>
-              {d.overall_evidence_quality}
-            </span>
-          </div>
-          <BulletGroup label="Gaps" items={d.gaps} />
-          <BulletGroup label="Sources That Would Help" items={d.additional_sources_needed} />
-        </SectionShell>
-      );
-    }
-
     default:
       return (
         <SectionShell id={sectionKey} title={title} feedback={feedback}>

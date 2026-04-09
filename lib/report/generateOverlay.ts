@@ -1,7 +1,6 @@
 import { supabaseAdmin } from "@/lib/db/supabase";
 import { generateCandidateOverlay } from "@/lib/ai/openai";
 import { getCandidateOverlayPrompt } from "@/lib/ai/overlayPrompt";
-import { CandidateOverlayData } from "@/lib/types";
 
 /**
  * Generates the candidate overlay for a given (requestId, overlayId) pair.

@@ -282,6 +282,42 @@ export type ConfidenceLevel = "high" | "medium" | "low" | "none";
 export type EvidenceBasis = "strong" | "partial" | "inferred";
 export type EvidenceQuality = "strong" | "partial" | "weak";
 
+// ─── Evidence Contract (Phase 2 — System Contract layers) ──────────────────
+
+export interface VerifiedFact {
+  claim: string;
+  source_ref: string; // e.g. "Job description", "TechCrunch 2024-11", "Company blog"
+}
+
+export interface KeyInference {
+  inference: string;
+  basis: string; // what evidence supports this
+  confidence: ConfidenceLevel;
+}
+
+export interface EvidenceGap {
+  what_is_missing: string;
+  why_it_matters: string;
+}
+
+export interface CandidateGuidanceItem {
+  action: string;
+  basis: string; // which verified fact or gap drives this
+}
+
+export interface NextBestAction {
+  action: string;
+  rationale: string;
+}
+
+export interface EvidenceContract {
+  verified_facts: VerifiedFact[];
+  key_inferences: KeyInference[];
+  evidence_gaps: EvidenceGap[];
+  candidate_guidance: CandidateGuidanceItem[];
+  next_best_actions: NextBestAction[];
+}
+
 export interface ScoreDetail {
   score: number | null; // 1–10, or null when NOT_ASSESSED
   label: SignalLabel;
@@ -442,4 +478,6 @@ export interface StructuredReport {
     supporting_signals: string[];
     confidence: ConfidenceLevel;
   };
+  // ── System Contract (explicit fact/inference/gap layers) ─────────────────
+  evidence_contract: EvidenceContract;
 }

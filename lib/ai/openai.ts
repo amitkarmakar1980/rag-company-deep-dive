@@ -148,6 +148,7 @@ export type InterviewLayerResult = Pick<
   | "role_snapshot"
   | "interview_decision_summary"
   | "five_minute_brief"
+  | "evidence_contract"
 >;
 
 export async function generateInterviewLayer(

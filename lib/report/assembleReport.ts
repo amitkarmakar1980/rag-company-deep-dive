@@ -103,6 +103,7 @@ const SECTION_TITLES: Record<keyof StructuredReport, string> = {
   role_snapshot: "Role Snapshot",
   role_swot: "Role SWOT",
   why_role_exists_now: "Why This Role Exists Now",
+  evidence_contract: "Evidence Contract",
 };
 
 const SECTION_ORDER: (keyof StructuredReport)[] = [
@@ -122,6 +123,7 @@ const SECTION_ORDER: (keyof StructuredReport)[] = [
   "role_snapshot",
   "role_swot",
   "why_role_exists_now",
+  "evidence_contract",
 ];
 
 const DEFAULT_SCORES = {

@@ -12,6 +12,7 @@ import { FiveMinuteBrief } from "./report/FiveMinuteBrief";
 import { StrategicImportanceCard } from "./report/StrategicImportanceCard";
 import { LikelyInterviewAgenda } from "./report/LikelyInterviewAgenda";
 import { UnknownsToValidate } from "./report/UnknownsToValidate";
+import { EvidenceContractCard } from "./report/EvidenceContractCard";
 
 interface Citation {
   source_id: string;
@@ -340,6 +341,20 @@ export function ReportSectionCard({
           feedback={feedback}
         >
           <RisksSection data={data as StructuredReport["risks_red_flags"]} />
+        </SectionShell>
+      );
+
+    case "evidence_contract":
+      return (
+        <SectionShell
+          id={sectionKey}
+          title={title}
+          subtitle="What we know vs. inferred vs. unknown — with your next actions"
+          feedback={feedback}
+          collapsible
+          defaultCollapsed
+        >
+          <EvidenceContractCard data={data as StructuredReport["evidence_contract"]} />
         </SectionShell>
       );
 

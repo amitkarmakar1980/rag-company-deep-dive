@@ -558,8 +558,14 @@ RULES:
 9. interview_decision_summary and five_minute_brief must synthesize everything — write them last, make them concise and immediately actionable.
 10. Never invent specifics (org structure, success metrics, reporting lines) not supported by evidence.
 11. Evidence quality warnings in the header must inform your confidence levels. If evidence quality is WEAK or INSUFFICIENT, lower all confidence ratings and mark claims accordingly.
+12. EVIDENCE CONTRACT — evidence_contract is the system's transparency layer. It must be the most rigorous section:
+    - verified_facts: only include claims that could survive a fact-check against the source. No inferences here.
+    - key_inferences: label your synthesis honestly. "The company is prioritizing X" is an inference unless stated directly.
+    - evidence_gaps: be honest about what you do NOT know. This is a feature, not a failure.
+    - candidate_guidance: tie every item to a specific verified fact or evidence gap — no floating generic advice.
+    - next_best_actions: exactly 3–5 items. Order by impact. Make them specific and executable, not aspirational.
 
-RETURN A SINGLE VALID JSON OBJECT with exactly these 11 keys. No other text.
+RETURN A SINGLE VALID JSON OBJECT with exactly these 12 keys. No other text.
 
 {
   "company_overview": {
@@ -711,6 +717,48 @@ RETURN A SINGLE VALID JSON OBJECT with exactly these 11 keys. No other text.
     "biggest_concern_to_address": "<1 sentence — what the interviewer will probe hardest>",
     "top_3_smart_questions": ["<question 1>", "<question 2>", "<question 3>"],
     "most_important_risk": "<1 sentence — most material risk for someone taking this role>"
+  },
+
+  "evidence_contract": {
+    "verified_facts": [
+      {
+        "claim": "<specific fact directly stated in or directly derivable from a source — no inference>",
+        "source_ref": "<source name, type, or date — e.g. 'Job description', 'TechCrunch Nov 2024', 'Company blog'>'"
+      }
+    ],
+    "key_inferences": [
+      {
+        "inference": "<reasonable interpretation derived from one or more verified facts — not speculation>",
+        "basis": "<which facts or sources support this inference>",
+        "confidence": "high" | "medium" | "low"
+      }
+    ],
+    "evidence_gaps": [
+      {
+        "what_is_missing": "<specific information or dimension not evidenced in any source>",
+        "why_it_matters": "<what a candidate cannot confidently assess without this information>"
+      }
+    ],
+    "candidate_guidance": [
+      {
+        "action": "<concrete interview-prep action the candidate should take — specific, not generic>",
+        "basis": "<which verified fact or evidence gap drives this recommendation>"
+      }
+    ],
+    "next_best_actions": [
+      {
+        "action": "<the single most important step the candidate should take next — before the interview>",
+        "rationale": "<why this is the highest-priority action given the evidence>"
+      },
+      {
+        "action": "<second most important action>",
+        "rationale": "<why>"
+      },
+      {
+        "action": "<third most important action>",
+        "rationale": "<why>"
+      }
+    ]
   }
 }
 

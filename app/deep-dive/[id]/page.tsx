@@ -395,30 +395,14 @@ export default function ReportPage() {
     overlayPollRef.current = setInterval(pollOverlay, 3000);
   }, [pollOverlay]);
 
-  const autoSubmitStoredResume = useCallback(async (resumeText: string) => {
-    try {
-      const res = await fetch("/api/resume/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId, resumeText }),
-      });
-      if (res.ok) {
-        setOverlay({ status: "generating", data: null, error: null });
-        startOverlayPolling();
-      }
-    } catch {
-      // Non-critical
-    }
-  }, [requestId, startOverlayPolling]);
-
-  const checkExistingOverlay = useCallback(async (resumeText?: string) => {
+  const checkExistingOverlay = useCallback(async () => {
     try {
       const res = await fetch(`/api/overlay/${requestId}`);
       if (!res.ok) return;
       const data = await res.json();
 
       if (!data.exists) {
-        if (resumeText) autoSubmitStoredResume(resumeText);
+        // Never auto-submit — user must explicitly click "Use This Resume"
         return;
       }
 
@@ -433,7 +417,7 @@ export default function ReportPage() {
     } catch {
       // Non-critical
     }
-  }, [requestId, autoSubmitStoredResume]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [requestId, startOverlayPolling]);
 
   const handleOverlayUploaded = useCallback(() => {
     setOverlay({ status: "generating", data: null, error: null });
@@ -461,14 +445,14 @@ export default function ReportPage() {
         if (!reportRes.ok) throw new Error("Failed to fetch report");
         const reportData = await reportRes.json();
         setReport(reportData);
-        checkExistingOverlay(storedResume?.text);
+        checkExistingOverlay();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
-  }, [requestId, checkExistingOverlay, storedResume]);
+  }, [requestId, checkExistingOverlay]);
 
   useEffect(() => {
     fetchStatus();

@@ -20,6 +20,8 @@ export type DeepDiveStatus =
   | "fetching_sources"
   | "indexing"
   | "generating_report"
+  | "generating_deep_analysis"
+  | "generating_interview_layer"
   | "completed"
   | "failed";
 

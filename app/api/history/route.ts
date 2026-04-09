@@ -5,48 +5,45 @@ import { supabaseAdmin } from "@/lib/db/supabase";
 export async function GET(req: NextRequest) {
   try {
     const supabase = createRouteClient(req);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { data, error } = await supabaseAdmin
       .from("deep_dive_requests")
-      .select(
-        `
+      .select(`
         id,
         role_title,
+        status,
         created_at,
-        companies(name),
-        reports(recommendation)
-      `
-      )
+        company_url,
+        job_description,
+        companies(name, website_url),
+        reports(recommendation),
+        candidate_overlays(id, status)
+      `)
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(50);
 
     if (error) throw error;
 
     return NextResponse.json(
-      data?.map((item: any) => ({
+      (data ?? []).map((item: any) => ({
         requestId: item.id,
-        company: item.companies || { name: "Unknown" },
+        company: item.companies || { name: "Unknown", website_url: null },
         roleTitle: item.role_title,
+        status: item.status,
         createdAt: item.created_at,
+        companyUrl: item.company_url || item.companies?.website_url || null,
+        hasJobDescription: !!item.job_description,
+        hasResume: (item.candidate_overlays ?? []).some(
+          (o: any) => o.status === "completed" || o.status === "generating"
+        ),
         report: item.reports?.[0] || null,
-      })) || []
+      }))
     );
   } catch (error) {
     console.error("History fetch error:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch history" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch history" }, { status: 500 });
   }
 }

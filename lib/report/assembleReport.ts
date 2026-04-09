@@ -1,12 +1,22 @@
 import {
   getDeepDiveRequest,
   getRequestSources,
+  getReport,
   createReport,
+  updateReport,
+  updateReportSummaryJson,
+  clearReportSections,
   createReportSection,
+  updateDeepDiveStatus,
 } from "@/lib/db/operations";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import { generateEmbedding } from "@/lib/ai/embeddings";
-import { generateDeepAnalysis, generateInterviewLayer } from "@/lib/ai/openai";
+import {
+  generateDeepAnalysis,
+  generateInterviewLayer,
+  DeepAnalysisResult,
+  InterviewLayerResult,
+} from "@/lib/ai/openai";
 import { getDeepAnalysisPrompt, getInterviewLayerPrompt } from "@/lib/ai/prompts";
 import { semanticSearch, rerank } from "@/lib/retrieval/search";
 import {
@@ -15,9 +25,10 @@ import {
   StructuredReport,
   RecommendationType,
   ReportTokenUsage,
+  LLMCallUsage,
 } from "@/lib/types";
 
-// Broad retrieval query — used by both parallel calls
+// Broad retrieval query — used by both LLM calls
 const BROAD_RETRIEVAL_QUERY =
   "company strategy priorities product platform leadership org structure " +
   "role responsibilities hiring team metrics success risks opportunities " +
@@ -57,17 +68,48 @@ const SECTION_ORDER: (keyof StructuredReport)[] = [
   "why_role_exists_now",
 ];
 
+const DEFAULT_SCORES = {
+  company_momentum: 5,
+  org_clarity: 5,
+  role_leverage: 5,
+  execution_risk: 5,
+  candidate_fit: 5,
+};
+
+/**
+ * Assembles the full report for a requestId.
+ *
+ * Checkpointing: runs deep analysis (o3) first, saves result to reports.summary_json,
+ * then runs interview layer (gpt-4o-mini), saves result, then finalizes.
+ * On retry, completed stages are skipped using the saved checkpoint.
+ */
 export async function assembleReport(requestId: string): Promise<Report | null> {
-  // 1. Load request and sources
+  // 1. Load request
   const request = await getDeepDiveRequest(requestId);
   if (!request) throw new Error("Request not found");
 
-  const sources = await getRequestSources(requestId);
-  if (sources.length === 0) {
-    console.warn(`[assembleReport] No sources found for request ${requestId} — generating with empty context`);
+  // 2. Check for existing partial report (from a prior failed attempt)
+  let existingReport = await getReport(requestId);
+  const checkpoint = existingReport?.summary_json?.checkpoint ?? {};
+
+  let deepData: DeepAnalysisResult | null = checkpoint.deep_analysis ?? null;
+  let deepUsage: LLMCallUsage | null = checkpoint.deep_usage ?? null;
+  let interviewData: InterviewLayerResult | null = checkpoint.interview_layer ?? null;
+  let interviewUsage: LLMCallUsage | null = checkpoint.interview_usage ?? null;
+
+  if (deepData) {
+    console.log(`[assembleReport] Resuming from checkpoint — deep analysis already done`);
+  }
+  if (interviewData) {
+    console.log(`[assembleReport] Resuming from checkpoint — interview layer already done`);
   }
 
-  // 2. Semantic retrieval — shared across both parallel calls
+  // 3. Build retrieval context (always needed for prompts)
+  const sources = await getRequestSources(requestId);
+  if (sources.length === 0) {
+    console.warn(`[assembleReport] No sources found for request ${requestId}`);
+  }
+
   const queryEmbedding = await generateEmbedding(BROAD_RETRIEVAL_QUERY);
   const rawResults = await semanticSearch(requestId, queryEmbedding, 25, 0.4);
 
@@ -97,64 +139,91 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     },
   };
 
-  // 3. Build both prompts from the same context
-  const deepPrompt = getDeepAnalysisPrompt(
-    context,
-    companyName,
-    request.role_title,
-    request.job_description ?? undefined,
-    request.profile_context ?? undefined
-  );
+  // 4. Stage 1: Deep analysis (o3) — skip if checkpoint exists
+  if (!deepData) {
+    await updateDeepDiveStatus(requestId, "generating_deep_analysis");
+    console.log(`[assembleReport] Running o3 deep analysis…`);
 
-  const interviewPrompt = getInterviewLayerPrompt(
-    context,
-    companyName,
-    request.role_title,
-    request.job_description ?? undefined,
-    request.profile_context ?? undefined
-  );
+    const deepPrompt = getDeepAnalysisPrompt(
+      context,
+      companyName,
+      request.role_title,
+      request.job_description ?? undefined,
+      request.profile_context ?? undefined
+    );
 
-  // 4. Fire both LLM calls in parallel
-  console.log(`[assembleReport] Firing parallel LLM calls: o3 (deep) + gpt-4o-mini (interview layer)`);
+    const result = await generateDeepAnalysis(deepPrompt);
+    deepData = result.data;
+    deepUsage = result.usage;
 
-  let deepResult: Awaited<ReturnType<typeof generateDeepAnalysis>>;
-  let interviewResult: Awaited<ReturnType<typeof generateInterviewLayer>>;
+    console.log(
+      `[assembleReport] Deep analysis done — ${deepUsage.input_tokens}in/${deepUsage.output_tokens}out` +
+      (deepUsage.reasoning_tokens ? ` (${deepUsage.reasoning_tokens} reasoning)` : "")
+    );
 
-  try {
-    [deepResult, interviewResult] = await Promise.all([
-      generateDeepAnalysis(deepPrompt),
-      generateInterviewLayer(interviewPrompt),
-    ]);
-  } catch (err) {
-    console.error("[assembleReport] Parallel LLM calls failed:", err);
-    throw err;
+    // Save checkpoint to DB so a retry can skip this stage
+    if (!existingReport) {
+      existingReport = await createReport(requestId, "need_more_signal", DEFAULT_SCORES, {
+        checkpoint: { deep_analysis: deepData, deep_usage: deepUsage },
+      });
+    } else {
+      await updateReportSummaryJson(existingReport.id, {
+        checkpoint: { deep_analysis: deepData, deep_usage: deepUsage },
+      });
+    }
   }
 
-  console.log(
-    `[assembleReport] Done — deep: ${deepResult.usage.input_tokens}in/${deepResult.usage.output_tokens}out ` +
-    `(${deepResult.usage.reasoning_tokens ?? 0} reasoning) | ` +
-    `interview: ${interviewResult.usage.input_tokens}in/${interviewResult.usage.output_tokens}out`
-  );
+  // 5. Stage 2: Interview layer (gpt-4o-mini) — skip if checkpoint exists
+  if (!interviewData) {
+    await updateDeepDiveStatus(requestId, "generating_interview_layer");
+    console.log(`[assembleReport] Running gpt-4o-mini interview layer…`);
 
-  // 5. Merge into a single StructuredReport
+    const interviewPrompt = getInterviewLayerPrompt(
+      context,
+      companyName,
+      request.role_title,
+      request.job_description ?? undefined,
+      request.profile_context ?? undefined
+    );
+
+    const result = await generateInterviewLayer(interviewPrompt);
+    interviewData = result.data;
+    interviewUsage = result.usage;
+
+    console.log(
+      `[assembleReport] Interview layer done — ${interviewUsage.input_tokens}in/${interviewUsage.output_tokens}out`
+    );
+
+    // Update checkpoint with both results
+    await updateReportSummaryJson(existingReport!.id, {
+      checkpoint: {
+        deep_analysis: deepData,
+        deep_usage: deepUsage,
+        interview_layer: interviewData,
+        interview_usage: interviewUsage,
+      },
+    });
+  }
+
+  // 6. Merge results
   const structured: StructuredReport = {
-    ...deepResult.data,
-    ...interviewResult.data,
+    ...deepData!,
+    ...interviewData!,
   };
 
-  // 6. Build token usage summary
+  // 7. Build token usage
   const tokenUsage: ReportTokenUsage = {
-    calls: [deepResult.usage, interviewResult.usage],
+    calls: [deepUsage!, interviewUsage!],
     total_tokens:
-      deepResult.usage.input_tokens +
-      deepResult.usage.output_tokens +
-      interviewResult.usage.input_tokens +
-      interviewResult.usage.output_tokens,
+      deepUsage!.input_tokens +
+      deepUsage!.output_tokens +
+      interviewUsage!.input_tokens +
+      interviewUsage!.output_tokens,
     total_cost_usd:
-      deepResult.usage.estimated_cost_usd + interviewResult.usage.estimated_cost_usd,
+      deepUsage!.estimated_cost_usd + interviewUsage!.estimated_cost_usd,
   };
 
-  // 7. Derive scores from the interview layer's assessment_snapshot
+  // 8. Finalize report record (update with real scores + clear checkpoint)
   const snap = structured.assessment_snapshot;
   const scores = {
     company_momentum: snap.company_momentum.score,
@@ -163,43 +232,58 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     execution_risk: snap.execution_risk.score,
     candidate_fit: snap.candidate_fit.score,
   };
-
   const recommendation = validateRecommendation(
     structured.executive_summary.recommendation
   );
 
-  // 8. Create the report record — store token usage in summary_json
-  const report = await createReport(requestId, recommendation, scores, {
-    token_usage: tokenUsage,
-  });
+  let finalReport: Report;
+  if (existingReport) {
+    // Clear checkpoint (no longer needed) and store final token usage
+    finalReport = await updateReport(existingReport.id, recommendation, scores, {
+      token_usage: tokenUsage,
+    });
+    // Clear any stale sections from a prior partial run
+    await clearReportSections(finalReport.id);
+  } else {
+    finalReport = await createReport(requestId, recommendation, scores, {
+      token_usage: tokenUsage,
+    });
+  }
 
-  // 9. Store each section
+  // 9. Store sections
   const citationsForSection = context.chunks.map((c) => ({
     source_id: c.source_id,
     url: c.source_url,
     title: c.source_title,
   }));
 
+  const CITATION_SECTIONS = new Set([
+    "company_snapshot",
+    "company_swot",
+    "role_snapshot",
+    "role_swot",
+    "why_role_exists_now",
+    "strategic_bet_analysis",
+  ]);
+
   for (const sectionKey of SECTION_ORDER) {
     const sectionData = structured[sectionKey];
     if (!sectionData) continue;
-
     try {
       await createReportSection(
-        report.id,
+        finalReport.id,
         sectionKey,
         SECTION_TITLES[sectionKey],
         JSON.stringify(sectionData),
-        ["company_snapshot", "company_swot", "role_snapshot", "role_swot", "why_role_exists_now", "strategic_bet_analysis"].includes(sectionKey)
-          ? citationsForSection
-          : undefined
+        CITATION_SECTIONS.has(sectionKey) ? citationsForSection : undefined
       );
     } catch (err) {
       console.error(`Failed to store section ${sectionKey}:`, err);
     }
   }
 
-  return report;
+  console.log(`[assembleReport] Complete — report ${finalReport.id}`);
+  return finalReport;
 }
 
 function validateRecommendation(raw: string): RecommendationType {

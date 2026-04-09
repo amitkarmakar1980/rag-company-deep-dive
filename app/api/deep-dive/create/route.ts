@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+
+export const maxDuration = 300; // 5 minutes — needed for o3 + gpt-4o-mini pipeline
 import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import {

@@ -68,6 +68,8 @@ const PROCESSING_STATUSES = new Set([
   "fetching_sources",
   "indexing",
   "generating_report",
+  "generating_deep_analysis",
+  "generating_interview_layer",
 ]);
 
 const STATUS_LABELS: Record<string, string> = {
@@ -75,6 +77,8 @@ const STATUS_LABELS: Record<string, string> = {
   fetching_sources: "Fetching sources from the web…",
   indexing: "Indexing and embedding content…",
   generating_report: "Generating your intelligence brief…",
+  generating_deep_analysis: "Running deep strategic analysis…",
+  generating_interview_layer: "Running interview prep layer…",
 };
 
 // Animated sub-step messages shown per status phase
@@ -94,14 +98,22 @@ const STATUS_SUBSTEPS: Record<string, string[]> = {
     "Deduplicating and chunking evidence…",
   ],
   generating_report: [
-    "Running deep strategic analysis (o3)…",
+    "Preparing retrieval context for LLM calls…",
+    "Running semantic search over sources…",
+  ],
+  generating_deep_analysis: [
+    "Running o3 deep strategic analysis…",
     "Building SWOT quadrants from evidence…",
-    "Classifying strategic bet and role mandate…",
-    "Running interview prep layer (gpt-4o-mini)…",
+    "Classifying strategic role significance…",
+    "Identifying why this role exists now…",
+    "Surfacing risks and red flags…",
+  ],
+  generating_interview_layer: [
+    "Running gpt-4o-mini interview prep layer…",
     "Synthesizing candidate positioning angles…",
-    "Generating questions to ask…",
-    "Assembling 5-minute brief…",
-    "Finalising the intelligence brief…",
+    "Generating executive-caliber questions…",
+    "Assembling interview decision summary…",
+    "Building 5-minute brief…",
   ],
 };
 
@@ -160,7 +172,12 @@ const OVERLAY_SECTIONS: Array<{
 
 // ─── Processing screen with animated thinking messages ────────────────────────
 
-const PHASE_ORDER = ["pending", "fetching_sources", "indexing", "generating_report"];
+const PHASE_ORDER = [
+  "fetching_sources",
+  "indexing",
+  "generating_deep_analysis",
+  "generating_interview_layer",
+];
 
 function ProcessingScreen({ statusKey }: { statusKey: string }) {
   const [subStep, setSubStep] = useState(0);

@@ -251,6 +251,68 @@ export async function createReport(
   return data;
 }
 
+export async function updateReport(
+  reportId: string,
+  recommendation: string,
+  scores: {
+    company_momentum: number;
+    org_clarity: number;
+    role_leverage: number;
+    execution_risk: number;
+    candidate_fit: number;
+  },
+  summaryJson?: Record<string, any>
+): Promise<Report> {
+  const { data, error } = await supabaseAdmin
+    .from("reports")
+    .update({
+      recommendation,
+      company_momentum_score: scores.company_momentum,
+      org_clarity_score: scores.org_clarity,
+      role_leverage_score: scores.role_leverage,
+      execution_risk_score: scores.execution_risk,
+      candidate_fit_score: scores.candidate_fit,
+      summary_json: summaryJson ?? null,
+    })
+    .eq("id", reportId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateReportSummaryJson(
+  reportId: string,
+  summaryJson: Record<string, any>
+): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("reports")
+    .update({ summary_json: summaryJson })
+    .eq("id", reportId);
+
+  if (error) throw error;
+}
+
+export async function clearReportSections(reportId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from("report_sections")
+    .delete()
+    .eq("report_id", reportId);
+
+  if (error && error.code !== "PGRST116") throw error;
+}
+
+export async function getSourceCount(requestId: string): Promise<number> {
+  const { count, error } = await supabaseAdmin
+    .from("sources")
+    .select("id", { count: "exact", head: true })
+    .eq("request_id", requestId);
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function getReport(requestId: string): Promise<Report | null> {
   const { data, error } = await supabaseAdmin
     .from("reports")

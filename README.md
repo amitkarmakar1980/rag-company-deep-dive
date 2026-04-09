@@ -1,311 +1,294 @@
-# Company Deep-Dive Engine MVP
+# Company Deep Dive Engine
 
-A lean, AI-powered web application that helps high-stakes job candidates make informed decisions by analyzing companies and roles before interviews.
+An AI-powered interview decision-support and candidate-positioning tool for senior product, strategy, and GM candidates at Director+ and VP level.
 
-## Product Overview
+Rather than producing a generic research report, the engine answers one question: **should you pursue this role, and if so, how do you win the interview?**
 
-The Company Deep-Dive Engine generates grounded reports answering:
-- **What is happening inside this company?** - Current strategy and momentum
-- **Why does this role likely exist?** - Role mandate and context
-- **What are the hidden risks?** - Execution and organizational risks
-- **What are the opportunities?** - Leverage points and upside potential
-- **How should the candidate position themselves?** - Specific positioning strategy
-- **What smart questions should they ask?** - Interview prep backed by evidence
+---
 
-## Tech Stack
+## What It Does
 
-- **Frontend**: Next.js 15, TypeScript, Tailwind CSS, shadcn/ui
-- **Backend**: Next.js API routes + server actions
-- **Database**: Supabase PostgreSQL with pgvector
-- **Vector Storage**: pgvector (Supabase embeddings)
-- **Auth**: Supabase Auth
-- **LLM**: OpenAI (GPT-4 Turbo for generation, text-embedding-3-small for embeddings)
-- **Web Extraction**: Firecrawl (with axios fallback)
-- **Deployment**: Vercel + Supabase
-- **Analytics**: PostHog (optional, ready to integrate)
+### For every company + role, it generates:
+
+- **Interview Decision Summary** — Pursue recommendation (Aggressive / Selective / Cautious / Pass), positioning angle, top 3 questions, red flag to validate
+- **5-Minute Brief** — Skimmable pre-interview card set with smart questions
+- **Executive Summary** — Overall opportunity narrative with pursuit stance
+- **Assessment Snapshot** — Scored across 5 dimensions (company momentum, org clarity, role leverage, execution risk, candidate fit)
+- **Strategic Importance of This Role** — Classification of strategic weight, evidence, what could disprove it, career upside
+- **Likely Interview Agenda** — What interviewers validate, worry about, and need to see per dimension
+- **Questions to Ask** — Must Ask (top 3 with follow-ups) + Good Questions, each with strong/weak answer signals
+- **Risks & Red Flags** — Evidence-grounded, severity-ranked
+- **Unknowns to Validate Live** — Live interview questions with reassuring vs. concerning answer patterns
+- **Company Snapshot + SWOT** — Min 5 items per quadrant, all evidence-linked
+- **Role Snapshot + SWOT** — Charter, success metrics, Y1 expectations, structural risks
+- **Why This Role Exists Now** — Original thesis on what changed to create this hire
+
+### When a resume is uploaded, it also generates:
+
+- **Candidate–Role Match** — Fit level (strong / moderate / stretch / mismatch), 1–10 score, alignments with resume evidence, gaps
+- **Strengths to Emphasize** — Resume-grounded, mapped to what this hiring manager actually cares about
+- **Objections You Must Overcome** — The 3–5 hardest objections with how to respond, proof points, what not to say
+- **Likely Interviewer Concerns** — Severity-ranked worries + the probing questions they'll ask
+- **Gap Management** — Real gaps named honestly, reframes, verbatim talking points
+- **Story Recommendations** — Specific resume stories fleshed out + mapped to JD requirements
+- **Positioning Strategy** — Headline, narrative arc, and a ready-to-use Tell Me About Yourself
+
+---
+
+## Architecture
+
+### Two-tier LLM pipeline (parallel)
+
+Report generation fires two LLM calls simultaneously and merges the results:
+
+| Tier | Model | Sections |
+|---|---|---|
+| Deep Analysis | `o3` | company_swot, role_swot, strategic_bet_analysis, why_role_exists_now, risks_red_flags |
+| Interview Layer | `gpt-4o-mini` | executive_summary, assessment_snapshot, likely_interview_agenda, questions_to_ask, unknowns_to_validate, company_snapshot, role_snapshot, interview_decision_summary, five_minute_brief |
+| Candidate Overlay | `gpt-4o` | All 7 resume-personalization sections |
+
+`o3` handles sections requiring multi-step strategic reasoning and non-obvious SWOT synthesis. `gpt-4o-mini` handles synthesis and formatting. Both base calls run in parallel via `Promise.all` — latency is bounded by the slower of the two, not their sum.
+
+### Ingestion pipeline
+
+```
+URL / JD input
+    → Firecrawl (v2 scrape API, axios fallback)
+    → cleanContent()  — strip HTML, boilerplate, normalize
+    → chunkContent()  — semantic + token-based, ~500 tokens/chunk, 50-token overlap
+    → generateEmbeddings()  — OpenAI text-embedding-3-small, 1536 dims
+    → Supabase (chunks + pgvector embeddings)
+```
+
+### Retrieval
+
+```
+Broad retrieval query embedding
+    → semanticSearch()  — Supabase RPC (cosine distance, ivfflat index)
+    → rerank()  — recency boost, source type weights, strategic keyword density,
+                  company/role name mentions
+    → Top 25 chunks → RetrievalContext
+```
+
+### Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript |
+| Styling | Tailwind CSS |
+| Database | Supabase PostgreSQL + pgvector |
+| Auth | Supabase Auth (email/password + Google OAuth) |
+| LLM | OpenAI (`o3`, `gpt-4o`, `gpt-4o-mini`, `text-embedding-3-small`) |
+| Web scraping | Firecrawl v2 API (axios fallback) |
+| File parsing | pdf-parse (v1), mammoth (DOCX/DOC) |
+| Resume persistence | localStorage (`useResumeStore` hook) |
+
+---
 
 ## Project Structure
 
 ```
-/app
-  /_layout.tsx        # Root layout
-  /page.tsx           # Landing page
-  /deep-dive/
-    /new/page.tsx     # New analysis form
-    /[id]/page.tsx    # Report display
-  /history/page.tsx   # User report history
-  /api/
-    /deep-dive/
-      /create/route.ts       # Create new analysis
-      /status/route.ts       # Check analysis status
-    /report/[id]/route.ts    # Fetch report
-    /feedback/route.ts       # Submit feedback
-    /history/route.ts        # Get user history
+app/
+  page.tsx                         # Homepage with resume panel
+  auth/page.tsx                    # Email/password + Google OAuth
+  deep-dive/
+    new/page.tsx                   # New deep dive form
+    [id]/page.tsx                  # Report page (polling, overlay, view modes)
+  history/page.tsx                 # User's last 20 deep dives
+  api/
+    deep-dive/
+      create/                      # Create request + fire async pipeline
+      status/                      # Poll processing status
+      extract-jd/                  # Extract JD fields from a URL
+      [id]/regenerate/             # Re-run full pipeline
+    report/[id]/                   # Fetch report + sections + token usage
+    overlay/[requestId]/           # Poll overlay status + data
+    resume/
+      upload/                      # Upload resume → trigger overlay
+      parse/                       # Client-side file → text extraction
+    feedback/                      # Per-section useful/not_useful
+    history/                       # User report history
 
-/lib
-  /types/index.ts          # All TypeScript interfaces
-  /db/
-    /supabase.ts           # Supabase client initialization
-    /operations.ts         # Database operations
-  /ai/
-    /openai.ts             # OpenAI API client
-    /embeddings.ts         # Text embedding generation
-    /prompts.ts            # System prompts for each section
-  /ingestion/
-    /firecrawl.ts          # Web scraping / fetching
-    /clean.ts              # Content cleaning
-    /chunk.ts              # Semantic chunking
-    /ingest.ts             # Main ingestion pipeline
-  /retrieval/
-    /search.ts             # Vector search + reranking
-  /report/
-    /generateSection.ts    # Individual section generation
-    /assembleReport.ts     # Full report orchestration
-  /scoring/
-    /scores.ts             # Scoring logic
+lib/
+  types/index.ts                   # All domain types + LLMCallUsage + ReportTokenUsage
+  ai/
+    openai.ts                      # generateDeepAnalysis (o3) + generateInterviewLayer (mini) + generateCandidateOverlay (4o)
+    prompts.ts                     # getDeepAnalysisPrompt + getInterviewLayerPrompt
+    overlayPrompt.ts               # getCandidateOverlayPrompt (7 sections)
+    embeddings.ts                  # generateEmbedding / generateEmbeddings
+  db/
+    supabase.ts                    # Admin client
+    operations.ts                  # ~40 CRUD functions for all entities
+  ingestion/
+    ingest.ts                      # Main ingestion orchestrator
+    firecrawl.ts                   # URL fetch + buildSourceUrls
+    clean.ts                       # HTML cleaning + content hash
+    chunk.ts                       # Semantic chunking
+  retrieval/
+    search.ts                      # semanticSearch + rerank
+  report/
+    assembleReport.ts              # Parallel LLM calls → merge → store
+    generateOverlay.ts             # Candidate overlay generation
+  hooks/
+    useResumeStore.ts              # localStorage resume persistence
 
-/components
-  /Header.tsx                 # Navigation header
-  /DeepDiveForm.tsx          # Main form for analysis
-  /RecommendationBanner.tsx  # Top recommendation display
-  /ScoreCards.tsx            # Confidence indicator cards
-  /ReportSectionCard.tsx     # Individual section display
-  /FeedbackButtons.tsx       # Useful/not useful buttons
+components/
+  DeepDiveForm.tsx                 # Multi-step form with inline resume panel
+  ReportSectionCard.tsx            # Section dispatcher → typed renderer
+  HomepageResumePanel.tsx          # Homepage resume upload/display
+  report/
+    InterviewDecisionSummary.tsx   # Color-coded pursue recommendation card
+    FiveMinuteBrief.tsx            # 6-card skimmable brief
+    StrategicImportanceCard.tsx    # Strategic bet classification
+    LikelyInterviewAgenda.tsx      # Accordion interview dimensions
+    QuestionsCard.tsx              # Must Ask + Good Questions
+    UnknownsToValidate.tsx         # Amber accordion with answer signals
+    CandidateOverlaySections.tsx   # Base overlay section renderers (6)
+    ObjectionHandling.tsx          # Red accordion objection handling
+    TokenUsagePanel.tsx            # Collapsible API usage + cost breakdown
+    SourcesPanel.tsx               # Evidence sources with citations
+    SectionShell.tsx               # Collapsible section wrapper
 
-/database
-  /schema.sql                # SQL schema and setup
+database/
+  schema.sql                       # Full schema + pgvector + RPC function
 
+docs/
+  product-brief.md                 # Auto-generated feature list + customer journeys
+
+scripts/
+  update-product-docs.mjs          # Regenerates docs/product-brief.md from source files
 ```
+
+---
 
 ## Database Schema
 
-The MVP uses these core tables:
+```
+users
+companies
+deep_dive_requests    status: pending → fetching_sources → indexing → generating_report → completed | failed
+sources               source_type: job_description | company_homepage | newsroom | blog | custom_url | profile_text
+chunks
+embeddings            vector(1536), ivfflat index, cosine distance
+reports               5 scores + recommendation + summary_json (token usage)
+report_sections       14 section keys, content stored as JSON string
+candidate_resumes
+candidate_overlays    overlay_json JSONB, status: pending | generating | completed | failed
+feedback_events
+```
 
-- **users** - User accounts and auth
-- **companies** - Company profiles
-- **deep_dive_requests** - Analysis requests
-- **sources** - Web pages and documents fetched
-- **chunks** - Semantic chunks from sources
-- **embeddings** - Vector embeddings for chunks (pgvector)
-- **reports** - Generated analysis reports
-- **report_sections** - Individual report sections with content
-- **feedback_events** - User feedback on sections
+Custom PostgreSQL function:
+```sql
+search_embeddings(query_embedding vector, request_id uuid, match_count int, similarity_threshold float)
+```
 
-See `/database/schema.sql` for full schema with indexes and the vector search RPC function.
+---
 
-## Setup Instructions
+## Setup
 
-### 1. Prerequisites
+### Prerequisites
 
 - Node.js 18+
-- npm or yarn
-- Supabase account
+- Supabase project (pgvector enabled)
 - OpenAI API key
-- Firecrawl API key (optional but recommended)
+- Firecrawl API key (optional — falls back to axios)
 
-### 2. Environment Setup
-
-Copy `.env.example` to `.env.local` and fill in values:
+### Environment variables
 
 ```bash
 # Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key  
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 
 # OpenAI
-OPENAI_API_KEY=your_openai_key
+OPENAI_API_KEY=
 
-# Firecrawl
-FIRECRAWL_API_KEY=your_firecrawl_key
-
-# PostHog (optional)
-NEXT_PUBLIC_POSTHOG_KEY=your_posthog_key
+# Firecrawl (optional)
+FIRECRAWL_API_KEY=
 ```
 
-### 3. Database Setup
+### Database setup
 
-In the Supabase SQL editor, run the SQL from `/database/schema.sql` to:
-- Enable pgvector extension
-- Create all tables with proper indexes
-- Create the vector search RPC function
+Run `database/schema.sql` in your Supabase SQL editor. This enables the pgvector extension, creates all tables and indexes, and sets up the `search_embeddings` RPC function.
 
-### 4. Install Dependencies
+### Install and run
 
 ```bash
 npm install
-```
-
-### 5. Run Locally
-
-```bash
 npm run dev
+# → http://localhost:3000
 ```
 
-Open http://localhost:3000 in your browser.
+---
 
-## Core Workflows
+## Key Behaviors
 
-### Analysis Creation Flow
+### Report page view modes
 
-1. User submits company, role, and optional context
-2. Frontend calls `/api/deep-dive/create`
-3. Backend creates request record and triggers ingestion
-4. Ingestion process:
-   - Fetches sources (homepage, blog, newsroom, custom URLs)
-   - Cleans and chunks content
-   - Generates embeddings
-   - Stores in database
-5. Report generation:
-   - Retrieves relevant chunks via vector search
-   - Reranksto prioritize high-signal content
-   - Generates each section with LLM
-   - Calculates scores deterministically
-   - Determines recommendation
-   - Stores report and sections
+| Mode | Sections shown |
+|---|---|
+| **Full Report** | All 14 sections + overlay + sources + token usage |
+| **5-Minute Brief** | `interview_decision_summary`, `five_minute_brief`, `assessment_snapshot` only |
 
-### Report Display
+Toggle is in the page header. Brief mode shows an amber banner with a link back to full.
 
-User is redirected to report page which:
-- Displays recommendation banner
-- Shows 5 confidence indicators (scores)
-- Renders each analysis section with citations
-- Allows feedback on each section
-- Lists evidence sources
+### Resume handling
 
-### Scoring Logic
+- Accepted: PDF, DOCX, DOC, TXT
+- Parsed client-side via `/api/resume/parse` → stored in localStorage
+- Persists across sessions via `useResumeStore`
+- Auto-triggers overlay on report load if resume already on file
+- Available on homepage, both form steps, and report page
 
-Scores (1-10) are calculated from:
+### Token usage panel
 
-- **Company Momentum**: Recent announcements, launches, hiring
-- **Org Clarity**: Role language clarity, strategic consistency
-- **Role Leverage**: Scope, impact potential, platform contribution
-- **Execution Risk**: Restructuring signals, leadership changes, conflicts
-- **Candidate Fit**: Overlap between JD and candidate context (low by default)
+Every report shows a collapsible breakdown of:
+- Per-call: model name, purpose, input/output/reasoning tokens, estimated cost, token bar
+- Totals: tokens this report, cost per report, estimated 100-reports/month cost
+- Pricing reference table (o3, gpt-4o, gpt-4o-mini, gpt-4-turbo)
 
-Recommendation logic:
-- `Pursue`: Strong signals (avg 7+) and low risk
-- `Pursue Cautiously`: Mixed signals or moderate risk
-- `Avoid`: Major red flags or poor fit
-- `Need More Signal`: Insufficient evidence
-
-## Ingestion & Retrieval
-
-### Content Sources
-
-The system fetches from:
-- User-provided job description
-- Company homepage
-- Company newsroom / press
-- Company blog
-- User-provided custom URLs
-- Hiring manager / recruiter profile text
-
-### Chunking Strategy
-
-Content is chunked semantically:
-1. Split by sections (headings, paragraphs)
-2. If chunk > 1.5x target size, split by sentences
-3. Apply overlap between chunks
-4. Target ~500 tokens per chunk
-
-### Retrieval & Reranking
-
-Each report section:
-1. Embeds a domain-specific query
-2. Semantic search (vector similarity)
-3. Rerankby:
-   - Recency (boost if < 30 days)
-   - Source type (newsroom/blog > generic)
-   - Strategic language presence
-   - Title/content relevance to query
-   - Penalize boilerplate
-
-## Report Generation
-
-The system generates 6 main sections plus recommendation:
-
-1. **Company Snapshot** - Current state and strategy
-2. **Role Mandate Hypothesis** - Why this role exists
-3. **Risk Flags** - 3-5 execution or org risks
-4. **Opportunity Flags** - 3-5 leverage points
-5. **How to Position Yourself** - Positioning strategy
-6. **Questions to Ask** - 5-7 informed questions
-7. **Recommendation** - Pursue / Pursue Cautiously / Avoid / Need More Signal
-
-Each section:
-- Uses a focused prompt with relevant evidence
-- Returns structured JSON
-- Gets formatted to markdown
-- Includes citations back to sources
-- Has confidence scores
-
-## Feedback System
-
-Users can rate each section as "useful" or "not useful". This data:
-- Stores in `feedback_events` table
-- Enables report improvement over time
-- Signals which content resonates most
-- Powers future prioritization
-
-## Error Handling
-
-The system gracefully handles:
-
-- **No sources fetched** - Returns "Need More Signal"
-- **Partial ingestion** - Continues with available sources
-- **Generation timeout** - Surfaces evidence gaps to user
-- **Weak evidence** - Adjusts confidence and recommendation
-- **API failures** - Fallback mechanisms (axios if Firecrawl fails)
-
-User-facing errors are clear:
-> "We couldn't gather enough signal to produce a confident report. Try providing more context."
-
-## Deployment to Vercel
+### Auto-updating product docs
 
 ```bash
-# Set environment variables in Vercel dashboard
-# Push to your git repository
-git push origin main
-
-# Vercel automatically deploys on push
+npm run docs:update
 ```
 
-Supabase requires:
-- Enable "Postgres Extensions" in Database settings
-- Enable pgvector extension
-- Run schema.sql in SQL editor
+Reads 8 source-of-truth files, calls `gpt-4o` to regenerate `docs/product-brief.md` (feature list + 5 customer journeys). The pre-commit hook at `.git/hooks/pre-commit` runs this automatically when feature-defining files are staged and adds the result to the commit. Fails gracefully if `OPENAI_API_KEY` is unavailable.
 
-## Future Enhancements (Post-MVP)
+---
 
-- Multi-user teams and shared analyses
-- Advanced job tracking
-- Live interview coaching
-- Browser extension for job posting pages
-- More sophisticated multi-source reconciliation
-- Advanced candidate preference learning
-- LinkedIn integration (with permissions)
-- Company compensation data integration
-- Historical trend analysis
+## Data Flow
 
-## Architecture Principles
+```
+Form submit
+  → POST /api/deep-dive/create
+      → createDeepDiveRequest()
+      → setImmediate(() => runPipeline())    ← non-blocking
+      ← { requestId }
 
-1. **Modular separation of concerns**: Ingestion, retrieval, generation, and scoring are separate
-2. **Deterministic scoring**: Grounded in heuristics, not just LLM opinion
-3. **Honest uncertainty**: Clear labels on AI-generated vs factual content
-4. **Evidence-grounded**: Every claim backed by source citation
-5. **Lean MVP**: No microservices, complex queuing, or premature optimization
-6. **User-friendly errors**: No stack traces in UI, clear user guidance
-7. **Observable processing**: Status tracking and progress indication
+runPipeline()
+  → ingestSources()
+      → Firecrawl × N URLs → clean → chunk → embed → store
+  → assembleReport()
+      → semanticSearch() + rerank()
+      → Promise.all([
+          generateDeepAnalysis(o3),           ← SWOT + strategy + risks
+          generateInterviewLayer(gpt-4o-mini) ← prep + synthesis sections
+        ])
+      → merge StructuredReport
+      → store 14 report_sections + token_usage
+  → if resume: generateOverlay(gpt-4o)
+      → store overlay_json in candidate_overlays
 
-## Feedback & Iteration
+Frontend
+  → poll GET /api/deep-dive/status every 3s until completed
+  → fetch GET /api/report/[id]
+  → poll GET /api/overlay/[requestId] every 3s (if resume present)
+```
 
-The report quality improves through:
-- User feedback on section quality
-- Analysis of "not useful" signals
-- Iterating on prompt engineering
-- Refining retrieval and reranking
-- Tracking which section types drive decisions
+---
 
 ## License
 

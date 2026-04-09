@@ -67,10 +67,16 @@ export async function ingestSources(
       customUrls
     );
 
-    for (const urlSource of urlSources) {
-      const response = await fetchPageWithFirecrawl(urlSource.url);
+    // Fetch all web sources in parallel
+    const fetchResults = await Promise.allSettled(
+      urlSources.map((urlSource) =>
+        fetchPageWithFirecrawl(urlSource.url).then((response) => ({ urlSource, response }))
+      )
+    );
 
-      // Firecrawl v2 returns `markdown`; axios fallback returns `content`
+    for (const result of fetchResults) {
+      if (result.status === "rejected") continue;
+      const { urlSource, response } = result.value;
       const pageContent = response.data?.markdown || (response.data as any)?.content;
       if (response.success && pageContent) {
         sources.push({
@@ -144,26 +150,18 @@ async function processSource(
   const chunkTexts = chunks.map((c) => c.text);
   const embeddings = await generateEmbeddings(chunkTexts);
 
-  // Store chunks and embeddings
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const embedding = embeddings[i];
+  // Store chunks in parallel, then batch-insert embeddings
+  const dbChunks = await Promise.all(
+    chunks.map((chunk) => dbCreateChunk(source.id, chunk.index, chunk.text, chunk.tokenCount))
+  );
 
-    const dbChunk = await dbCreateChunk(
-      source.id,
-      chunk.index,
-      chunk.text,
-      chunk.tokenCount
-    );
+  const embeddingRows = dbChunks.map((dbChunk, i) => ({
+    chunk_id: dbChunk.id,
+    embedding: embeddings[i],
+  }));
 
-    // Store embedding in database
-    await supabaseAdmin.from("embeddings").insert([
-      {
-        chunk_id: dbChunk.id,
-        embedding,
-      },
-    ]);
+  // Batch insert all embeddings in one DB call
+  await supabaseAdmin.from("embeddings").insert(embeddingRows);
 
-    stats.chunksCreated++;
-  }
+  stats.chunksCreated += dbChunks.length;
 }

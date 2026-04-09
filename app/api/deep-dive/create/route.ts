@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
       companyUrl,
       profileContext,
       customUrls,
+      resumeText,
     } = await req.json();
 
     // Get current user from session cookie
@@ -53,11 +54,13 @@ export async function POST(req: NextRequest) {
       runPipeline(
         request.id,
         company.id,
+        user.id,
         companyName,
         companyUrl,
         customUrls,
         jobDescription,
-        profileContext
+        profileContext,
+        resumeText || undefined
       ).catch((err) =>
         console.error("[Pipeline] Unhandled top-level error:", err)
       );
@@ -79,11 +82,13 @@ export async function POST(req: NextRequest) {
 async function runPipeline(
   requestId: string,
   companyId: string,
+  userId: string,
   companyName: string,
   companyUrl: string | undefined,
   customUrls: string[] | undefined,
   jobDescription: string | undefined,
-  profileContext: string | undefined
+  profileContext: string | undefined,
+  resumeText: string | undefined
 ) {
   console.log(`[Pipeline] START requestId=${requestId} company=${companyName}`);
   try {
@@ -116,6 +121,38 @@ async function runPipeline(
 
       await updateDeepDiveStatus(requestId, "completed");
       console.log("[Pipeline] Status → completed ✓");
+
+      // If resume was provided at submission time, auto-personalize
+      if (resumeText?.trim()) {
+        console.log("[Pipeline] Resume present — auto-generating candidate overlay...");
+        try {
+          const { supabaseAdmin } = await import("@/lib/db/supabase");
+          // Save resume record
+          const { data: resumeRecord } = await supabaseAdmin
+            .from("candidate_resumes")
+            .insert({ user_id: userId, request_id: requestId, raw_text: resumeText.trim() })
+            .select("id")
+            .single();
+
+          if (resumeRecord) {
+            // Create overlay record
+            const { data: overlayRecord } = await supabaseAdmin
+              .from("candidate_overlays")
+              .insert({ request_id: requestId, resume_id: resumeRecord.id, status: "pending" })
+              .select("id")
+              .single();
+
+            if (overlayRecord) {
+              const { generateOverlay } = await import("@/lib/report/generateOverlay");
+              await generateOverlay(overlayRecord.id);
+              console.log("[Pipeline] Candidate overlay complete ✓");
+            }
+          }
+        } catch (overlayErr) {
+          // Overlay failure must not fail the overall pipeline
+          console.error("[Pipeline] Overlay auto-generation failed (non-fatal):", overlayErr);
+        }
+      }
     } else {
       console.error(`[Pipeline] ingestSources failed: ${result.error}`);
       await updateDeepDiveStatus(requestId, "failed");

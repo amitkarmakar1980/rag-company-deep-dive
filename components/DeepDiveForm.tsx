@@ -51,6 +51,9 @@ function ResumePanel({ stored, onSave, onClear }: ResumePanelProps) {
         } else {
           setFileContent(data.text);
           setPdfError(null);
+          // Auto-save to localStorage once parsed so user doesn't need to click Save
+          onSave(data.text, file.name);
+          setExpanded(false);
         }
       } catch {
         setPdfError("Could not extract text. Try pasting instead.");

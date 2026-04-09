@@ -316,7 +316,7 @@ export function getDeepAnalysisPrompt(
     ? `\n\nCANDIDATE PROFILE / CONTEXT:\n${profileContext}`
     : "";
 
-  return `You are an elite strategic analyst. You will receive company intelligence and produce a rigorous strategic deep-dive on a company and role.
+  return `You are an evidence-grounded strategic analyst. Your job is NOT to summarize documents. Your job is to synthesize across sources to build a rigorous, gap-aware, contradiction-aware strategic deep-dive.
 
 COMPANY: ${companyName}
 ROLE: ${roleTitle}${jdSection}${profileSection}
@@ -326,13 +326,51 @@ ${formatChunks(context)}
 
 ---
 
-YOUR TASK: Produce deep strategic analysis for 5 sections only. You must:
+REASONING WORKFLOW — complete these steps before writing the JSON:
 
-1. Ground every claim in specific evidence. Distinguish FACT, INFERENCE, and HYPOTHESIS explicitly in evidence fields.
-2. SWOT quadrants require a MINIMUM of 5 points each — non-obvious, evidence-linked, specific to this company and moment in time. Generic points (e.g. "strong brand") are unacceptable without specific evidence.
-3. strategic_bet_analysis must arrive at a clear, defensible classification with reasons that would hold up to scrutiny.
-4. risks_red_flags must name real, specific risks — not generic category risks. Tie each to a signal from the evidence.
-5. why_role_exists_now requires an original thesis — what specifically changed in the last 12–18 months that created this need.
+STEP 1 — Classify each source by reliability:
+- Job description: high confidence for stated requirements
+- News / earnings / press releases: high confidence for factual signals
+- Blog posts / thought leadership: medium confidence
+- Prior generated analyses: low confidence unless corroborated
+
+STEP 2 — Build a coverage map. For each area, mark: sufficient / partial / missing:
+- Company strategic priorities
+- Competitive position and market dynamics
+- Org structure and role scope
+- Recent business momentum or inflection (12–18 months)
+- Pressure points, headwinds, or constraints
+- Why this specific role exists now
+
+STEP 3 — Retrieve for missingness, not just similarity. Ask:
+- What important strategic dimension is not yet evidenced?
+- What claims are I making that are unsupported?
+- What contradictions exist between sources?
+- What could disprove my current hypothesis?
+
+STEP 4 — For each major conclusion, trace:
+- Claim → supporting evidence → source → FACT / INFERENCE / HYPOTHESIS
+- FACT: directly stated in a source
+- INFERENCE: reasonable synthesis across sources
+- HYPOTHESIS: plausible but unverified — must be validated live
+
+STEP 5 — Stress-test before writing:
+- Am I overfitting to generic company facts (e.g. "growing fast", "competitive market")?
+- Am I inventing specifics not supported by evidence?
+- Is my SWOT full of non-obvious, evidence-backed points — or generic filler?
+- Would my why_role_exists_now thesis hold up to a skeptic asking "but why NOW?"
+- Are my risks tied to specific signals, or are they category-level guesses?
+
+---
+
+RULES:
+1. Ground every claim in specific evidence. Use FACT / INFERENCE / HYPOTHESIS labels in evidence fields.
+2. SWOT quadrants require a MINIMUM of 5 points each — non-obvious, evidence-linked, specific to this company and moment. Generic filler (e.g. "strong brand", "competitive market") is unacceptable.
+3. strategic_bet_analysis must reach a clear, defensible classification with reasons that would hold up to scrutiny.
+4. risks_red_flags must name real, specific risks — not category risks. Each flag must be tied to a named signal from the evidence.
+5. why_role_exists_now requires an original thesis — what specifically changed in the last 12–18 months that triggered this hire.
+6. When sources conflict, state which is more reliable and what should be validated live.
+7. Never invent org structure, reporting lines, success metrics, or role scope without evidence.
 
 RETURN A SINGLE VALID JSON OBJECT with exactly these 5 keys. No other text.
 
@@ -451,7 +489,7 @@ export function getInterviewLayerPrompt(
     ? `\n\nCANDIDATE PROFILE / CONTEXT:\n${profileContext}`
     : "";
 
-  return `You are an elite interview-prep analyst for senior product, strategy, and general management candidates at Director+ and VP level. Synthesize company intelligence and role context into a high-quality prep brief.
+  return `You are an evidence-grounded interview-prep analyst for senior product, strategy, and GM candidates at Director+ and VP level. Your job is NOT to summarize documents. Your job is to use retrieval to build a prep brief that is evidence-backed, gap-aware, contradiction-aware, and tailored to this specific role.
 
 COMPANY: ${companyName}
 ROLE: ${roleTitle}${jdSection}${profileSection}
@@ -461,14 +499,54 @@ ${formatChunks(context)}
 
 ---
 
-YOUR TASK: Produce 9 interview-prep and synthesis sections. You must:
+REASONING WORKFLOW — complete these steps before writing the JSON:
 
-1. Optimize for interview decision-making — every point must answer "so what for the candidate?"
-2. Be decisive. State your judgment. Do not hedge.
+STEP 1 — Classify inputs:
+- Job description: high confidence for stated requirements and role scope
+- News / earnings / press releases: high confidence for business signals
+- Candidate profile (if provided): high confidence for background; medium for behavioral signal without stories
+- Blog posts / thought leadership: medium confidence
+
+STEP 2 — Build a coverage map. Mark each: sufficient / partial / missing:
+- Role scope and charter
+- Success metrics (what does "winning" look like in 12 months?)
+- Stakeholder complexity and political landscape
+- Technical / domain depth required
+- Candidate strengths relative to role (if profile provided)
+- Candidate gaps and likely objections
+- Likely interviewer concerns and validation agenda
+- Unknowns that must be validated live
+
+STEP 3 — Retrieve for missingness:
+- What dimensions are not evidenced at all?
+- What likely interviewer concerns are not yet covered?
+- What candidate evidence exists outside the resume (if any stories or context provided)?
+- What would a skeptical interviewer ask that I haven't addressed?
+
+STEP 4 — Separate fact, inference, and hypothesis:
+- FACT: directly supported by a source
+- INFERENCE: reasonable synthesis across sources
+- HYPOTHESIS: plausible but unverified — flag for live validation
+
+STEP 5 — Stress-test before writing:
+- Am I overfitting to generic company facts instead of role-specific insights?
+- Am I underusing candidate evidence (stories, context) if provided?
+- Am I inventing specifics (org structure, reporting lines, metrics) not in evidence?
+- Am I confusing company context with role charter?
+- Are my questions truly executive-caliber and specific — or generic filler?
+- Would my interview_decision_summary be immediately usable by the candidate?
+
+---
+
+RULES:
+1. Every insight must answer "so what for the candidate?" — no generic observations.
+2. Be decisive. State your judgment. Do not hedge behind disclaimers.
 3. Avoid repeating insights across sections. Each section adds unique value.
-4. Use crisp, specific language. No filler phrases.
-5. Questions must be executive-caliber — specific, diagnostic, hard to deflect.
-6. interview_decision_summary and five_minute_brief synthesize everything — write them last in your reasoning, make them concise and immediately actionable.
+4. Questions must be executive-caliber — specific, diagnostic, difficult to deflect.
+5. If a candidate profile is provided, candidate_fit must be grounded in actual evidence from it.
+6. If only a JD exists (no profile), score candidate_fit at 5 and note behavioral confidence is limited.
+7. interview_decision_summary and five_minute_brief must synthesize everything — write them last, make them concise and immediately actionable.
+8. Never invent specifics not supported by evidence.
 
 RETURN A SINGLE VALID JSON OBJECT with exactly these 9 keys. No other text.
 

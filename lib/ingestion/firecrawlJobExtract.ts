@@ -18,23 +18,45 @@ export async function fetchAndExtractJobDetails(
   if (!res.success || !res.data) return null;
 
   const { markdown, html } = res.data;
-  let rawText =
-    markdown && typeof markdown === "string" && markdown.length > 100
-      ? markdown
-      : typeof html === "string" && html.length > 100
-      ? html
-      : undefined;
-  if (!rawText) return null;
 
-  // Clean the extracted text
-  let cleanedText = cleanContent(rawText);
+  let cleanedText: string;
+
+  if (markdown && typeof markdown === "string" && markdown.length > 100) {
+    // Markdown path: strip markdown syntax but preserve structure and newlines
+    cleanedText = markdown
+      // Remove code fences
+      .replace(/```[\s\S]*?```/g, "")
+      // Remove inline code
+      .replace(/`[^`]*`/g, "")
+      // Remove images
+      .replace(/!\[.*?\]\(.*?\)/g, "")
+      // Remove links but keep text
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      // Strip heading markers (#, ##, etc.) but keep text
+      .replace(/^#{1,6}\s+/gm, "")
+      // Strip bold/italic markers
+      .replace(/(\*\*|__)(.*?)\1/g, "$2")
+      .replace(/(\*|_)(.*?)\1/g, "$2")
+      // Strip blockquotes
+      .replace(/^>\s+/gm, "")
+      // Collapse 3+ consecutive blank lines to 2
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  } else if (typeof html === "string" && html.length > 100) {
+    // HTML path: use the HTML cleaner
+    cleanedText = cleanContent(html);
+  } else {
+    return null;
+  }
+
+  if (!cleanedText) return null;
 
   // Remove leading JSON blobs or boilerplate
   cleanedText = cleanedText.replace(/^(\s*`?\{[\s\S]+?\}`?\s*)+/g, "");
 
   // Try to start from the first job description heading
   const jobDescMatch = cleanedText.match(
-    /(Job description|Overview|Responsibilities|Role|About the job|Position summary|^#\s*Job|^##\s*Job)/i
+    /(Job description|Overview|Responsibilities|Role|About the job|Position summary|Job Title)/i
   );
   if (jobDescMatch && jobDescMatch.index !== undefined) {
     cleanedText = cleanedText.slice(jobDescMatch.index);

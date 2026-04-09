@@ -77,6 +77,34 @@ const STATUS_LABELS: Record<string, string> = {
   generating_report: "Generating your intelligence brief…",
 };
 
+// Animated sub-step messages shown per status phase
+const STATUS_SUBSTEPS: Record<string, string[]> = {
+  pending: ["Initializing the analysis pipeline…", "Preparing retrieval context…"],
+  fetching_sources: [
+    "Crawling company website…",
+    "Pulling recent news and press releases…",
+    "Retrieving earnings reports and investor docs…",
+    "Scanning industry analyst coverage…",
+    "Fetching job posting context…",
+    "Gathering competitive landscape data…",
+  ],
+  indexing: [
+    "Embedding retrieved content into vector store…",
+    "Ranking sources by relevance to the role…",
+    "Deduplicating and chunking evidence…",
+  ],
+  generating_report: [
+    "Running deep strategic analysis (o3)…",
+    "Building SWOT quadrants from evidence…",
+    "Classifying strategic bet and role mandate…",
+    "Running interview prep layer (gpt-4o-mini)…",
+    "Synthesizing candidate positioning angles…",
+    "Generating questions to ask…",
+    "Assembling 5-minute brief…",
+    "Finalising the intelligence brief…",
+  ],
+};
+
 /**
  * Sections that appear in the "5-Minute Brief" view only.
  * All other base sections are full-report only.
@@ -129,6 +157,96 @@ const OVERLAY_SECTIONS: Array<{
     subtitle: "Your headline, narrative arc, and a ready-to-use Tell Me About Yourself",
   },
 ];
+
+// ─── Processing screen with animated thinking messages ────────────────────────
+
+const PHASE_ORDER = ["pending", "fetching_sources", "indexing", "generating_report"];
+
+function ProcessingScreen({ statusKey }: { statusKey: string }) {
+  const [subStep, setSubStep] = useState(0);
+  const subSteps = STATUS_SUBSTEPS[statusKey] ?? [];
+  const phaseIdx = PHASE_ORDER.indexOf(statusKey);
+
+  useEffect(() => {
+    if (subSteps.length === 0) return;
+    setSubStep(0);
+    const id = setInterval(() => {
+      setSubStep((prev) => (prev + 1) % subSteps.length);
+    }, 2800);
+    return () => clearInterval(id);
+  }, [statusKey, subSteps.length]);
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-20 flex flex-col items-center gap-8">
+      {/* Spinner */}
+      <div className="relative w-14 h-14">
+        <div className="absolute inset-0 rounded-full border-2 border-gray-200" />
+        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-gray-900 animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-2 h-2 rounded-full bg-gray-900 animate-pulse" />
+        </div>
+      </div>
+
+      {/* Phase label */}
+      <div className="text-center space-y-2">
+        <p className="text-base font-semibold text-gray-900">
+          {STATUS_LABELS[statusKey] ?? statusKey}
+        </p>
+        {subSteps.length > 0 && (
+          <p key={subStep} className="text-sm text-gray-400 animate-pulse">
+            {subSteps[subStep]}
+          </p>
+        )}
+        <p className="text-xs text-gray-300 mt-3">Takes 45–90 seconds · Stay on this page</p>
+      </div>
+
+      {/* Progress steps */}
+      <div className="flex items-center gap-0">
+        {PHASE_ORDER.map((phase, i) => {
+          const isCompleted = i < phaseIdx;
+          const isActive = i === phaseIdx;
+          const isUpcoming = i > phaseIdx;
+          return (
+            <div key={phase} className="flex items-center">
+              <div className="flex flex-col items-center gap-1.5">
+                <div
+                  className={`w-2.5 h-2.5 rounded-full transition-all ${
+                    isCompleted
+                      ? "bg-gray-900"
+                      : isActive
+                      ? "bg-gray-900 ring-4 ring-gray-900/20"
+                      : "bg-gray-200"
+                  }`}
+                />
+                <span className={`text-xs whitespace-nowrap ${isUpcoming ? "text-gray-300" : isActive ? "text-gray-700 font-medium" : "text-gray-400"}`}>
+                  {STATUS_LABELS[phase]?.replace("…", "") ?? phase}
+                </span>
+              </div>
+              {i < PHASE_ORDER.length - 1 && (
+                <div className={`h-px w-12 mx-1.5 mb-4 ${i < phaseIdx ? "bg-gray-900" : "bg-gray-200"}`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Thinking log — last few messages */}
+      <div className="w-full max-w-md bg-white border border-gray-100 rounded-xl px-5 py-4 space-y-2.5">
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">What&apos;s happening</p>
+        {PHASE_ORDER.slice(0, phaseIdx + 1).map((phase) => (
+          STATUS_SUBSTEPS[phase]?.slice(0, phase === statusKey ? subStep + 1 : STATUS_SUBSTEPS[phase].length).map((msg, i) => (
+            <div key={`${phase}-${i}`} className="flex items-start gap-2.5">
+              <div className={`flex-shrink-0 mt-1 w-1.5 h-1.5 rounded-full ${phase === statusKey && i === subStep ? "bg-gray-900" : "bg-gray-300"}`} />
+              <span className={`text-xs leading-relaxed ${phase === statusKey && i === subStep ? "text-gray-700" : "text-gray-400"}`}>
+                {msg}
+              </span>
+            </div>
+          ))
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ─── Locked overlay placeholder ───────────────────────────────────────────────
 
@@ -418,25 +536,7 @@ export default function ReportPage() {
   if (status && PROCESSING_STATUSES.has(status.status)) {
     return (
       <main className="min-h-screen bg-stone-50">
-        <div className="max-w-3xl mx-auto px-4 py-24 flex flex-col items-center gap-6">
-          <div className="w-10 h-10 rounded-full border-2 border-gray-200 border-t-gray-900 animate-spin" role="status" aria-label="Processing" />
-          <div className="text-center">
-            <p className="text-base font-semibold text-gray-900">{STATUS_LABELS[status.status] ?? status.status}</p>
-            <p className="text-sm text-gray-400 mt-1.5">Takes 45–90 seconds. Stay on this page.</p>
-          </div>
-          <div className="flex gap-2 mt-2" aria-hidden>
-            {Object.keys(STATUS_LABELS).map((s, i) => (
-              <div
-                key={s}
-                className={`h-1 rounded-full transition-all ${
-                  Object.keys(STATUS_LABELS).indexOf(status.status) >= i
-                    ? "bg-gray-900 w-8"
-                    : "bg-gray-200 w-4"
-                }`}
-              />
-            ))}
-          </div>
-        </div>
+        <ProcessingScreen statusKey={status.status} />
       </main>
     );
   }

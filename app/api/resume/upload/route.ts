@@ -130,5 +130,5 @@ export async function POST(req: NextRequest) {
     });
   });
 
-  return NextResponse.json({ overlayId: overlay.id, resumeId: resume.id });
+  return NextResponse.json({ overlayId: overlay.id, resumeId: resume.id, resumeText: resumeText.trim() });
 }

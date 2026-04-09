@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { useResumeStore } from "@/lib/hooks/useResumeStore";
 
 interface StoredResume {
   text: string;
@@ -19,6 +20,7 @@ interface ResumeUploadPanelProps {
 type UploadState = "idle" | "uploading" | "error";
 
 export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: ResumeUploadPanelProps) {
+  const { save: saveToLocalStorage } = useResumeStore();
   const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState<"paste" | "file">("paste");
   const [resumeText, setResumeText] = useState("");
@@ -78,7 +80,15 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
         throw new Error(data.error ?? "Upload failed");
       }
 
-      const { overlayId } = await res.json();
+      const responseData = await res.json();
+      const { overlayId } = responseData;
+
+      // Persist resume to localStorage so future sessions/forms remember it
+      const savedText = responseData.resumeText ?? (mode === "paste" ? resumeText : fileContent) ?? null;
+      if (savedText) {
+        saveToLocalStorage(savedText, mode === "file" ? fileName : null);
+      }
+
       onUploaded(overlayId);
     } catch (err) {
       setUploadState("error");

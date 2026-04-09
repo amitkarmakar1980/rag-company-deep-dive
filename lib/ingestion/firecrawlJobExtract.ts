@@ -3,8 +3,9 @@ import { generateStructuredCompletion } from "@/lib/ai/openai";
 import { cleanContent } from "./clean";
 
 /**
- * Attempts to extract job details from a job description page using Firecrawl.
- * Tries to parse out company name, role title, and job description from the content/metadata.
+ * Fetches a job posting URL and extracts company name, role title, and full
+ * job description text. Uses Firecrawl with onlyMainContent=true, then strips
+ * residual markdown syntax before sending to the LLM extractor.
  */
 export async function fetchAndExtractJobDetails(
   url: string
@@ -14,103 +15,134 @@ export async function fetchAndExtractJobDetails(
   companyUrl?: string;
   jobDescription?: string;
 } | null> {
-  const res = await fetchPageWithFirecrawl(url);
+  const res = await fetchPageWithFirecrawl(url, { onlyMainContent: true, timeoutMs: 60000 });
   if (!res.success || !res.data) return null;
 
   const { markdown, html } = res.data;
 
-  let cleanedText: string;
+  let rawText: string;
 
-  if (markdown && typeof markdown === "string" && markdown.length > 100) {
-    // Markdown path: strip markdown syntax but preserve structure and newlines
-    cleanedText = markdown
-      // Remove code fences
-      .replace(/```[\s\S]*?```/g, "")
-      // Remove inline code
-      .replace(/`[^`]*`/g, "")
-      // Remove images
-      .replace(/!\[.*?\]\(.*?\)/g, "")
-      // Remove links but keep text
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      // Strip heading markers (#, ##, etc.) but keep text
-      .replace(/^#{1,6}\s+/gm, "")
-      // Strip bold/italic markers
-      .replace(/(\*\*|__)(.*?)\1/g, "$2")
-      .replace(/(\*|_)(.*?)\1/g, "$2")
-      // Strip blockquotes
-      .replace(/^>\s+/gm, "")
-      // Collapse 3+ consecutive blank lines to 2
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-  } else if (typeof html === "string" && html.length > 100) {
-    // HTML path: use the HTML cleaner
-    cleanedText = cleanContent(html);
+  if (markdown && markdown.length > 200) {
+    rawText = stripMarkdown(markdown);
+  } else if (html && html.length > 200) {
+    rawText = cleanContent(html);
   } else {
+    console.warn("[JD Extraction] Both markdown and html too short — cannot extract");
     return null;
   }
 
-  if (!cleanedText) return null;
+  rawText = rawText.trim();
+  if (!rawText) return null;
 
-  // Remove leading JSON blobs or boilerplate
-  cleanedText = cleanedText.replace(/^(\s*`?\{[\s\S]+?\}`?\s*)+/g, "");
+  console.log(`[JD Extraction] Raw text length: ${rawText.length} chars`);
 
-  // Try to start from the first job description heading
-  const jobDescMatch = cleanedText.match(
-    /(Job description|Overview|Responsibilities|Role|About the job|Position summary|Job Title)/i
-  );
-  if (jobDescMatch && jobDescMatch.index !== undefined) {
-    cleanedText = cleanedText.slice(jobDescMatch.index);
-  }
+  // Remove obvious leading boilerplate (cookie banners, login walls, etc.)
+  rawText = removeLeadingBoilerplate(rawText);
 
-  // Truncate to 10,000 characters (~3,000 tokens)
-  if (cleanedText.length > 10000) {
-    cleanedText = cleanedText.slice(0, 10000);
-  }
+  // Cap at 25k chars — most JDs are well under this; LLM context allows it
+  const textForLLM = rawText.length > 25000 ? rawText.slice(0, 25000) : rawText;
 
   try {
-    // Use LLM to extract company name and role title from the page text
-    const extracted = await generateStructuredCompletion(
-      `Extract the company name and role title from this job posting text. Return only valid JSON.
+    const extracted = await generateStructuredCompletion(`You are extracting structured data from a job posting page.
+
+Extract the following from the text below:
+1. companyName — the name of the hiring company (not a job board like LinkedIn, Indeed, etc.)
+2. roleTitle — the exact job title for this specific role
+3. jobDescription — the FULL job description text: all responsibilities, requirements,
+   qualifications, about-the-team sections, and any other role-specific content.
+   Include everything that describes the role. Do NOT include company boilerplate,
+   cookie notices, navigation menus, or repeated site-wide content.
 
 Text:
-${cleanedText}
+${textForLLM}
 
-Return JSON with this shape:
+Return ONLY valid JSON with this shape:
 {
   "companyName": "...",
-  "roleTitle": "..."
+  "roleTitle": "...",
+  "jobDescription": "..."
 }
 
-If you cannot confidently determine a value, omit that field.`
+If you cannot determine a field, omit it. The jobDescription field should be comprehensive — do not truncate it.`
     );
 
-    const result: {
-      companyName?: string;
-      roleTitle?: string;
-      companyUrl?: string;
-      jobDescription?: string;
-    } = {
-      companyName: extracted?.companyName || undefined,
-      roleTitle: extracted?.roleTitle || undefined,
-      jobDescription: cleanedText,
+    if (!extracted) return fallbackResult(url, rawText);
+
+    const jobDescription: string =
+      extracted.jobDescription?.trim() ||
+      // If LLM didn't extract a JD, use the cleaned raw text as fallback
+      rawText.slice(0, 15000);
+
+    console.log(`[JD Extraction] Extracted JD length: ${jobDescription.length} chars`);
+
+    return {
+      companyName: extracted.companyName || undefined,
+      roleTitle: extracted.roleTitle || undefined,
+      jobDescription: jobDescription || undefined,
+      companyUrl: safeOrigin(url),
     };
-
-    try {
-      const u = new URL(url);
-      result.companyUrl = u.origin;
-    } catch {
-      // URL parsing failed — companyUrl stays undefined
-    }
-
-    return result;
   } catch (e) {
-    console.error("[JD Extraction] LLM extraction failed", e);
-    // Return what we can without LLM-extracted fields
-    try {
-      const u = new URL(url);
-      return { companyUrl: u.origin, jobDescription: cleanedText };
-    } catch {
-      return { jobDescription: cleanedText };
+    console.error("[JD Extraction] LLM call failed:", e);
+    return fallbackResult(url, rawText);
+  }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Strip markdown syntax while preserving text and newlines. */
+function stripMarkdown(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, "")           // code fences
+    .replace(/`[^`\n]*`/g, "")                // inline code
+    .replace(/!\[.*?\]\(.*?\)/g, "")          // images
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links → text
+    .replace(/^#{1,6}\s+/gm, "")             // heading markers
+    .replace(/(\*\*|__)(.*?)\1/g, "$2")      // bold
+    .replace(/(\*|_)(.*?)\1/g, "$2")         // italic
+    .replace(/^>\s+/gm, "")                  // blockquotes
+    .replace(/^[-*+]\s+/gm, "")             // unordered list markers
+    .replace(/^\d+\.\s+/gm, "")             // ordered list markers
+    .replace(/\n{3,}/g, "\n\n")             // collapse blank lines
+    .trim();
+}
+
+/**
+ * Remove leading boilerplate that appears before the actual job content.
+ * Only removes if clearly nav/cookie/login content — stops at first substantive line.
+ */
+function removeLeadingBoilerplate(text: string): string {
+  const boilerplatePatterns = [
+    /^(accept|reject|manage)\s+(cookies?|preferences)/i,
+    /^(sign in|log in|create account|register)/i,
+    /^(skip to|jump to)\s+(main|content|navigation)/i,
+    /^(menu|navigation|home|about|careers|jobs)\s*$/im,
+  ];
+
+  const lines = text.split("\n");
+  let startIdx = 0;
+
+  // Skip leading lines that look like boilerplate (max 20 lines)
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    const line = lines[i].trim();
+    if (line.length === 0) continue;
+    if (boilerplatePatterns.some((p) => p.test(line))) {
+      startIdx = i + 1;
+    } else if (line.length > 60) {
+      // Hit a substantive line — stop scanning
+      break;
     }
   }
+
+  return lines.slice(startIdx).join("\n").trim();
+}
+
+function fallbackResult(url: string, rawText: string) {
+  return {
+    companyUrl: safeOrigin(url),
+    jobDescription: rawText.slice(0, 15000) || undefined,
+  };
+}
+
+function safeOrigin(url: string): string | undefined {
+  try { return new URL(url).origin; } catch { return undefined; }
 }

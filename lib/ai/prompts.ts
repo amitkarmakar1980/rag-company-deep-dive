@@ -87,7 +87,7 @@ RETURN A SINGLE VALID JSON OBJECT matching this exact schema. Do not include any
       "rationale": "<1 sentence — what is the specific risk?>",
       "confidence": "high" | "medium" | "low"
     },
-    "candidate_fit": {
+    "candidate_role_match": {
       "score": <1-10>,
       "label": "Strong" | "Mixed" | "Weak",
       "rationale": "<1 sentence — if no profile provided, score 5 and note that>",
@@ -543,8 +543,8 @@ RULES:
 2. Be decisive. State your judgment. Do not hedge behind disclaimers.
 3. Avoid repeating insights across sections. Each section adds unique value.
 4. Questions must be executive-caliber — specific, diagnostic, difficult to deflect.
-5. If a candidate profile is provided, candidate_fit must be grounded in actual evidence from it.
-6. If only a JD exists (no profile), score candidate_fit at 5 and note behavioral confidence is limited.
+5. If a candidate profile is provided, candidate_role_match must be grounded in actual evidence from it.
+6. If only a JD exists (no profile), score candidate_role_match at 5 and note behavioral confidence is limited.
 7. interview_decision_summary and five_minute_brief must synthesize everything — write them last, make them concise and immediately actionable.
 8. Never invent specifics not supported by evidence.
 
@@ -606,7 +606,7 @@ RETURN A SINGLE VALID JSON OBJECT with exactly these 11 keys. No other text.
       "rationale": "<1 sentence — what is the specific risk?>",
       "confidence": "high" | "medium" | "low"
     },
-    "candidate_fit": {
+    "candidate_role_match": {
       "score": <1-10>,
       "label": "Strong" | "Mixed" | "Weak",
       "rationale": "<1 sentence — if no profile provided, score 5 and note that>",

@@ -141,7 +141,7 @@ export function AssessmentSnapshotSection({ data }: { data: Data }) {
       <MetricCard label="Org Clarity" detail={data.org_clarity} />
       <MetricCard label="Role Leverage" detail={data.role_leverage} />
       <MetricCard label="Execution Risk" detail={data.execution_risk} inverse />
-      <MetricCard label="Candidate Fit" detail={data.candidate_fit} />
+      <MetricCard label="Candidate-Role Match" detail={data.candidate_role_match} />
       <MetricCard label="Evidence Strength" detail={data.evidence_strength} />
     </div>
   );

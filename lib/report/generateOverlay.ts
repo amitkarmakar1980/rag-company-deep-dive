@@ -120,11 +120,11 @@ export async function generateOverlay(overlayId: string): Promise<void> {
       if (snapSection?.content_markdown) {
         try {
           const snap = JSON.parse(snapSection.content_markdown);
-          if (snap?.candidate_fit) {
+          if (snap?.candidate_role_match) {
             const fit = overlayData.candidate_role_match;
-            snap.candidate_fit.score = matchScore;
-            snap.candidate_fit.signal = fit.overall_fit === "strong" ? "Strong" : fit.overall_fit === "mismatch" ? "Weak" : "Mixed";
-            snap.candidate_fit.rationale = fit.rationale ?? snap.candidate_fit.rationale;
+            snap.candidate_role_match.score = matchScore;
+            snap.candidate_role_match.signal = fit.overall_fit === "strong" ? "Strong" : fit.overall_fit === "mismatch" ? "Weak" : "Mixed";
+            snap.candidate_role_match.rationale = fit.rationale ?? snap.candidate_role_match.rationale;
             await supabaseAdmin
               .from("report_sections")
               .update({ content_markdown: JSON.stringify(snap) })

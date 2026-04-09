@@ -1,9 +1,15 @@
 import OpenAI from "openai";
 import { StructuredReport, CandidateOverlayData, LLMCallUsage } from "@/lib/types";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy-initialized to avoid "Missing credentials" error during Vercel build
+// (OPENAI_API_KEY is only available at runtime, not at build/page-data-collection time)
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
 
 // ─── Model constants ──────────────────────────────────────────────────────────
 
@@ -99,7 +105,7 @@ export async function generateDeepAnalysis(
   for (const model of modelsToTry) {
     try {
       const isReasoningModel = model.startsWith("o");
-      const response = await openai.chat.completions.create({
+      const response = await getOpenAI().chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
         // Reasoning models use max_completion_tokens; standard models use max_tokens
@@ -147,7 +153,7 @@ export type InterviewLayerResult = Pick<
 export async function generateInterviewLayer(
   prompt: string
 ): Promise<{ data: InterviewLayerResult; usage: LLMCallUsage }> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: STANDARD_MODEL,
     messages: [
       {
@@ -178,7 +184,7 @@ export async function generateInterviewLayer(
 export async function generateCandidateOverlay(
   prompt: string
 ): Promise<{ data: CandidateOverlayData; usage: LLMCallUsage }> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: OVERLAY_MODEL,
     messages: [
       {
@@ -208,7 +214,7 @@ export async function generateCandidateOverlay(
 
 /** @deprecated Use generateDeepAnalysis + generateInterviewLayer instead */
 export async function generateFullReport(prompt: string): Promise<StructuredReport> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4o",
     messages: [
       {
@@ -231,7 +237,7 @@ export async function generateStructuredCompletion(
   prompt: string,
   _jsonSchema?: Record<string, any>
 ): Promise<any> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4-turbo",
     messages: [
       {
@@ -250,7 +256,7 @@ export async function generateStructuredCompletion(
 }
 
 export async function generateText(prompt: string): Promise<string> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-4-turbo",
     messages: [
       {

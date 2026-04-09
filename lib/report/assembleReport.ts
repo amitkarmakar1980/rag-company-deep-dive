@@ -234,7 +234,7 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     org_clarity: snap.org_clarity.score,
     role_leverage: snap.role_leverage.score,
     execution_risk: snap.execution_risk.score,
-    candidate_fit: snap.candidate_fit.score,
+    candidate_fit: snap.candidate_role_match.score,
   };
   const recommendation = validateRecommendation(
     structured.executive_summary.recommendation

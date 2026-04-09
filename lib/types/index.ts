@@ -386,7 +386,7 @@ export interface StructuredReport {
     org_clarity: ScoreDetail;
     role_leverage: ScoreDetail;
     execution_risk: RiskScoreDetail;
-    candidate_fit: ScoreDetail;
+    candidate_role_match: ScoreDetail;
     evidence_strength: ScoreDetail;
   };
   strategic_bet_analysis: {

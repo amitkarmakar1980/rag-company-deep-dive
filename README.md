@@ -43,21 +43,22 @@ Report generation fires two LLM calls simultaneously and merges the results:
 
 | Tier | Model | Sections |
 |---|---|---|
-| Deep Analysis | `o3` | company_swot, role_swot, strategic_bet_analysis, why_role_exists_now, risks_red_flags |
+| Deep Analysis | `o4-mini` (fallback: `gpt-4o`) | company_swot, role_swot, strategic_bet_analysis, why_role_exists_now, risks_red_flags |
 | Interview Layer | `gpt-4o-mini` | executive_summary, assessment_snapshot, likely_interview_agenda, questions_to_ask, unknowns_to_validate, company_snapshot, role_snapshot, interview_decision_summary, five_minute_brief |
 | Candidate Overlay | `gpt-4o` | All 7 resume-personalization sections |
 
-`o3` handles sections requiring multi-step strategic reasoning and non-obvious SWOT synthesis. `gpt-4o-mini` handles synthesis and formatting. Both base calls run in parallel via `Promise.all` — latency is bounded by the slower of the two, not their sum.
+`o4-mini` handles sections requiring multi-step strategic reasoning and non-obvious SWOT synthesis. `gpt-4o-mini` handles synthesis and formatting. Both base calls run in parallel via `Promise.all` — latency is bounded by the slower of the two, not their sum. If `o4-mini` fails, the pipeline automatically retries with `gpt-4o`.
 
 ### Ingestion pipeline
 
 ```
 URL / JD input
-    → Firecrawl (v2 scrape API, axios fallback)
+    → Firecrawl (v2 scrape API, axios fallback) — max 3 web sources
     → cleanContent()  — strip HTML, boilerplate, normalize
     → chunkContent()  — semantic + token-based, ~500 tokens/chunk, 50-token overlap
     → generateEmbeddings()  — OpenAI text-embedding-3-small, 1536 dims
-    → Supabase (chunks + pgvector embeddings)
+    → Supabase (bulk chunk insert + pgvector embeddings)
+    Sources processed with concurrency=3 (not sequentially)
 ```
 
 ### Retrieval
@@ -67,7 +68,7 @@ Broad retrieval query embedding
     → semanticSearch()  — Supabase RPC (cosine distance, ivfflat index)
     → rerank()  — recency boost, source type weights, strategic keyword density,
                   company/role name mentions
-    → Top 25 chunks → RetrievalContext
+    → Top 18 chunks → RetrievalContext (batch DB queries, not sequential)
 ```
 
 ### Stack
@@ -79,7 +80,7 @@ Broad retrieval query embedding
 | Styling | Tailwind CSS |
 | Database | Supabase PostgreSQL + pgvector |
 | Auth | Supabase Auth (email/password + Google OAuth) |
-| LLM | OpenAI (`o3`, `gpt-4o`, `gpt-4o-mini`, `text-embedding-3-small`) |
+| LLM | OpenAI (`o4-mini`, `gpt-4o`, `gpt-4o-mini`, `text-embedding-3-small`) |
 | Web scraping | Firecrawl v2 API (axios fallback) |
 | File parsing | pdf-parse (v1), mammoth (DOCX/DOC) |
 | Resume persistence | localStorage (`useResumeStore` hook) |
@@ -102,6 +103,8 @@ app/
       status/                      # Poll processing status
       extract-jd/                  # Extract JD fields from a URL
       [id]/regenerate/             # Re-run full pipeline
+    cron/
+      retry-queue/                 # Vercel Cron (every 5 min) — retry stuck/failed requests
     report/[id]/                   # Fetch report + sections + token usage
     overlay/[requestId]/           # Poll overlay status + data
     resume/
@@ -207,6 +210,9 @@ OPENAI_API_KEY=
 
 # Firecrawl (optional)
 FIRECRAWL_API_KEY=
+
+# Cron job protection (set to any secret string)
+CRON_SECRET=
 ```
 
 ### Database setup
@@ -274,7 +280,7 @@ runPipeline()
   → assembleReport()
       → semanticSearch() + rerank()
       → Promise.all([
-          generateDeepAnalysis(o3),           ← SWOT + strategy + risks
+          generateDeepAnalysis(o4-mini),      ← SWOT + strategy + risks
           generateInterviewLayer(gpt-4o-mini) ← prep + synthesis sections
         ])
       → merge StructuredReport

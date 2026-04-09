@@ -100,43 +100,83 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
     (mode === "paste" && resumeText.trim().length > 50) ||
     (mode === "file" && fileName !== null && (isBinaryFile(fileName) || (fileContent ?? "").trim().length > 50));
 
-  if (!expanded) {
-    // If a saved resume exists in localStorage, show that context
-    if (storedResume) {
-      const savedDate = new Date(storedResume.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      return (
-        <div className="bg-white border border-gray-200 rounded-xl px-6 py-5" role="region" aria-label="Resume upload CTA">
-          <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
-            <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-              <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 mb-0.5">
-                Resume on file
-                {storedResume.fileName && (
-                  <span className="font-normal text-gray-500 ml-1">· {storedResume.fileName}</span>
-                )}
-              </p>
-              <p className="text-sm text-gray-500 leading-relaxed">
-                Saved {savedDate}. Upload to personalize this report with candidate-role matching, interviewer concerns, and positioning strategy.
-              </p>
-            </div>
+  // Stored resume: one-click direct submit without expanding the form
+  if (!expanded && storedResume) {
+    const savedDate = new Date(storedResume.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const handleUseStored = async () => {
+      setUploadState("uploading");
+      setErrorMessage(null);
+      try {
+        const res = await fetch("/api/resume/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId, resumeText: storedResume.text }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error ?? "Upload failed");
+        }
+        const { overlayId } = await res.json();
+        onUploaded(overlayId);
+      } catch (err) {
+        setUploadState("error");
+        setErrorMessage(err instanceof Error ? err.message : "Failed. Please try again.");
+      }
+    };
+
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl px-6 py-5" role="region" aria-label="Personalize report">
+        <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
+          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
+            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 mb-0.5">
+              Personalize with your resume
+              {storedResume.fileName && (
+                <span className="font-normal text-gray-500 ml-1">· {storedResume.fileName}</span>
+              )}
+            </p>
+            <p className="text-sm text-gray-500 leading-relaxed">
+              Saved {savedDate}. Generate candidate-role matching, interviewer concerns, and positioning strategy tailored to you.
+            </p>
+            {errorMessage && <p className="text-xs text-red-600 mt-1">{errorMessage}</p>}
+          </div>
+          <div className="flex flex-col items-end gap-2 flex-shrink-0">
             <button
-              onClick={() => { setResumeText(storedResume.text); setMode("paste"); setExpanded(true); }}
-              className="flex-shrink-0 inline-flex items-center gap-1.5 bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 transition-colors"
-              aria-expanded={false}
+              onClick={handleUseStored}
+              disabled={uploadState === "uploading"}
+              className="inline-flex items-center gap-1.5 bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 disabled:opacity-40 transition-colors"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              Use This Resume
+              {uploadState === "uploading" ? (
+                <>
+                  <span className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" aria-hidden />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Personalize
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setExpanded(true)}
+              className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+            >
+              Use a different resume
             </button>
           </div>
         </div>
-      );
-    }
+      </div>
+    );
+  }
+
+  if (!expanded) {
 
     return (
       <div

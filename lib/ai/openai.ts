@@ -93,25 +93,38 @@ export type DeepAnalysisResult = Pick<
 export async function generateDeepAnalysis(
   prompt: string
 ): Promise<{ data: DeepAnalysisResult; usage: LLMCallUsage }> {
-  const response = await openai.chat.completions.create({
-    model: DEEP_MODEL,
-    messages: [
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-    // o3 uses max_completion_tokens (not max_tokens)
-    max_completion_tokens: 4000,
-  });
+  // Try o4-mini first; fall back to gpt-4o if the model is unavailable or fails
+  const modelsToTry = [DEEP_MODEL, "gpt-4o"] as const;
 
-  const content = response.choices[0].message.content;
-  if (!content) throw new Error("Empty response from deep analysis model");
+  for (const model of modelsToTry) {
+    try {
+      const isReasoningModel = model.startsWith("o");
+      const response = await openai.chat.completions.create({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        // Reasoning models use max_completion_tokens; standard models use max_tokens
+        ...(isReasoningModel
+          ? { max_completion_tokens: 8000 }
+          : { max_tokens: 6000, temperature: 0.4 }),
+      });
 
-  return {
-    data: extractJSON<DeepAnalysisResult>(content, "deep analysis"),
-    usage: buildUsage(DEEP_MODEL, "Deep Analysis (SWOT + Strategy)", response.usage),
-  };
+      const content = response.choices[0].message.content;
+      if (!content) throw new Error("Empty response from deep analysis model");
+
+      if (model !== DEEP_MODEL) {
+        console.warn(`[generateDeepAnalysis] Used fallback model ${model}`);
+      }
+      return {
+        data: extractJSON<DeepAnalysisResult>(content, "deep analysis"),
+        usage: buildUsage(model, "Deep Analysis (SWOT + Strategy)", response.usage),
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[generateDeepAnalysis] Model ${model} failed: ${msg}`);
+      if (model === modelsToTry[modelsToTry.length - 1]) throw err; // rethrow on last attempt
+    }
+  }
+  throw new Error("All deep analysis models failed");
 }
 
 // ─── Interview layer (gpt-4o-mini) ───────────────────────────────────────────
@@ -146,7 +159,7 @@ export async function generateInterviewLayer(
       },
     ],
     temperature: 0.4,
-    max_tokens: 5000,
+    max_tokens: 7000,
   });
 
   const content = response.choices[0].message.content;

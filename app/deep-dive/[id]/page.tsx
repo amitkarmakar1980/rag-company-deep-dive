@@ -454,10 +454,7 @@ export default function ReportPage() {
       if (!res.ok) return;
       const data = await res.json();
 
-      if (!data.exists) {
-        // Never auto-submit — user must explicitly click "Use This Resume"
-        return;
-      }
+      if (!data.exists) return; // No overlay — panel will offer user-triggered option
 
       if (data.status === "completed" && data.data) {
         setOverlay({ status: "completed", data: data.data, error: null });

@@ -131,6 +131,8 @@ export async function generateDeepAnalysis(
 
 export type InterviewLayerResult = Pick<
   StructuredReport,
+  | "company_overview"
+  | "mission_vision_leadership"
   | "executive_summary"
   | "assessment_snapshot"
   | "likely_interview_agenda"

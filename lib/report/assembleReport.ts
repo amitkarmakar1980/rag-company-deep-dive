@@ -35,6 +35,8 @@ const BROAD_RETRIEVAL_QUERY =
   "competitive market growth momentum executive vision";
 
 const SECTION_TITLES: Record<keyof StructuredReport, string> = {
+  company_overview: "Company Overview",
+  mission_vision_leadership: "Mission, Vision & Leadership",
   interview_decision_summary: "Interview Decision Summary",
   five_minute_brief: "5-Minute Interview Brief",
   executive_summary: "Executive Summary",
@@ -52,6 +54,8 @@ const SECTION_TITLES: Record<keyof StructuredReport, string> = {
 };
 
 const SECTION_ORDER: (keyof StructuredReport)[] = [
+  "company_overview",
+  "mission_vision_leadership",
   "interview_decision_summary",
   "five_minute_brief",
   "executive_summary",

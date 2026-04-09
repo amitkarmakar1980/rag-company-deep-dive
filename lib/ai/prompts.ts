@@ -548,9 +548,32 @@ RULES:
 7. interview_decision_summary and five_minute_brief must synthesize everything — write them last, make them concise and immediately actionable.
 8. Never invent specifics not supported by evidence.
 
-RETURN A SINGLE VALID JSON OBJECT with exactly these 9 keys. No other text.
+RETURN A SINGLE VALID JSON OBJECT with exactly these 11 keys. No other text.
 
 {
+  "company_overview": {
+    "founded": "<year — omit if unknown>",
+    "headquarters": "<city, country>",
+    "employees": "<approximate headcount or range, e.g. '2,000–3,000'>",
+    "stage": "<public | private | pre-IPO | subsidiary | non-profit>",
+    "funding": "<total raised or market cap if public — omit if unknown>",
+    "products_services": ["<key product or service — be specific, not generic>"],
+    "key_markets": ["<primary customer segment or vertical>"],
+    "notable_customers": ["<named customer or customer type if confidential>"],
+    "recent_milestones": ["<notable event in the last 12–24 months — launch, acquisition, partnership, financial result>"]
+  },
+
+  "mission_vision_leadership": {
+    "mission": "<company's stated mission or the clearest inferred equivalent — quote directly if available>",
+    "vision": "<long-term aspiration or strategic north star — quote directly if available>",
+    "leadership_principles": ["<named operating principle or value — quote if stated, infer if implicit>"],
+    "ceo": "<name + 1-sentence context on tenure, background, or recent signal>",
+    "key_executives": [
+      { "name": "<name>", "role": "<title>", "context": "<1 sentence on relevance to this role or recent signal>" }
+    ],
+    "culture_signals": ["<observable signal about how the company actually operates — pace, decision-making, values in action>"]
+  },
+
   "executive_summary": {
     "recommendation": "pursue" | "pursue_cautiously" | "avoid" | "need_more_signal",
     "recommendation_rationale": "<2-3 sentences — decisive core reason. State your actual view.>",

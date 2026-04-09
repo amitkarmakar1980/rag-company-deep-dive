@@ -67,6 +67,79 @@ export function ReportSectionCard({
 
   // Route to section-specific renderer
   switch (sectionKey) {
+    case "company_overview": {
+      const d = data as StructuredReport["company_overview"];
+      return (
+        <SectionShell
+          id={sectionKey}
+          title={title}
+          subtitle="Founding, scale, products, markets, and recent milestones"
+          feedback={feedback}
+          collapsible
+          defaultCollapsed
+        >
+          <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-4">
+            {d.founded && <MetaField label="Founded" value={d.founded} />}
+            {d.headquarters && <MetaField label="Headquarters" value={d.headquarters} />}
+            {d.employees && <MetaField label="Employees" value={d.employees} />}
+            {d.stage && <MetaField label="Stage" value={d.stage} />}
+            {d.funding && <MetaField label="Funding / Market Cap" value={d.funding} />}
+          </div>
+          <BulletGroup label="Products & Services" items={d.products_services} />
+          <BulletGroup label="Key Markets" items={d.key_markets} />
+          {d.notable_customers?.length > 0 && (
+            <BulletGroup label="Notable Customers" items={d.notable_customers} />
+          )}
+          <BulletGroup label="Recent Milestones" items={d.recent_milestones} />
+          {citations && <CitationList citations={citations} />}
+        </SectionShell>
+      );
+    }
+
+    case "mission_vision_leadership": {
+      const d = data as StructuredReport["mission_vision_leadership"];
+      return (
+        <SectionShell
+          id={sectionKey}
+          title={title}
+          subtitle="Mission, vision, operating principles, and leadership team"
+          feedback={feedback}
+          collapsible
+          defaultCollapsed
+        >
+          <ProseBlock label="Mission" value={d.mission} />
+          <ProseBlock label="Vision" value={d.vision} />
+          {d.leadership_principles?.length > 0 && (
+            <BulletGroup label="Leadership Principles" items={d.leadership_principles} />
+          )}
+          <ProseBlock label="CEO" value={d.ceo} />
+          {d.key_executives?.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+                Key Executives
+              </h3>
+              <div className="space-y-2">
+                {d.key_executives.map((exec, i) => (
+                  <div key={i} className="text-sm">
+                    <span className="font-medium text-gray-800">{exec.name}</span>
+                    <span className="text-gray-400 mx-1">·</span>
+                    <span className="text-gray-500">{exec.role}</span>
+                    {exec.context && (
+                      <p className="text-gray-500 mt-0.5 text-xs leading-relaxed">{exec.context}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {d.culture_signals?.length > 0 && (
+            <BulletGroup label="Culture Signals" items={d.culture_signals} />
+          )}
+          {citations && <CitationList citations={citations} />}
+        </SectionShell>
+      );
+    }
+
     case "interview_decision_summary":
       return (
         <SectionShell
@@ -291,6 +364,15 @@ function BulletGroup({ label, items }: { label: string; items?: string[] }) {
         {label}
       </h3>
       <BulletList items={items} />
+    </div>
+  );
+}
+
+function MetaField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-semibold uppercase tracking-wider text-gray-400">{label}</dt>
+      <dd className="text-sm text-gray-700 mt-0.5">{value}</dd>
     </div>
   );
 }

@@ -335,6 +335,26 @@ export interface UnknownToValidate {
 }
 
 export interface StructuredReport {
+  // ── Company foundation ──────────────────────────────────────────────────
+  company_overview: {
+    founded?: string;
+    headquarters?: string;
+    employees?: string;
+    stage: string; // public | private | pre-IPO | etc.
+    funding?: string;
+    products_services: string[];
+    key_markets: string[];
+    notable_customers: string[];
+    recent_milestones: string[];
+  };
+  mission_vision_leadership: {
+    mission: string;
+    vision: string;
+    leadership_principles: string[];
+    ceo: string;
+    key_executives: Array<{ name: string; role: string; context: string }>;
+    culture_signals: string[];
+  };
   // ── Decision layer (top of page) ───────────────────────────────────────
   interview_decision_summary: {
     pursue_recommendation: PursueRecommendation;

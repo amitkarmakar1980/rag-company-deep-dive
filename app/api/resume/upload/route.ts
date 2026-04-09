@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
 
   let requestId: string | null = null;
   let resumeText: string | null = null;
+  let reuseExisting = false;
 
   const contentType = req.headers.get("content-type") ?? "";
 
@@ -69,13 +70,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     requestId = body.requestId;
     resumeText = body.resumeText;
+    reuseExisting = !!body.reuseExisting;
   }
 
-  if (!requestId || !resumeText?.trim()) {
-    return NextResponse.json(
-      { error: "requestId and resume text are required" },
-      { status: 400 }
-    );
+  if (!requestId) {
+    return NextResponse.json({ error: "requestId is required" }, { status: 400 });
   }
 
   // Verify the request belongs to the current user
@@ -89,10 +88,57 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // If reuseExisting, find the existing resume record for this request
+  if (reuseExisting && !resumeText?.trim()) {
+    const { data: existing } = await supabaseAdmin
+      .from("candidate_resumes")
+      .select("id, raw_text")
+      .eq("request_id", requestId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!existing?.raw_text) {
+      return NextResponse.json({ error: "No existing resume found for this request" }, { status: 404 });
+    }
+
+    // Create a new overlay from the existing resume record
+    const { data: overlay, error: overlayErr } = await supabaseAdmin
+      .from("candidate_overlays")
+      .insert({
+        request_id: requestId,
+        resume_id: existing.id,
+        status: "pending",
+        overlay_json: null,
+        error_message: null,
+      })
+      .select("id")
+      .single();
+
+    if (overlayErr || !overlay) {
+      return NextResponse.json({ error: "Failed to create overlay record" }, { status: 500 });
+    }
+
+    setImmediate(() => {
+      generateOverlay(overlay.id).catch((err) => {
+        console.error("[resume/upload] Reuse overlay generation failed:", err);
+      });
+    });
+
+    return NextResponse.json({ overlayId: overlay.id, resumeId: existing.id });
+  }
+
+  if (!resumeText?.trim()) {
+    return NextResponse.json(
+      { error: "requestId and resume text are required" },
+      { status: 400 }
+    );
+  }
+
   // Create resume record
   const { data: resume, error: resumeErr } = await supabaseAdmin
     .from("candidate_resumes")
-    .insert({ user_id: userId, raw_text: resumeText.trim(), status: "parsed" })
+    .insert({ user_id: userId, request_id: requestId, raw_text: resumeText.trim(), status: "parsed" })
     .select("id")
     .single();
 

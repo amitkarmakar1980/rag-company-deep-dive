@@ -28,7 +28,15 @@ export async function GET(
     .single();
 
   if (!overlay) {
-    return NextResponse.json({ exists: false });
+    // Check if a resume was submitted for this request (overlay may have failed to create)
+    const { data: resume } = await supabaseAdmin
+      .from("candidate_resumes")
+      .select("id")
+      .eq("request_id", requestId)
+      .limit(1)
+      .single();
+
+    return NextResponse.json({ exists: false, resumeOnFile: !!resume });
   }
 
   return NextResponse.json({

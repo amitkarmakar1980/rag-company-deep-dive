@@ -454,7 +454,22 @@ export default function ReportPage() {
       if (!res.ok) return;
       const data = await res.json();
 
-      if (!data.exists) return; // No overlay — panel will offer user-triggered option
+      if (!data.exists) {
+        if (data.resumeOnFile) {
+          // Resume was submitted with this report but overlay failed to generate — auto-retry
+          setOverlay({ status: "generating", data: null, error: null });
+          fetch("/api/resume/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ requestId, reuseExisting: true }),
+          })
+            .then((r) => r.json())
+            .then(() => startOverlayPolling())
+            .catch(() => setOverlay({ status: "failed", data: null, error: "Personalization failed" }));
+        }
+        // No resume on file at all — panel will offer user-triggered option
+        return;
+      }
 
       if (data.status === "completed" && data.data) {
         setOverlay({ status: "completed", data: data.data, error: null });

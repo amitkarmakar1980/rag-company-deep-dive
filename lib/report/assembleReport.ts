@@ -10,7 +10,6 @@ import {
   updateDeepDiveStatus,
 } from "@/lib/db/operations";
 import { supabaseAdmin } from "@/lib/db/supabase";
-import { generateEmbedding } from "@/lib/ai/embeddings";
 import {
   generateDeepAnalysis,
   generateInterviewLayer,
@@ -18,7 +17,7 @@ import {
   InterviewLayerResult,
 } from "@/lib/ai/openai";
 import { getDeepAnalysisPrompt, getInterviewLayerPrompt } from "@/lib/ai/prompts";
-import { semanticSearch, rerank } from "@/lib/retrieval/search";
+import { multiTopicSearch, rerank } from "@/lib/retrieval/search";
 import {
   RetrievalContext,
   Report,
@@ -79,12 +78,6 @@ function assessEvidenceQuality(
     warnings,
   };
 }
-
-// Broad retrieval query — used by both LLM calls
-const BROAD_RETRIEVAL_QUERY =
-  "company strategy priorities product platform leadership org structure " +
-  "role responsibilities hiring team metrics success risks opportunities " +
-  "competitive market growth momentum executive vision";
 
 const SECTION_TITLES: Record<keyof StructuredReport, string> = {
   company_overview: "Company Overview",
@@ -168,8 +161,8 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     console.warn(`[assembleReport] No sources found for request ${requestId}`);
   }
 
-  const queryEmbedding = await generateEmbedding(BROAD_RETRIEVAL_QUERY);
-  const rawResults = await semanticSearch(requestId, queryEmbedding, 18, 0.4);
+  // Multi-topic retrieval: 6 focused queries × 8 chunks each → deduped pool
+  const rawResults = await multiTopicSearch(requestId, 8, 0.35);
 
   const { data: company } = await supabaseAdmin
     .from("companies")

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/db/supabase";
+import { generateEmbeddings } from "@/lib/ai/embeddings";
 import { Chunk, Source, SourceType } from "@/lib/types";
 
 export interface RetrievalResult {
@@ -7,6 +8,26 @@ export interface RetrievalResult {
   similarity: number;
   rank: number;
 }
+
+/**
+ * Topic-decomposed retrieval queries.
+ * Each covers a distinct analytical dimension so that no single dimension
+ * dominates the embedding space of a broad query.
+ */
+const TOPIC_QUERIES = [
+  // 1. Company strategy, business model, and competitive position
+  "company strategy business model revenue growth market position competitive advantage core products platform",
+  // 2. Role scope, charter, and success criteria
+  "role responsibilities success metrics deliverables expectations hiring mandate what this role does ownership",
+  // 3. Leadership, org structure, and culture
+  "CEO leadership team executive vision org structure culture values operating principles decision making",
+  // 4. Business momentum, recent signals, and milestones
+  "recent launch product announcement funding partnership acquisition growth milestone momentum quarterly results",
+  // 5. Risks, headwinds, and pressure points
+  "risks challenges headwinds layoffs restructuring competition pressure financial constraints execution risk",
+  // 6. Why this role exists now — change catalyst
+  "why now strategic inflection new initiative expansion priority shift hiring urgency org change catalyst",
+];
 
 const STRATEGIC_KEYWORDS = [
   "launch",
@@ -196,6 +217,87 @@ export function rerank(
   }
 
   return diversified.map((result, index) => ({ ...result, rank: index }));
+}
+
+// ─── Deduplication ───────────────────────────────────────────────────────────
+
+/**
+ * Word-level Jaccard similarity between two text strings.
+ * Two chunks are considered near-duplicates if they share > 60% of their words.
+ */
+function jaccardSimilarity(a: string, b: string): number {
+  const wordsA = new Set(a.toLowerCase().match(/\b\w{4,}\b/g) ?? []);
+  const wordsB = new Set(b.toLowerCase().match(/\b\w{4,}\b/g) ?? []);
+  if (wordsA.size === 0 && wordsB.size === 0) return 1;
+  if (wordsA.size === 0 || wordsB.size === 0) return 0;
+  let intersection = 0;
+  for (const w of wordsA) if (wordsB.has(w)) intersection++;
+  const union = wordsA.size + wordsB.size - intersection;
+  return intersection / union;
+}
+
+/**
+ * Removes near-duplicate chunks from a merged result set.
+ * Keeps the higher-similarity result when two chunks are near-identical.
+ * Uses a greedy O(n²) scan — acceptable for n ≤ ~100.
+ */
+export function deduplicateChunks(
+  results: RetrievalResult[],
+  threshold = 0.6
+): RetrievalResult[] {
+  const kept: RetrievalResult[] = [];
+  for (const candidate of results) {
+    const isDuplicate = kept.some(
+      (k) =>
+        // Same chunk ID — exact duplicate from multiple topic queries
+        k.chunk.id === candidate.chunk.id ||
+        // Near-duplicate by text content
+        jaccardSimilarity(k.chunk.text, candidate.chunk.text) >= threshold
+    );
+    if (!isDuplicate) kept.push(candidate);
+  }
+  return kept;
+}
+
+// ─── Multi-topic retrieval ────────────────────────────────────────────────────
+
+/**
+ * Runs semantic search across all TOPIC_QUERIES in parallel, merges results,
+ * deduplicates near-identical chunks, and returns the unified result set.
+ *
+ * This replaces the single BROAD_RETRIEVAL_QUERY approach, ensuring that
+ * each analytical dimension (strategy, leadership, risks, etc.) gets
+ * dedicated retrieval coverage rather than competing in one embedding space.
+ */
+export async function multiTopicSearch(
+  requestId: string,
+  /** Max chunks to retrieve per topic query (total before dedup = topics × perTopicLimit) */
+  perTopicLimit = 8,
+  similarityThreshold = 0.35
+): Promise<RetrievalResult[]> {
+  // 1. Batch-embed all topic queries in a single API call
+  const embeddings = await generateEmbeddings(TOPIC_QUERIES);
+
+  // 2. Run all topic searches in parallel
+  const topicResults = await Promise.all(
+    embeddings.map((embedding) =>
+      semanticSearch(requestId, embedding, perTopicLimit, similarityThreshold)
+    )
+  );
+
+  // 3. Merge: flatten and sort by similarity descending
+  const merged = topicResults
+    .flat()
+    .sort((a, b) => b.similarity - a.similarity);
+
+  // 4. Deduplicate: remove exact + near-duplicate chunks
+  const unique = deduplicateChunks(merged);
+
+  console.log(
+    `[multiTopicSearch] ${merged.length} raw → ${unique.length} after dedup (${merged.length - unique.length} removed)`
+  );
+
+  return unique;
 }
 
 export async function retrieveForSection(

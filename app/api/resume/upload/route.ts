@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import { generateOverlay } from "@/lib/report/generateOverlay";
 import { createRouteClient } from "@/lib/db/supabase-server";
@@ -120,11 +120,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to create overlay record" }, { status: 500 });
     }
 
-    setImmediate(() => {
+    after(
       generateOverlay(overlay.id).catch((err) => {
         console.error("[resume/upload] Reuse overlay generation failed:", err);
-      });
-    });
+      })
+    );
 
     return NextResponse.json({ overlayId: overlay.id, resumeId: existingOverlay.resume_id });
   }
@@ -170,12 +170,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to create overlay record" }, { status: 500 });
   }
 
-  // Fire off async overlay generation (non-blocking)
-  setImmediate(() => {
+  // after() keeps the function alive on Vercel after response is sent (waitUntil)
+  after(
     generateOverlay(overlay.id).catch((err) => {
       console.error("[resume/upload] Async overlay generation failed:", err);
-    });
-  });
+    })
+  );
 
   return NextResponse.json({ overlayId: overlay.id, resumeId: resume.id, resumeText: resumeText.trim() });
 }

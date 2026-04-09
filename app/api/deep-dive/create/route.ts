@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 
-export const maxDuration = 300; // 5 minutes — needed for o3 + gpt-4o-mini pipeline
+export const maxDuration = 300; // 5 minutes — needed for o4-mini + gpt-4o-mini pipeline
 import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import {
@@ -49,8 +49,9 @@ export async function POST(req: NextRequest) {
       profileContext
     );
 
-    // Fire-and-forget: kick off pipeline without blocking the response.
-    setImmediate(() => {
+    // after() keeps the serverless function alive after the response is sent (Vercel waitUntil).
+    // setImmediate would be silently killed on Vercel once the response is returned.
+    after(
       runPipeline(
         request.id,
         company.id,
@@ -63,8 +64,8 @@ export async function POST(req: NextRequest) {
         resumeText || undefined
       ).catch((err) =>
         console.error("[Pipeline] Unhandled top-level error:", err)
-      );
-    });
+      )
+    );
 
     return NextResponse.json({ requestId: request.id, status: "pending" });
   } catch (error) {

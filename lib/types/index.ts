@@ -162,6 +162,12 @@ export interface RetrievalContext {
   metadata: {
     total_chunks_available: number;
     retrieval_confidence: number;
+    evidence_quality?: {
+      rating: "strong" | "moderate" | "weak" | "insufficient";
+      distinct_source_count: number;
+      distinct_source_types: number;
+      warnings: string[];
+    };
   };
 }
 
@@ -270,14 +276,14 @@ export interface SWOTSection {
   threats: SWOTItem[];
 }
 
-export type SignalLabel = "Strong" | "Mixed" | "Weak";
+export type SignalLabel = "Strong" | "Mixed" | "Weak" | "NOT_ASSESSED";
 export type RiskLabel = "Low" | "Medium" | "High";
-export type ConfidenceLevel = "high" | "medium" | "low";
+export type ConfidenceLevel = "high" | "medium" | "low" | "none";
 export type EvidenceBasis = "strong" | "partial" | "inferred";
 export type EvidenceQuality = "strong" | "partial" | "weak";
 
 export interface ScoreDetail {
-  score: number; // 1–10
+  score: number | null; // 1–10, or null when NOT_ASSESSED
   label: SignalLabel;
   rationale: string;
   confidence: ConfidenceLevel;

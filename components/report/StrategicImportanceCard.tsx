@@ -36,6 +36,7 @@ const CONFIDENCE_LABELS: Record<ConfidenceLevel, string> = {
   high: "High confidence",
   medium: "Medium confidence",
   low: "Low confidence — verify live",
+  none: "Not assessed",
 };
 
 export function StrategicImportanceCard({ data }: Props) {

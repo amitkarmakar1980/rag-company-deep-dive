@@ -44,6 +44,7 @@ const SIGNAL_ICONS = {
 };
 
 function getLabelStyle(label: string, inverse: boolean) {
+  if (label === "NOT_ASSESSED") return "text-gray-400 bg-gray-50 border-gray-200";
   if (inverse) {
     if (label === "Low") return "text-emerald-700 bg-emerald-50 border-emerald-200";
     if (label === "Medium") return "text-amber-700 bg-amber-50 border-amber-200";
@@ -68,13 +69,31 @@ function getBarColor(label: string, inverse: boolean) {
 }
 
 function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
+  const isNotAssessed = detail.label === "NOT_ASSESSED" || detail.score === null;
   const labelStyle = getLabelStyle(detail.label, inverse);
   const barColor = getBarColor(detail.label, inverse);
-  const barWidth = inverse
-    ? `${((10 - detail.score + 1) / 10) * 100}%`
-    : `${(detail.score / 10) * 100}%`;
+  const score = detail.score ?? 0;
+  const barWidth = isNotAssessed
+    ? "0%"
+    : inverse
+    ? `${((10 - score + 1) / 10) * 100}%`
+    : `${(score / 10) * 100}%`;
 
   const icon = SIGNAL_ICONS[detail.label as keyof typeof SIGNAL_ICONS];
+
+  if (isNotAssessed) {
+    return (
+      <div
+        className="bg-gray-50 border border-dashed border-gray-200 rounded-lg p-4 space-y-2"
+        role="group"
+        aria-label={`${label}: not assessed`}
+      >
+        <div className="text-xs font-semibold text-gray-400 leading-tight">{label}</div>
+        <div className="text-sm font-medium text-gray-400">Not assessed</div>
+        <p className="text-xs text-gray-400 leading-relaxed">{detail.rationale}</p>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -94,8 +113,8 @@ function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
       </div>
 
       <div className="flex items-end gap-2">
-        <span className="text-2xl font-bold text-gray-900 leading-none" aria-label={`Score: ${detail.score} out of 10`}>
-          {detail.score}
+        <span className="text-2xl font-bold text-gray-900 leading-none" aria-label={`Score: ${score} out of 10`}>
+          {score}
         </span>
         <span className="text-xs text-gray-400 mb-0.5">/ 10</span>
       </div>
@@ -103,7 +122,7 @@ function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
       <div
         className="w-full bg-gray-100 rounded-full h-1.5"
         role="progressbar"
-        aria-valuenow={detail.score}
+        aria-valuenow={score}
         aria-valuemin={1}
         aria-valuemax={10}
         aria-label={`${label} score bar`}

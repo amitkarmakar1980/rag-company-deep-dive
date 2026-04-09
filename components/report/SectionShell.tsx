@@ -132,18 +132,25 @@ export function ProseBlock({ label, value }: { label?: string; value: string }) 
 }
 
 /** Confidence pill */
-export function ConfidencePill({ level }: { level: "high" | "medium" | "low" }) {
-  const styles = {
+export function ConfidencePill({ level }: { level: "high" | "medium" | "low" | "none" }) {
+  const styles: Record<string, string> = {
     high: "bg-emerald-50 text-emerald-700 border-emerald-200",
     medium: "bg-amber-50 text-amber-700 border-amber-200",
     low: "bg-gray-100 text-gray-500 border-gray-200",
+    none: "bg-gray-50 text-gray-400 border-gray-200",
+  };
+  const labels: Record<string, string> = {
+    high: "High confidence",
+    medium: "Medium confidence",
+    low: "Low confidence",
+    none: "Not assessed",
   };
   return (
     <span
-      className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${styles[level]}`}
+      className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${styles[level] ?? styles.low}`}
       aria-label={`Confidence: ${level}`}
     >
-      {level === "high" ? "High confidence" : level === "medium" ? "Medium confidence" : "Low confidence"}
+      {labels[level] ?? level}
     </span>
   );
 }

@@ -88,10 +88,10 @@ RETURN A SINGLE VALID JSON OBJECT matching this exact schema. Do not include any
       "confidence": "high" | "medium" | "low"
     },
     "candidate_role_match": {
-      "score": <1-10>,
-      "label": "Strong" | "Mixed" | "Weak",
-      "rationale": "<1 sentence — if no profile provided, score 5 and note that>",
-      "confidence": "high" | "medium" | "low"
+      "score": <1-10> | null,
+      "label": "Strong" | "Mixed" | "Weak" | "NOT_ASSESSED",
+      "rationale": "<1 sentence — if no profile, use: 'No resume provided. Upload your resume for a real fit assessment.'>",
+      "confidence": "high" | "medium" | "low" | "none"
     },
     "evidence_strength": {
       "score": <1-10>,
@@ -316,10 +316,17 @@ export function getDeepAnalysisPrompt(
     ? `\n\nCANDIDATE PROFILE / CONTEXT:\n${profileContext}`
     : "";
 
+  const eq = context.metadata.evidence_quality;
+  const evidenceHeader = eq
+    ? `\nEVIDENCE QUALITY: ${eq.rating.toUpperCase()} — ${eq.distinct_source_count} distinct source(s), ${eq.distinct_source_types} source type(s)` +
+      (eq.warnings.length ? `\nEVIDENCE WARNINGS:\n${eq.warnings.map((w) => `- ${w}`).join("\n")}` : "")
+    : "";
+
   return `You are an evidence-grounded strategic analyst. Your job is NOT to summarize documents. Your job is to synthesize across sources to build a rigorous, gap-aware, contradiction-aware strategic deep-dive.
 
 COMPANY: ${companyName}
 ROLE: ${roleTitle}${jdSection}${profileSection}
+${evidenceHeader}
 
 EVIDENCE FROM PUBLIC SOURCES (${context.chunks.length} chunks):
 ${formatChunks(context)}
@@ -365,12 +372,15 @@ STEP 5 — Stress-test before writing:
 
 RULES:
 1. Ground every claim in specific evidence. Use FACT / INFERENCE / HYPOTHESIS labels in evidence fields.
-2. SWOT quadrants require a MINIMUM of 5 points each — non-obvious, evidence-linked, specific to this company and moment. Generic filler (e.g. "strong brand", "competitive market") is unacceptable.
-3. strategic_bet_analysis must reach a clear, defensible classification with reasons that would hold up to scrutiny.
-4. risks_red_flags must name real, specific risks — not category risks. Each flag must be tied to a named signal from the evidence.
-5. why_role_exists_now requires an original thesis — what specifically changed in the last 12–18 months that triggered this hire.
-6. When sources conflict, state which is more reliable and what should be validated live.
-7. Never invent org structure, reporting lines, success metrics, or role scope without evidence.
+2. CRITICAL — PREFER OMISSION OVER FABRICATION: Never invent SWOT items, risks, or signals to fill a schema. Produce only as many items as you have genuine evidence for. 3 well-evidenced items beats 5 padded ones.
+3. ESCAPE HATCH: If you do not have enough evidence to populate a field meaningfully, set the string value to "INSUFFICIENT_EVIDENCE" and set any score or confidence to the lowest available option. Never guess.
+4. SWOT items must be non-obvious, evidence-linked, and specific to this company at this moment. Generic filler (e.g. "strong brand", "competitive market", "macro uncertainty") is not acceptable and must be replaced with "INSUFFICIENT_EVIDENCE" if nothing specific is available.
+5. strategic_bet_analysis must reach a clear, defensible classification. If evidence is insufficient, use "Unclear" and explain what would be needed to determine the true classification.
+6. risks_red_flags must name real, specific risks tied to a named signal from the evidence. Do not produce category risks (e.g. "execution risk", "market risk") without a specific signal.
+7. why_role_exists_now requires an original thesis on what changed in the last 12–18 months. If the evidence does not support a thesis, set primary_driver to "INSUFFICIENT_EVIDENCE" and confidence to "low".
+8. When sources conflict, state which is more reliable and what should be validated live.
+9. Never invent org structure, reporting lines, success metrics, or role scope without evidence.
+10. Role SWOT evidence is harder to source than company SWOT. For role_swot, prefix each evidence field with "INFERRED:" if derived from context, "FACT:" if directly stated, or "INSUFFICIENT_EVIDENCE" if not evidenced.
 
 RETURN A SINGLE VALID JSON OBJECT with exactly these 5 keys. No other text.
 
@@ -408,32 +418,20 @@ RETURN A SINGLE VALID JSON OBJECT with exactly these 5 keys. No other text.
 
   "role_swot": {
     "strengths": [
-      { "point": "<role charter strength — min 5>", "evidence": "<optional>" },
-      { "point": "<strength>", "evidence": "<optional>" },
-      { "point": "<strength>", "evidence": "<optional>" },
-      { "point": "<strength>", "evidence": "<optional>" },
-      { "point": "<strength>", "evidence": "<optional>" }
+      { "point": "<role charter strength — only include if evidenced>", "evidence": "FACT: <source> | INFERRED: <reasoning> | INSUFFICIENT_EVIDENCE" },
+      { "point": "<strength or omit this item>", "evidence": "FACT: <source> | INFERRED: <reasoning> | INSUFFICIENT_EVIDENCE" }
     ],
     "weaknesses": [
-      { "point": "<role ambiguity or structural weakness — min 5>", "evidence": "<optional>" },
-      { "point": "<weakness>", "evidence": "<optional>" },
-      { "point": "<weakness>", "evidence": "<optional>" },
-      { "point": "<weakness>", "evidence": "<optional>" },
-      { "point": "<weakness>", "evidence": "<optional>" }
+      { "point": "<role ambiguity or structural weakness — only include if evidenced>", "evidence": "FACT: <source> | INFERRED: <reasoning> | INSUFFICIENT_EVIDENCE" },
+      { "point": "<weakness or omit>", "evidence": "FACT: <source> | INFERRED: <reasoning> | INSUFFICIENT_EVIDENCE" }
     ],
     "opportunities": [
-      { "point": "<impact opportunity from this role — min 5>", "evidence": "<optional>" },
-      { "point": "<opportunity>", "evidence": "<optional>" },
-      { "point": "<opportunity>", "evidence": "<optional>" },
-      { "point": "<opportunity>", "evidence": "<optional>" },
-      { "point": "<opportunity>", "evidence": "<optional>" }
+      { "point": "<impact opportunity from this role — only include if evidenced>", "evidence": "FACT: <source> | INFERRED: <reasoning> | INSUFFICIENT_EVIDENCE" },
+      { "point": "<opportunity or omit>", "evidence": "FACT: <source> | INFERRED: <reasoning> | INSUFFICIENT_EVIDENCE" }
     ],
     "threats": [
-      { "point": "<execution risk to this role — min 5>", "evidence": "<optional>" },
-      { "point": "<threat>", "evidence": "<optional>" },
-      { "point": "<threat>", "evidence": "<optional>" },
-      { "point": "<threat>", "evidence": "<optional>" },
-      { "point": "<threat>", "evidence": "<optional>" }
+      { "point": "<execution risk to this role — only include if evidenced>", "evidence": "FACT: <source> | INFERRED: <reasoning> | INSUFFICIENT_EVIDENCE" },
+      { "point": "<threat or omit>", "evidence": "FACT: <source> | INFERRED: <reasoning> | INSUFFICIENT_EVIDENCE" }
     ]
   },
 
@@ -489,10 +487,20 @@ export function getInterviewLayerPrompt(
     ? `\n\nCANDIDATE PROFILE / CONTEXT:\n${profileContext}`
     : "";
 
+  const hasProfile = !!(profileContext?.trim());
+
+  const eq = context.metadata.evidence_quality;
+  const evidenceHeader = eq
+    ? `\nEVIDENCE QUALITY: ${eq.rating.toUpperCase()} — ${eq.distinct_source_count} distinct source(s), ${eq.distinct_source_types} source type(s)` +
+      (eq.warnings.length ? `\nEVIDENCE WARNINGS:\n${eq.warnings.map((w) => `- ${w}`).join("\n")}` : "")
+    : "";
+
   return `You are an evidence-grounded interview-prep analyst for senior product, strategy, and GM candidates at Director+ and VP level. Your job is NOT to summarize documents. Your job is to use retrieval to build a prep brief that is evidence-backed, gap-aware, contradiction-aware, and tailored to this specific role.
 
 COMPANY: ${companyName}
 ROLE: ${roleTitle}${jdSection}${profileSection}
+${evidenceHeader}
+CANDIDATE PROFILE PROVIDED: ${hasProfile ? "YES — use it for fit-related fields" : "NO — do NOT assess candidate fit or produce positioning angles. See rules 5 and 6."}
 
 EVIDENCE FROM PUBLIC SOURCES (${context.chunks.length} chunks):
 ${formatChunks(context)}
@@ -543,10 +551,13 @@ RULES:
 2. Be decisive. State your judgment. Do not hedge behind disclaimers.
 3. Avoid repeating insights across sections. Each section adds unique value.
 4. Questions must be executive-caliber — specific, diagnostic, difficult to deflect.
-5. If a candidate profile is provided, candidate_role_match must be grounded in actual evidence from it.
-6. If only a JD exists (no profile), score candidate_role_match at 5 and note behavioral confidence is limited.
-7. interview_decision_summary and five_minute_brief must synthesize everything — write them last, make them concise and immediately actionable.
-8. Never invent specifics not supported by evidence.
+5. CANDIDATE FIT — NO PROFILE: If CANDIDATE PROFILE PROVIDED is NO, set candidate_role_match to { "score": null, "label": "NOT_ASSESSED", "rationale": "No resume or profile provided. Upload your resume for a real fit assessment.", "confidence": "none" }. Do NOT invent a score. Do NOT use 5 as a default.
+6. CANDIDATE FIT — WITH PROFILE: If CANDIDATE PROFILE PROVIDED is YES, candidate_role_match must be grounded in actual evidence from the profile — reference specific roles, results, and experiences. Do not produce generic fit language.
+7. POSITIONING ANGLE — NO PROFILE: If CANDIDATE PROFILE PROVIDED is NO, set best_positioning_angle in interview_decision_summary to "REQUIRES_RESUME — upload your resume for a personalized positioning angle."
+8. ESCAPE HATCH: If you do not have sufficient evidence to make a meaningful claim, set that string field to "INSUFFICIENT_EVIDENCE" rather than guessing. Prefer omission or honest admission over fabrication.
+9. interview_decision_summary and five_minute_brief must synthesize everything — write them last, make them concise and immediately actionable.
+10. Never invent specifics (org structure, success metrics, reporting lines) not supported by evidence.
+11. Evidence quality warnings in the header must inform your confidence levels. If evidence quality is WEAK or INSUFFICIENT, lower all confidence ratings and mark claims accordingly.
 
 RETURN A SINGLE VALID JSON OBJECT with exactly these 11 keys. No other text.
 
@@ -607,10 +618,10 @@ RETURN A SINGLE VALID JSON OBJECT with exactly these 11 keys. No other text.
       "confidence": "high" | "medium" | "low"
     },
     "candidate_role_match": {
-      "score": <1-10>,
-      "label": "Strong" | "Mixed" | "Weak",
-      "rationale": "<1 sentence — if no profile provided, score 5 and note that>",
-      "confidence": "high" | "medium" | "low"
+      "score": <1-10> | null,
+      "label": "Strong" | "Mixed" | "Weak" | "NOT_ASSESSED",
+      "rationale": "<1 sentence — if no profile, use: 'No resume provided. Upload your resume for a real fit assessment.'>",
+      "confidence": "high" | "medium" | "low" | "none"
     },
     "evidence_strength": {
       "score": <1-10>,

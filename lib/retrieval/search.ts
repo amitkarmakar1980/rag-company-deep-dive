@@ -179,12 +179,23 @@ export function rerank(
   });
 
   // Sort by rerank score
-  return scored
-    .sort((a, b) => (b as any).rerankScore - (a as any).rerankScore)
-    .map((result, index) => ({
-      ...result,
-      rank: index,
-    }));
+  const sorted = scored
+    .sort((a, b) => (b as any).rerankScore - (a as any).rerankScore);
+
+  // Source diversity cap: max 3 chunks per source to prevent one source
+  // dominating context and inflating confidence in a single signal
+  const chunksPerSource = new Map<string, number>();
+  const diversified: typeof sorted = [];
+  for (const result of sorted) {
+    const sourceId = result.source.id;
+    const count = chunksPerSource.get(sourceId) ?? 0;
+    if (count < 3) {
+      diversified.push(result);
+      chunksPerSource.set(sourceId, count + 1);
+    }
+  }
+
+  return diversified.map((result, index) => ({ ...result, rank: index }));
 }
 
 export async function retrieveForSection(

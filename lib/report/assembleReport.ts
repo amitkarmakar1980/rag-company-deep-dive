@@ -28,6 +28,58 @@ import {
   LLMCallUsage,
 } from "@/lib/types";
 
+// ─── Evidence quality assessment ─────────────────────────────────────────────
+
+export interface EvidenceQuality {
+  /** Total chunks retrieved before reranking */
+  raw_chunk_count: number;
+  /** Chunks that survived reranking */
+  final_chunk_count: number;
+  /** Number of distinct sources in the final context */
+  distinct_source_count: number;
+  /** Number of distinct source types (job_description, newsroom, blog, etc.) */
+  distinct_source_types: number;
+  /** Human-readable rating */
+  rating: "strong" | "moderate" | "weak" | "insufficient";
+  /** Specific gaps for the prompt */
+  warnings: string[];
+}
+
+function assessEvidenceQuality(
+  rawResults: import("@/lib/retrieval/search").RetrievalResult[],
+  reranked: import("@/lib/retrieval/search").RetrievalResult[]
+): EvidenceQuality {
+  const distinctSources = new Set(reranked.map((r) => r.source.id));
+  const distinctTypes = new Set(reranked.map((r) => r.source.source_type));
+
+  const warnings: string[] = [];
+  if (reranked.length < 6) warnings.push("Very few chunks available — analysis may be shallow");
+  if (distinctSources.size <= 1) warnings.push("All evidence from a single source — high risk of one-sided view");
+  if (distinctSources.size <= 2) warnings.push("Low source diversity — conclusions may be poorly corroborated");
+  if (!distinctTypes.has("job_description")) warnings.push("No job description provided — role scope is inferred only");
+  if (!distinctTypes.has("newsroom") && !distinctTypes.has("blog")) warnings.push("No recent company news or blog evidence — momentum signals may be stale or missing");
+
+  let rating: EvidenceQuality["rating"];
+  if (reranked.length >= 12 && distinctSources.size >= 3 && distinctTypes.size >= 2) {
+    rating = "strong";
+  } else if (reranked.length >= 6 && distinctSources.size >= 2) {
+    rating = "moderate";
+  } else if (reranked.length >= 3) {
+    rating = "weak";
+  } else {
+    rating = "insufficient";
+  }
+
+  return {
+    raw_chunk_count: rawResults.length,
+    final_chunk_count: reranked.length,
+    distinct_source_count: distinctSources.size,
+    distinct_source_types: distinctTypes.size,
+    rating,
+    warnings,
+  };
+}
+
 // Broad retrieval query — used by both LLM calls
 const BROAD_RETRIEVAL_QUERY =
   "company strategy priorities product platform leadership org structure " +
@@ -129,6 +181,10 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     company_name: companyName,
   });
 
+  // Assess evidence quality before synthesis
+  const evidenceQuality = assessEvidenceQuality(rawResults, reranked);
+  console.log(`[assembleReport] Evidence quality: ${JSON.stringify(evidenceQuality)}`);
+
   const context: RetrievalContext = {
     chunks: reranked.map((r) => ({
       text: r.chunk.text,
@@ -140,6 +196,7 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
     metadata: {
       total_chunks_available: sources.length * 5,
       retrieval_confidence: Math.min(1, reranked.length / 15),
+      evidence_quality: evidenceQuality,
     },
   };
 
@@ -230,11 +287,11 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
   // 8. Finalize report record (update with real scores + clear checkpoint)
   const snap = structured.assessment_snapshot;
   const scores = {
-    company_momentum: snap.company_momentum.score,
-    org_clarity: snap.org_clarity.score,
-    role_leverage: snap.role_leverage.score,
-    execution_risk: snap.execution_risk.score,
-    candidate_fit: snap.candidate_role_match.score,
+    company_momentum: snap.company_momentum.score ?? 5,
+    org_clarity: snap.org_clarity.score ?? 5,
+    role_leverage: snap.role_leverage.score ?? 5,
+    execution_risk: snap.execution_risk.score ?? 5,
+    candidate_fit: snap.candidate_role_match.score ?? 0, // 0 = not assessed
   };
   const recommendation = validateRecommendation(
     structured.executive_summary.recommendation

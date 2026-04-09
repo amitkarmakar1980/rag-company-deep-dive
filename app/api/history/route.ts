@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
         company_url,
         job_description,
         companies(name, website_url),
-        reports(recommendation),
+        reports(recommendation, candidate_fit_score, report_sections(section_key)),
         candidate_overlays(id, status)
       `)
       .eq("user_id", user.id)
@@ -39,7 +39,13 @@ export async function GET(req: NextRequest) {
         hasResume: (item.candidate_overlays ?? []).some(
           (o: any) => o.status === "completed" || o.status === "generating"
         ),
-        report: item.reports?.[0] || null,
+        report: item.reports?.[0]
+          ? {
+              recommendation: item.reports[0].recommendation,
+              candidateFitScore: item.reports[0].candidate_fit_score ?? null,
+              sectionKeys: (item.reports[0].report_sections ?? []).map((s: any) => s.section_key),
+            }
+          : null,
       }))
     );
   } catch (error) {

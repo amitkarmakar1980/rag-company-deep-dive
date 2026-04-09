@@ -12,26 +12,49 @@ interface HistoryItem {
   companyUrl: string | null;
   hasJobDescription: boolean;
   hasResume: boolean;
-  report?: { recommendation: string } | null;
+  report?: {
+    recommendation: string;
+    candidateFitScore: number | null;
+    sectionKeys: string[];
+  } | null;
 }
 
-const REC_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
-  pursue:           { label: "Aggressive Pursue", bg: "bg-emerald-100", text: "text-emerald-800" },
-  pursue_cautiously:{ label: "Cautious Pursue",   bg: "bg-amber-100",   text: "text-amber-800" },
-  avoid:            { label: "Pass",               bg: "bg-red-100",     text: "text-red-800" },
-  need_more_signal: { label: "More Signal Needed", bg: "bg-gray-100",    text: "text-gray-600" },
+const REC_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+  pursue:            { label: "Aggressive Pursue", bg: "bg-emerald-50",  text: "text-emerald-700", dot: "bg-emerald-500" },
+  pursue_cautiously: { label: "Cautious Pursue",   bg: "bg-amber-50",    text: "text-amber-700",   dot: "bg-amber-400"  },
+  avoid:             { label: "Pass",               bg: "bg-red-50",      text: "text-red-700",     dot: "bg-red-500"    },
+  need_more_signal:  { label: "Need More Signal",   bg: "bg-gray-100",    text: "text-gray-500",    dot: "bg-gray-400"   },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
   completed:                  { label: "Ready",       dot: "bg-emerald-500" },
-  failed:                     { label: "Failed",       dot: "bg-red-500" },
-  pending:                    { label: "Queued",       dot: "bg-gray-400" },
-  fetching_sources:           { label: "Fetching…",   dot: "bg-sky-500 animate-pulse" },
-  indexing:                   { label: "Indexing…",   dot: "bg-sky-500 animate-pulse" },
-  generating_report:          { label: "Generating…", dot: "bg-violet-500 animate-pulse" },
-  generating_deep_analysis:   { label: "Analysing…",  dot: "bg-violet-500 animate-pulse" },
-  generating_interview_layer: { label: "Generating…", dot: "bg-violet-500 animate-pulse" },
+  failed:                     { label: "Failed",      dot: "bg-red-500" },
+  pending:                    { label: "Queued",      dot: "bg-gray-400" },
+  fetching_sources:           { label: "Fetching…",  dot: "bg-sky-500 animate-pulse" },
+  indexing:                   { label: "Indexing…",  dot: "bg-sky-500 animate-pulse" },
+  generating_report:          { label: "Generating…",dot: "bg-violet-500 animate-pulse" },
+  generating_deep_analysis:   { label: "Analysing…", dot: "bg-violet-500 animate-pulse" },
+  generating_interview_layer: { label: "Generating…",dot: "bg-violet-500 animate-pulse" },
 };
+
+// Only surface the most decision-relevant sections in the card
+const SECTION_LABELS: Record<string, string> = {
+  interview_decision_summary: "Decision",
+  five_minute_brief:          "5-Min Brief",
+  strategic_bet_analysis:     "Strategic Bet",
+  likely_interview_agenda:    "Interview Agenda",
+  risks_red_flags:            "Risks",
+  unknowns_to_validate:       "Unknowns",
+  questions_to_ask:           "Questions",
+};
+const SECTION_DISPLAY_ORDER = Object.keys(SECTION_LABELS);
+
+function getFitColor(score: number): { bar: string; text: string } {
+  if (score >= 8) return { bar: "bg-emerald-500", text: "text-emerald-700" };
+  if (score >= 6) return { bar: "bg-sky-500",     text: "text-sky-700"     };
+  if (score >= 4) return { bar: "bg-amber-400",   text: "text-amber-700"   };
+  return             { bar: "bg-red-400",      text: "text-red-700"     };
+}
 
 function getFaviconUrl(domain: string | null): string | null {
   if (!domain) return null;
@@ -70,11 +93,12 @@ export default function HistoryPage() {
   const handleDelete = async (e: React.MouseEvent, requestId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm("Delete this deep dive? This cannot be undone.")) return;
+    if (!confirm("Delete this deep dive? All analysis data will be permanently removed.")) return;
     setDeleting(requestId);
     try {
       const res = await fetch(`/api/history/${requestId}`, { method: "DELETE" });
       if (res.ok) setHistory((prev) => prev.filter((h) => h.requestId !== requestId));
+      else alert("Failed to delete. Please try again.");
     } catch {
       alert("Failed to delete. Please try again.");
     } finally {
@@ -103,10 +127,11 @@ export default function HistoryPage() {
             {[1, 2, 3].map((i) => (
               <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 animate-pulse">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-gray-100" />
+                  <div className="w-9 h-9 rounded-lg bg-gray-100" />
                   <div className="flex-1 space-y-2">
                     <div className="h-4 bg-gray-100 rounded w-1/3" />
                     <div className="h-3 bg-gray-100 rounded w-1/2" />
+                    <div className="h-3 bg-gray-100 rounded w-2/3" />
                   </div>
                 </div>
               </div>
@@ -132,20 +157,24 @@ export default function HistoryPage() {
               const isReady = item.status === "completed";
               const isDeleting = deleting === item.requestId;
 
+              const fitScore = item.report?.candidateFitScore ?? null;
+              const fitColors = fitScore != null ? getFitColor(fitScore) : null;
+
+              // Sections present in this report, filtered to display set
+              const presentSections = (item.report?.sectionKeys ?? [])
+                .filter((k) => SECTION_LABELS[k])
+                .sort((a, b) => SECTION_DISPLAY_ORDER.indexOf(a) - SECTION_DISPLAY_ORDER.indexOf(b));
+
               const card = (
                 <div className="bg-white border border-gray-200 rounded-xl p-5 hover:border-gray-300 hover:shadow-sm transition-all group">
                   <div className="flex items-start gap-4">
-                    {/* Company favicon / placeholder */}
+
+                    {/* Favicon */}
                     <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden mt-0.5">
                       {faviconUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={faviconUrl}
-                          alt={item.company.name}
-                          width={20}
-                          height={20}
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                        />
+                        <img src={faviconUrl} alt="" width={20} height={20}
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                       ) : (
                         <span className="text-xs font-bold text-gray-400">
                           {item.company.name.charAt(0).toUpperCase()}
@@ -153,30 +182,57 @@ export default function HistoryPage() {
                       )}
                     </div>
 
-                    {/* Main content */}
-                    <div className="flex-1 min-w-0">
+                    {/* Content */}
+                    <div className="flex-1 min-w-0 space-y-2.5">
+
+                      {/* Row 1: company + role + status/rec */}
                       <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-gray-900 truncate">{item.company.name}</p>
                           <p className="text-sm text-gray-500 truncate">{item.roleTitle}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {rec && isReady && (
-                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${rec.bg} ${rec.text}`}>
+                          {rec && isReady ? (
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${rec.bg} ${rec.text}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${rec.dot}`} />
                               {rec.label}
                             </span>
-                          )}
-                          {!isReady && (
-                            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                          ) : !isReady ? (
+                            <span className="flex items-center gap-1.5 text-xs text-gray-400">
                               <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dot}`} />
                               {statusCfg.label}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
 
-                      {/* Meta row */}
-                      <div className="flex items-center gap-3 mt-2 flex-wrap">
+                      {/* Row 2: candidate fit score (only if resume was used) */}
+                      {fitScore != null && fitColors && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400 flex-shrink-0">Candidate fit</span>
+                          <div className="flex-1 max-w-[120px] h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${fitColors.bar}`}
+                              style={{ width: `${fitScore * 10}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-semibold ${fitColors.text}`}>{fitScore}/10</span>
+                        </div>
+                      )}
+
+                      {/* Row 3: sections present */}
+                      {presentSections.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {presentSections.map((key) => (
+                            <span key={key} className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md">
+                              {SECTION_LABELS[key]}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Row 4: meta */}
+                      <div className="flex items-center gap-3 flex-wrap">
                         <span className="text-xs text-gray-400">{date} · {time}</span>
                         {item.hasJobDescription && (
                           <span className="text-xs text-gray-400 flex items-center gap-1">
@@ -198,7 +254,7 @@ export default function HistoryPage() {
                           <button
                             type="button"
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(item.companyUrl!, "_blank", "noopener,noreferrer"); }}
-                            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 underline underline-offset-2 decoration-gray-300 hover:decoration-gray-500 transition-colors focus:outline-none"
+                            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 underline underline-offset-2 decoration-gray-300 hover:decoration-gray-400 transition-colors focus:outline-none"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -209,12 +265,12 @@ export default function HistoryPage() {
                       </div>
                     </div>
 
-                    {/* Delete button */}
+                    {/* Delete button — hover-reveal */}
                     <button
                       onClick={(e) => handleDelete(e, item.requestId)}
                       disabled={isDeleting}
-                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 transition-all disabled:opacity-40"
-                      aria-label={`Delete ${item.company.name} deep dive`}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 focus:outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-red-400 transition-all disabled:opacity-40"
+                      aria-label={`Delete ${item.company.name} – ${item.roleTitle}`}
                     >
                       {isDeleting ? (
                         <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden>

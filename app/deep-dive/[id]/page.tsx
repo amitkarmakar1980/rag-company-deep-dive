@@ -265,6 +265,59 @@ function ProcessingScreen({ statusKey }: { statusKey: string }) {
   );
 }
 
+// ─── Locked personalised section (resume required) ───────────────────────────
+
+function LockedPersonalisedSection({
+  title,
+  subtitle,
+  generating,
+}: {
+  title: string;
+  subtitle: string;
+  generating?: boolean;
+}) {
+  if (generating) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
+        </div>
+        <div className="px-6 py-5 space-y-2">
+          <SectionSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white border border-dashed border-gray-300 rounded-xl overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700">{title}</h2>
+          <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
+        </div>
+        <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full flex-shrink-0">
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+          Requires your resume
+        </span>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <p className="text-sm text-gray-400 leading-relaxed">
+          A pursue recommendation without knowing your background isn&apos;t meaningful — this section is generated specifically for you once you upload your resume.
+        </p>
+        <div className="space-y-2" aria-hidden>
+          <div className="h-3 bg-gray-100 rounded w-3/4" />
+          <div className="h-3 bg-gray-100 rounded w-full" />
+          <div className="h-3 bg-gray-100 rounded w-2/3" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Locked overlay placeholder ───────────────────────────────────────────────
 
 function LockedOverlaySection({ title, subtitle }: { title: string; subtitle: string }) {
@@ -569,6 +622,30 @@ export default function ReportPage() {
     const section = sectionByKey[key];
     if (!section) return null;
     if (!visibleSections(key)) return null;
+
+    // interview_decision_summary requires resume context to be meaningful
+    if (key === "interview_decision_summary") {
+      if (overlayGenerating) {
+        return (
+          <LockedPersonalisedSection
+            key={key}
+            title={section.title}
+            subtitle="Personalised pursue recommendation — generating now…"
+            generating
+          />
+        );
+      }
+      if (!hasOverlay) {
+        return (
+          <LockedPersonalisedSection
+            key={key}
+            title={section.title}
+            subtitle="Pursue recommendation, positioning angle, top questions, and key watchouts"
+          />
+        );
+      }
+    }
+
     return (
       <ReportSectionCard
         key={section.id}

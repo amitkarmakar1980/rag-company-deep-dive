@@ -461,11 +461,15 @@ export default function ReportPage() {
           fetch("/api/resume/upload", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ requestId, reuseExisting: true }),
           })
-            .then((r) => r.json())
+            .then((r) => r.ok ? r.json() : Promise.reject(`Upload returned ${r.status}`))
             .then(() => startOverlayPolling())
-            .catch(() => setOverlay({ status: "failed", data: null, error: "Personalization failed" }));
+            .catch((err) => {
+              console.error("[overlay auto-retry]", err);
+              setOverlay({ status: "failed", data: null, error: "Personalization failed" });
+            });
         }
         // No resume on file at all — panel will offer user-triggered option
         return;

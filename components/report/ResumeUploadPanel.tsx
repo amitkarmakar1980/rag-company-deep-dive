@@ -66,11 +66,12 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
         const form = new FormData();
         form.append("requestId", requestId);
         form.append("resumeFile", fileInputRef.current.files[0]);
-        res = await fetch("/api/resume/upload", { method: "POST", body: form });
+        res = await fetch("/api/resume/upload", { method: "POST", credentials: "include", body: form });
       } else {
         res = await fetch("/api/resume/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ requestId, resumeText: textToSend }),
         });
       }
@@ -110,6 +111,7 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
         const res = await fetch("/api/resume/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ requestId, resumeText: storedResume.text }),
         });
         if (!res.ok) {

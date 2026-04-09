@@ -195,18 +195,16 @@ export default function HistoryPage() {
                           </span>
                         )}
                         {item.companyUrl && (
-                          <a
-                            href={item.companyUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 underline underline-offset-2 decoration-gray-300 hover:decoration-gray-500 transition-colors"
+                          <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(item.companyUrl!, "_blank", "noopener,noreferrer"); }}
+                            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 underline underline-offset-2 decoration-gray-300 hover:decoration-gray-500 transition-colors focus:outline-none"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
                             Company site
-                          </a>
+                          </button>
                         )}
                       </div>
                     </div>

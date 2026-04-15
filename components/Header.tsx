@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/auth-helpers-nextjs";
 import type { User } from "@supabase/supabase-js";
+import { isAdmin } from "@/lib/admin";
 
 // Persist the Supabase client across renders
 const supabase = createBrowserClient(
@@ -52,6 +53,11 @@ export function Header() {
               <Link href="/history" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                 History
               </Link>
+              {isAdmin(user.email) && (
+                <Link href="/admin" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                  Admin
+                </Link>
+              )}
               <button
                 onClick={handleSignOut}
                 className="text-sm text-gray-400 hover:text-gray-900 transition-colors"

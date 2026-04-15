@@ -22,6 +22,11 @@ function getMetadataName(metadata: Record<string, unknown> | undefined, email: s
   return name || fallbackUserName(email);
 }
 
+type AuthProfile = {
+  name: string;
+  email: string | null;
+};
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = createRouteClient(req);
@@ -52,7 +57,7 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error;
 
-    const userIds = Array.from(
+    const userIds: string[] = Array.from(
       new Set(
         (data ?? [])
           .map((report: any) => report.deep_dive_requests?.user_id)
@@ -60,9 +65,9 @@ export async function GET(req: NextRequest) {
       )
     );
 
-    const authProfiles = new Map<string, { name: string; email: string | null }>();
+    const authProfiles = new Map<string, AuthProfile>();
     if (userIds.length > 0) {
-      const profileEntries = await Promise.all(
+      const profileEntries: ReadonlyArray<readonly [string, AuthProfile | null]> = await Promise.all(
         userIds.map(async (userId) => {
           const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
           if (error || !data.user) {

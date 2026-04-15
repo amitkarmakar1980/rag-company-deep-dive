@@ -51,3 +51,139 @@
 - Do not stop after one screenshot pass
 - Do not use `transition-all`
 - Do not use default Tailwind blue/indigo as primary color
+
+## Default mode
+- Use the cheapest adequate model first.
+- Use low-effort reasoning by default.
+- Escalate model or reasoning depth only when the task clearly requires it.
+- Prefer patch mode over rewrite mode.
+
+## Model routing
+Use this order unless the user explicitly requests otherwise:
+
+### Small / cheap model
+Use for:
+- formatting
+- copy edits
+- lint fixes
+- small refactors
+- boilerplate
+- tests for existing behavior
+- docs updates
+- type fixes
+- simple CRUD code
+- narrow bug fixes with clear local cause
+- grep/summarize/extract tasks
+- converting content between formats
+
+### Medium model
+Use for:
+- multi-file changes
+- moderate debugging
+- API integration work
+- nontrivial refactors
+- schema changes
+- migration plans
+- ambiguous code reading with bounded scope
+- test design when behavior is underspecified
+
+### Strong / expensive model
+Use only for:
+- architecture decisions
+- root-cause analysis across many files
+- vague or conflicting requirements
+- algorithm design
+- security/privacy-sensitive logic
+- performance bottlenecks with unclear cause
+- changes with high blast radius
+- tasks requiring tradeoff analysis
+
+## Escalation rules
+Escalate only if one of these is true:
+- the cheap model failed
+- the task spans many files or systems
+- requirements are ambiguous or conflicting
+- the bug is not locally diagnosable
+- correctness risk is high
+- the user explicitly asks for deep analysis
+
+Do not escalate just to improve wording or polish.
+
+## Output contract
+- Output only the final artifact needed.
+- Show only changed files, changed blocks, or exact commands.
+- Never restate unchanged code.
+- Do not explain obvious changes.
+- Keep notes to at most 3 bullets.
+- Omit rationale unless it affects correctness, risk, or follow-up.
+- Prefer diffs over full-file rewrites.
+- Prefer filenames + patches over prose.
+
+## Token discipline
+- Be brief by default.
+- Do not narrate your process.
+- Do not produce long plans unless asked.
+- Do not repeat the prompt or requirements.
+- Do not generate alternatives unless asked.
+- Do not add examples unless needed to implement correctly.
+- Do not summarize code the user can already see.
+- When listing options, cap at 3.
+- When asked a yes/no question, answer yes/no first, then one sentence.
+
+## Code-change policy
+- Make the smallest useful change.
+- Reuse existing patterns, helpers, and libraries.
+- Avoid introducing new dependencies unless necessary.
+- Avoid broad renames or large rewrites unless required.
+- Preserve public interfaces unless the task requires changing them.
+- Prefer backward-compatible changes.
+
+## Spec handling
+- Treat the repo and SPEC.md as source of truth.
+- If requirements changed, update SPEC.md first.
+- If implementation and SPEC.md conflict, follow SPEC.md and flag the mismatch briefly.
+- Do not rewrite SPEC.md for minor implementation details.
+
+## Debugging policy
+- Start with the most local plausible cause.
+- Form one primary hypothesis first.
+- Check existing logs, tests, types, and nearby callers before proposing broad changes.
+- Prefer one targeted fix over multiple speculative fixes.
+- Add or update the narrowest test that proves the fix.
+
+## Editing policy
+- For text/doc edits, return only the edited text.
+- For code edits, return only the patch or changed blocks.
+- For review tasks, list only issues and recommended fixes.
+- For summarization, keep to the requested length.
+
+## Command/tool policy
+- Prefer existing repo scripts over custom commands.
+- Do not run expensive operations unless necessary.
+- Avoid full builds when a targeted check will do.
+- Prefer targeted tests over full test suites.
+- Prefer reading specific files over scanning the whole repo.
+
+## When to ask
+Ask only if blocked by a missing decision that materially changes implementation.
+Otherwise make the most reasonable assumption from repo patterns and proceed.
+
+## Priorities
+1. Correctness
+2. Smallest useful change
+3. Cost efficiency
+4. Maintainability
+5. Speed
+
+## Response examples
+Good:
+- unified diff
+- changed function only
+- exact command
+- short answer plus one constraint
+
+Bad:
+- full-file dump when only 3 lines changed
+- long explanation of obvious code
+- multiple alternative implementations without request
+- deep-model use for routine formatting or local edits

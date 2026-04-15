@@ -4,6 +4,12 @@ An AI-powered interview decision-support and candidate-positioning tool for seni
 
 Rather than producing a generic research report, the engine answers one question: **should you pursue this role, and if so, how do you win the interview?**
 
+## Current Highlights
+
+- Admin dashboard with tracked OpenAI spend/tokens, Firecrawl remaining credits, and Supabase row-count visibility
+- Admin user and activity views enriched with resolved auth names and emails for clearer attribution
+- Branded app icon and social preview metadata for link unfurls and browser surfaces
+
 ---
 
 ## What It Does
@@ -75,7 +81,7 @@ Broad retrieval query embedding
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 15 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Language | TypeScript |
 | Styling | Tailwind CSS |
 | Database | Supabase PostgreSQL + pgvector |
@@ -91,13 +97,20 @@ Broad retrieval query embedding
 
 ```
 app/
+  icon.svg                         # App icon used by Next metadata
   page.tsx                         # Homepage with resume panel
+  admin/page.tsx                   # Admin dashboard for usage and activity monitoring
   auth/page.tsx                    # Email/password + Google OAuth
   deep-dive/
     new/page.tsx                   # New deep dive form
     [id]/page.tsx                  # Report page (polling, overlay, view modes)
   history/page.tsx                 # User's last 20 deep dives
   api/
+    admin/
+      activity/                    # Recent report activity with user identity + model usage
+      stats/                       # Aggregate usage and adoption metrics
+      usage/                       # OpenAI spend, Firecrawl credits, Supabase row counts
+      users/                       # Paginated user list with resolved profile details
     deep-dive/
       create/                      # Create request + fire async pipeline
       status/                      # Poll processing status
@@ -159,6 +172,9 @@ database/
 docs/
   product-brief.md                 # Auto-generated feature list + customer journeys
 
+public/
+  social-preview.svg               # Open Graph / Twitter preview image
+
 scripts/
   update-product-docs.mjs          # Regenerates docs/product-brief.md from source files
 ```
@@ -211,6 +227,11 @@ OPENAI_API_KEY=
 # Firecrawl (optional)
 FIRECRAWL_API_KEY=
 
+# Optional site metadata base URL
+NEXT_PUBLIC_APP_URL=
+# or
+NEXT_PUBLIC_SITE_URL=
+
 # Cron job protection (set to any secret string)
 CRON_SECRET=
 ```
@@ -239,6 +260,15 @@ npm run dev
 | **5-Minute Brief** | `interview_decision_summary`, `five_minute_brief`, `assessment_snapshot` only |
 
 Toggle is in the page header. Brief mode shows an amber banner with a link back to full.
+
+### Admin dashboard
+
+Admins get a dedicated dashboard at `/admin` with four server-backed views:
+
+- Overview totals for users, requests, completed reports, tracked AI spend, and total token usage
+- API usage cards for OpenAI tracked spend, Firecrawl remaining credits, and Supabase table row counts
+- Paginated user table with resolved auth profile name/email plus request and completion counts
+- Recent activity feed showing company, role, recommendation, token usage, and per-model call details
 
 ### Resume handling
 
@@ -298,4 +328,4 @@ Frontend
 
 ## License
 
-MIT
+ISC

@@ -3,6 +3,25 @@ import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import { isAdmin } from "@/lib/admin";
 
+function fallbackUserName(email: string | null | undefined) {
+  if (!email) return "Unknown User";
+  const localPart = email.split("@")[0] ?? "user";
+  return localPart
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function getMetadataName(metadata: Record<string, unknown> | undefined, email: string | null | undefined) {
+  const name =
+    (typeof metadata?.name === "string" && metadata.name) ||
+    (typeof metadata?.full_name === "string" && metadata.full_name) ||
+    (typeof metadata?.display_name === "string" && metadata.display_name);
+
+  return name || fallbackUserName(email);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = createRouteClient(req);
@@ -33,8 +52,43 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error;
 
+    const userIds = Array.from(
+      new Set(
+        (data ?? [])
+          .map((report: any) => report.deep_dive_requests?.user_id)
+          .filter((userId: string | null | undefined): userId is string => !!userId)
+      )
+    );
+
+    const authProfiles = new Map<string, { name: string; email: string | null }>();
+    if (userIds.length > 0) {
+      const profileEntries = await Promise.all(
+        userIds.map(async (userId) => {
+          const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+          if (error || !data.user) {
+            return [userId, null] as const;
+          }
+
+          return [
+            userId,
+            {
+              name: getMetadataName(data.user.user_metadata, data.user.email),
+              email: data.user.email ?? null,
+            },
+          ] as const;
+        })
+      );
+
+      for (const [userId, profile] of profileEntries) {
+        if (profile) {
+          authProfiles.set(userId, profile);
+        }
+      }
+    }
+
     const activities = (data ?? []).map((r: any) => {
       const req = r.deep_dive_requests;
+      const profile = req?.user_id ? authProfiles.get(req.user_id) : null;
       const usage = (r.summary_json as any)?.token_usage ?? null;
       const calls: any[] = usage?.calls ?? [];
 
@@ -46,6 +100,8 @@ export async function GET(req: NextRequest) {
         role_title: req?.role_title ?? "Unknown",
         recommendation: r.recommendation,
         user_id: req?.user_id ?? null,
+        user_name: profile?.name ?? fallbackUserName(profile?.email ?? null),
+        user_email: profile?.email ?? null,
         total_cost_usd: usage?.total_cost_usd ?? null,
         total_tokens: usage?.total_tokens ?? null,
         calls: calls.map((c: any) => ({

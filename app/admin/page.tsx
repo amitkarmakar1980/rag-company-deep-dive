@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/auth-helpers-nextjs";
 import { ADMIN_EMAILS } from "@/lib/admin";
@@ -37,9 +37,50 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
   );
 }
 
-function SectionHeader({ title }: { title: string }) {
+function SectionHeader({ title, icon, iconClassName }: { title: string; icon: ReactNode; iconClassName: string }) {
   return (
-    <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">{title}</h2>
+    <div className="mb-3 flex items-center gap-2">
+      <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${iconClassName}`}>
+        {icon}
+      </span>
+      <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">{title}</h2>
+    </div>
+  );
+}
+
+function SparkChartIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 16.5 9 12l3 3 7.5-8.25" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 6.75h1.5v1.5" />
+    </svg>
+  );
+}
+
+function BoltIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+      <path d="M13.25 2.75 6.9 12.1a.75.75 0 0 0 .62 1.17h3.82l-1.1 7.19a.75.75 0 0 0 1.36.51l6.5-9.68a.75.75 0 0 0-.62-1.17h-3.86l1-6.44a.75.75 0 0 0-1.37-.93Z" />
+    </svg>
+  );
+}
+
+function PeopleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 18.75v-.75A3.75 3.75 0 0 0 12 14.25H7.5A3.75 3.75 0 0 0 3.75 18v.75" />
+      <circle cx="9.75" cy="7.5" r="3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 18.75v-.75a3 3 0 0 0-2.25-2.902" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 4.78a3 3 0 0 1 0 5.44" />
+    </svg>
+  );
+}
+
+function ActivityIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h3.5l2-4.5 4.5 9 2.25-4.5h4.25" />
+    </svg>
   );
 }
 
@@ -84,8 +125,23 @@ export default function AdminPage() {
         fetch("/api/admin/usage"),
       ]);
 
-      if (!statsRes.ok || !usersRes.ok || !activityRes.ok || !usageRes.ok) {
-        throw new Error("One or more API calls failed");
+      const failed: string[] = [];
+      if (!statsRes.ok) failed.push(`stats (${statsRes.status})`);
+      if (!usersRes.ok) failed.push(`users (${usersRes.status})`);
+      if (!activityRes.ok) failed.push(`activity (${activityRes.status})`);
+      if (!usageRes.ok) failed.push(`usage (${usageRes.status})`);
+      if (failed.length > 0) {
+        // Try to extract error messages from failed responses
+        const msgs = await Promise.all(
+          [
+            !statsRes.ok ? statsRes.json().catch(() => ({})) : null,
+            !usersRes.ok ? usersRes.json().catch(() => ({})) : null,
+            !activityRes.ok ? activityRes.json().catch(() => ({})) : null,
+            !usageRes.ok ? usageRes.json().catch(() => ({})) : null,
+          ].filter(Boolean)
+        );
+        const errDetails = msgs.map((m: any) => m?.error).filter(Boolean).join("; ");
+        throw new Error(`Failed: ${failed.join(", ")}${errDetails ? ` — ${errDetails}` : ""}`);
       }
 
       const [s, u, a, us] = await Promise.all([
@@ -132,7 +188,7 @@ export default function AdminPage() {
 
       {/* ── Overview stats ── */}
       <section>
-        <SectionHeader title="Overview" />
+        <SectionHeader title="Overview" icon={<SparkChartIcon />} iconClassName="bg-emerald-100 text-emerald-700" />
         {loading || !stats ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -161,7 +217,7 @@ export default function AdminPage() {
 
       {/* ── API Usage ── */}
       <section>
-        <SectionHeader title="API Usage & Balances" />
+        <SectionHeader title="API Usage & Balances" icon={<BoltIcon />} iconClassName="bg-amber-100 text-amber-700" />
         {loading || !usage ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -230,7 +286,7 @@ export default function AdminPage() {
 
       {/* ── Users table ── */}
       <section>
-        <SectionHeader title="Users" />
+        <SectionHeader title="Users" icon={<PeopleIcon />} iconClassName="bg-sky-100 text-sky-700" />
         {loading || !users ? (
           <div className="bg-gray-100 rounded-xl h-64 animate-pulse" />
         ) : (
@@ -239,6 +295,7 @@ export default function AdminPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">Name</th>
                     <th className="text-left text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">Email</th>
                     <th className="text-left text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">Joined</th>
                     <th className="text-left text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">Last Activity</th>
@@ -249,7 +306,8 @@ export default function AdminPage() {
                 <tbody className="divide-y divide-gray-50">
                   {users.users?.map((u: any) => (
                     <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 text-gray-900 font-medium">{u.email}</td>
+                      <td className="px-5 py-3 text-gray-900 font-medium whitespace-nowrap">{u.name ?? "—"}</td>
+                      <td className="px-5 py-3 text-gray-600">{u.auth_email ?? u.email}</td>
                       <td className="px-5 py-3 text-gray-500">{fmtDate(u.created_at)}</td>
                       <td className="px-5 py-3 text-gray-500">{fmtDate(u.last_activity)}</td>
                       <td className="px-5 py-3 text-gray-900 text-right">{u.total_requests}</td>
@@ -294,15 +352,17 @@ export default function AdminPage() {
 
       {/* ── Recent activity ── */}
       <section>
-        <SectionHeader title="Last 10 Activities (All Users)" />
+        <SectionHeader title="Last 10 Activities (All Users)" icon={<ActivityIcon />} iconClassName="bg-fuchsia-100 text-fuchsia-700" />
         {loading || !activity ? (
           <div className="bg-gray-100 rounded-xl h-64 animate-pulse" />
         ) : (
           <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-            <table className="w-full text-sm min-w-[800px]">
+            <table className="w-full text-sm min-w-[1040px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-left text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">Date</th>
+                  <th className="text-left text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">User Name</th>
+                  <th className="text-left text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">User Email</th>
                   <th className="text-left text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">Company / Role</th>
                   <th className="text-left text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">Recommendation</th>
                   <th className="text-right text-xs font-semibold uppercase tracking-wider text-gray-400 px-5 py-3">Cost</th>
@@ -314,6 +374,8 @@ export default function AdminPage() {
                 {activity.activities?.map((a: any) => (
                   <tr key={a.report_id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.created_at)}</td>
+                    <td className="px-5 py-3 text-gray-900 font-medium whitespace-nowrap">{a.user_name ?? "—"}</td>
+                    <td className="px-5 py-3 text-gray-600 whitespace-nowrap">{a.user_email ?? "—"}</td>
                     <td className="px-5 py-3">
                       <p className="text-gray-900 font-medium">{a.company}</p>
                       <p className="text-gray-400 text-xs">{a.role_title}</p>

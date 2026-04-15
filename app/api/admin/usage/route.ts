@@ -7,17 +7,21 @@ async function getFirecrawlUsage(): Promise<{ credits_remaining: number | null; 
   const apiKey = process.env.FIRECRAWL_API_KEY;
   if (!apiKey) return { credits_remaining: null, error: "API key not configured" };
   try {
-    const res = await fetch("https://api.firecrawl.dev/v1/team/usage", {
+    const res = await fetch("https://api.firecrawl.dev/v2/team/credit-usage", {
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return { credits_remaining: null, error: `HTTP ${res.status}` };
     const json = await res.json();
-    // Firecrawl returns { creditsUsed, creditsLimit } or similar
+    const data = json?.data ?? json;
     const remaining =
-      json.creditsRemaining ??
-      (json.creditsLimit != null && json.creditsUsed != null
-        ? json.creditsLimit - json.creditsUsed
+      data?.remainingCredits ??
+      data?.creditsRemaining ??
+      (data?.planCredits != null && data?.creditsUsed != null
+        ? data.planCredits - data.creditsUsed
+        : null) ??
+      (data?.creditsLimit != null && data?.creditsUsed != null
+        ? data.creditsLimit - data.creditsUsed
         : null);
     return { credits_remaining: remaining };
   } catch (e: any) {

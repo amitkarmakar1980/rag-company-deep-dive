@@ -1,0 +1,34 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#F7F3EC"/>
+  <rect x="34" y="34" width="1132" height="562" rx="40" fill="url(#panelGlow)"/>
+  <rect x="54" y="54" width="1092" height="522" rx="30" fill="#FFFDF8" stroke="#E4DBCC" stroke-width="2"/>
+  <circle cx="1052" cy="126" r="132" fill="url(#haloTop)" fill-opacity="0.65"/>
+  <circle cx="180" cy="544" r="166" fill="url(#haloBottom)" fill-opacity="0.55"/>
+  <path d="M190 131C136.715 131 93.5 174.215 93.5 227.5C93.5 253.226 103.571 276.575 120 293.859C128.675 302.989 143.84 302.226 151.212 292.022L221.535 194.741C230.428 182.438 226.423 165.111 212.943 158.129C205.824 128.824 198.223 131 190 131Z" fill="#131313"/>
+  <path d="M335.623 119.191C299.01 119.191 269.327 148.874 269.327 185.487C269.327 203.165 276.248 219.231 287.541 231.127C293.505 237.406 303.936 236.881 309.01 229.857L357.403 162.973C363.522 154.516 360.767 142.605 351.497 137.804C346.606 117.65 341.388 119.191 335.623 119.191Z" fill="#131313"/>
+  <path d="M337.253 252.125C300.64 252.125 270.957 281.808 270.957 318.421C270.957 336.099 277.879 352.165 289.171 364.061C295.135 370.34 305.566 369.815 310.641 362.791L359.034 295.907C365.153 287.45 362.398 275.539 353.128 270.738C348.237 250.584 343.018 252.125 337.253 252.125Z" fill="#131313"/>
+  <rect x="510" y="152" width="136" height="36" rx="18" fill="#131313" fill-opacity="0.06"/>
+  <text x="578" y="175" text-anchor="middle" fill="#4B4337" font-family="Georgia, Times New Roman, serif" font-size="18" font-weight="700" letter-spacing="3.2">AI DECISION SUPPORT</text>
+  <text x="510" y="276" fill="#131313" font-family="Georgia, Times New Roman, serif" font-size="76" font-weight="700" letter-spacing="-2.4">
+    <tspan x="510" dy="0">Company</tspan>
+    <tspan x="510" dy="84">Deep-Dive</tspan>
+    <tspan x="510" dy="84">Engine</tspan>
+  </text>
+  <text x="511" y="530" fill="#5D5447" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="400">
+    Grounded intelligence on companies, roles, risks, and candidate fit.
+  </text>
+  <defs>
+    <linearGradient id="panelGlow" x1="72" y1="54" x2="1095" y2="576" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EFE5D6"/>
+      <stop offset="1" stop-color="#F4ECE1"/>
+    </linearGradient>
+    <radialGradient id="haloTop" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1052 126) rotate(90) scale(132)">
+      <stop stop-color="#D6C2A3"/>
+      <stop offset="1" stop-color="#D6C2A3" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="haloBottom" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(180 544) rotate(90) scale(166)">
+      <stop stop-color="#C9D8D3"/>
+      <stop offset="1" stop-color="#C9D8D3" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>

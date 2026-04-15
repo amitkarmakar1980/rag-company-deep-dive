@@ -44,7 +44,7 @@ const SIGNAL_ICONS = {
 };
 
 function getLabelStyle(label: string, inverse: boolean) {
-  if (label === "NOT_ASSESSED") return "text-gray-400 bg-gray-50 border-gray-200";
+  if (label === "NOT_ASSESSED") return "text-[#9c8d81] bg-[#f5f1e8] border-[#e4ddd4]";
   if (inverse) {
     if (label === "Low") return "text-emerald-700 bg-emerald-50 border-emerald-200";
     if (label === "Medium") return "text-amber-700 bg-amber-50 border-amber-200";
@@ -52,7 +52,7 @@ function getLabelStyle(label: string, inverse: boolean) {
   } else {
     if (label === "Strong") return "text-emerald-700 bg-emerald-50 border-emerald-200";
     if (label === "Mixed") return "text-amber-700 bg-amber-50 border-amber-200";
-    return "text-gray-600 bg-gray-100 border-gray-200";
+    return "text-[#6b5e52] bg-[#f0ece4] border-[#e4ddd4]";
   }
 }
 
@@ -84,25 +84,25 @@ function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
   if (isNotAssessed) {
     return (
       <div
-        className="bg-gray-50 border border-dashed border-gray-200 rounded-lg p-4 space-y-2"
+        className="bg-[#f5f1e8] border border-dashed border-[#e4ddd4] rounded-lg p-4 space-y-2"
         role="group"
         aria-label={`${label}: not assessed`}
       >
-        <div className="text-xs font-semibold text-gray-400 leading-tight">{label}</div>
-        <div className="text-sm font-medium text-gray-400">Not assessed</div>
-        <p className="text-xs text-gray-400 leading-relaxed">{detail.rationale}</p>
+        <div className="text-xs font-semibold text-[#9c8d81] leading-tight">{label}</div>
+        <div className="text-sm font-medium text-[#9c8d81]">Not assessed</div>
+        <p className="text-xs text-[#9c8d81] leading-relaxed">{detail.rationale}</p>
       </div>
     );
   }
 
   return (
     <div
-      className="bg-white border border-gray-200 rounded-lg p-4 space-y-3"
+      className="bg-white border border-[#e4ddd4] rounded-lg p-4 space-y-3"
       role="group"
       aria-label={`${label}: ${detail.label}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="text-xs font-semibold text-gray-500 leading-tight">{label}</div>
+        <div className="text-xs font-semibold text-[#7a6d63] leading-tight">{label}</div>
         <div
           className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium flex-shrink-0 ${labelStyle}`}
           aria-label={`Signal strength: ${detail.label}`}
@@ -113,14 +113,14 @@ function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
       </div>
 
       <div className="flex items-end gap-2">
-        <span className="text-2xl font-bold text-gray-900 leading-none" aria-label={`Score: ${score} out of 10`}>
+        <span className="text-2xl font-bold text-[#1c1713] leading-none" aria-label={`Score: ${score} out of 10`}>
           {score}
         </span>
-        <span className="text-xs text-gray-400 mb-0.5">/ 10</span>
+        <span className="text-xs text-[#9c8d81] mb-0.5">/ 10</span>
       </div>
 
       <div
-        className="w-full bg-gray-100 rounded-full h-1.5"
+        className="w-full bg-[#f0ece4] rounded-full h-1.5"
         role="progressbar"
         aria-valuenow={score}
         aria-valuemin={1}
@@ -133,17 +133,17 @@ function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
         />
       </div>
 
-      <p className="text-xs text-gray-500 leading-relaxed">{detail.rationale}</p>
+      <p className="text-xs text-[#7a6d63] leading-relaxed">{detail.rationale}</p>
 
       <div className="flex items-center gap-1.5">
-        <span className="text-xs text-gray-400">Confidence:</span>
+        <span className="text-xs text-[#9c8d81]">Confidence:</span>
         <span
           className={`text-xs font-medium ${
             detail.confidence === "high"
               ? "text-emerald-600"
               : detail.confidence === "medium"
               ? "text-amber-600"
-              : "text-gray-400"
+              : "text-[#9c8d81]"
           }`}
         >
           {detail.confidence}

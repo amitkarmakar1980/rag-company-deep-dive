@@ -21,13 +21,13 @@ const CLASS_CONFIG: Record<StrategicClassification, { bg: string; border: string
     desc: "Exploratory or adjacency investment — upside if it works, but not yet proven",
   },
   "Tactical Fill": {
-    bg: "bg-gray-50", border: "border-gray-200", text: "text-gray-700",
+    bg: "bg-[#f5f1e8]", border: "border-[#e4ddd4]", text: "text-[#4a3f36]",
     badge: "bg-gray-600 text-white",
     desc: "Operational necessity — solid role, limited strategic upside",
   },
   "Unclear": {
-    bg: "bg-gray-50", border: "border-gray-200", text: "text-gray-600",
-    badge: "bg-gray-500 text-white",
+    bg: "bg-[#f5f1e8]", border: "border-[#e4ddd4]", text: "text-[#6b5e52]",
+    badge: "bg-[#f5f1e8]0 text-white",
     desc: "Insufficient signal to classify — validate this live",
   },
 };
@@ -73,7 +73,7 @@ export function StrategicImportanceCard({ data }: Props) {
             <p className={`text-sm ${cfg.text} leading-relaxed`}>{cfg.desc}</p>
           </div>
           {confidenceLabel && (
-            <span className="text-xs text-gray-400 font-medium">{confidenceLabel}</span>
+            <span className="text-xs text-[#9c8d81] font-medium">{confidenceLabel}</span>
           )}
         </div>
       </div>
@@ -87,8 +87,8 @@ export function StrategicImportanceCard({ data }: Props) {
 
       {/* Candidate implication — only rendered when present (new schema reports) */}
       {implication && (
-        <div className="bg-gray-900 rounded-xl p-5 space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">What This Means for You</p>
+        <div className="bg-[#1a4a3a] rounded-xl p-5 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81]">What This Means for You</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { label: "Scope & Impact", value: implication.scope_impact },
@@ -97,7 +97,7 @@ export function StrategicImportanceCard({ data }: Props) {
               { label: "How to Adapt Your Pitch", value: implication.interview_adaptation },
             ].map(({ label, value }) => value ? (
               <div key={label}>
-                <p className="text-xs font-semibold text-gray-500 mb-0.5">{label}</p>
+                <p className="text-xs font-semibold text-[#7a6d63] mb-0.5">{label}</p>
                 <p className="text-sm text-gray-100 leading-relaxed">{value}</p>
               </div>
             ) : null)}
@@ -107,8 +107,8 @@ export function StrategicImportanceCard({ data }: Props) {
 
       {/* Fallback for old-schema reports: show interview_implication if present */}
       {!implication && raw.interview_implication && (
-        <div className="bg-gray-900 rounded-xl p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">What This Means in the Interview</p>
+        <div className="bg-[#1a4a3a] rounded-xl p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-2">What This Means in the Interview</p>
           <p className="text-sm text-gray-100 leading-relaxed">{raw.interview_implication}</p>
         </div>
       )}
@@ -120,12 +120,12 @@ function BulletBlock({ label, items, dotColor }: { label: string; items: string[
   if (!items?.length) return null;
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-2">{label}</p>
       <ul className="space-y-1.5">
         {items.map((item, i) => (
           <li key={i} className="flex items-start gap-2">
             <span className={`flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full ${dotColor}`} aria-hidden />
-            <span className="text-sm text-gray-700 leading-relaxed">{item}</span>
+            <span className="text-sm text-[#4a3f36] leading-relaxed">{item}</span>
           </li>
         ))}
       </ul>

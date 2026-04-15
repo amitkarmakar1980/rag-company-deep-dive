@@ -31,15 +31,15 @@ export function SectionShell({
     <section
       id={id}
       aria-labelledby={`${id}-heading`}
-      className="bg-white border border-gray-200 rounded-xl overflow-hidden"
+      className="bg-white border border-[#e4ddd4] rounded-xl overflow-hidden shadow-[0_1px_4px_rgba(28,23,19,0.05),0_4px_12px_rgba(28,23,19,0.04)]"
     >
-      <div className="px-6 py-5 border-b border-gray-100">
+      <div className="px-6 py-5 border-b border-[#f0ece4]">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <h2
                 id={`${id}-heading`}
-                className="text-sm font-semibold text-gray-900 leading-snug"
+                className="text-sm font-semibold text-[#1c1713] leading-snug"
               >
                 {title}
               </h2>
@@ -48,8 +48,8 @@ export function SectionShell({
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                     evidenceBacked
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : "bg-gray-100 text-gray-500 border border-gray-200"
+                      ? "bg-[#1a4a3a]/8 text-[#1a4a3a] border border-[#1a4a3a]/20"
+                      : "bg-[#f0ece4] text-[#7a6d63] border border-[#d4cdc4]"
                   }`}
                 >
                   {evidenceBacked ? "Evidence-backed" : "Inferred"}
@@ -57,7 +57,7 @@ export function SectionShell({
               )}
             </div>
             {subtitle && (
-              <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+              <p className="text-xs text-[#9c8d81] mt-1 leading-relaxed">
                 {subtitle}
               </p>
             )}
@@ -67,7 +67,7 @@ export function SectionShell({
               onClick={() => setCollapsed((c) => !c)}
               aria-expanded={!collapsed}
               aria-controls={`${id}-content`}
-              className="flex-shrink-0 text-gray-400 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 rounded p-1 transition-colors"
+              className="flex-shrink-0 text-[#9c8d81] hover:text-[#4a3f36] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 rounded p-1 transition-colors"
               aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
             >
               <svg
@@ -88,7 +88,7 @@ export function SectionShell({
         <div id={`${id}-content`} className="px-6 py-5 space-y-4">
           {children}
           {feedback && (
-            <div className="pt-3 border-t border-gray-100">{feedback}</div>
+            <div className="pt-3 border-t border-[#f0ece4]">{feedback}</div>
           )}
         </div>
       )}
@@ -108,8 +108,8 @@ export function BulletList({
   return (
     <ul className={`space-y-2 ${className}`} role="list">
       {items.map((item, i) => (
-        <li key={i} className="flex gap-2.5 text-sm text-gray-700 leading-relaxed">
-          <span className="mt-2 flex-shrink-0 w-1.5 h-1.5 rounded-full bg-gray-400" aria-hidden />
+        <li key={i} className="flex gap-2.5 text-sm text-[#4a3f36] leading-relaxed">
+          <span className="mt-2 flex-shrink-0 w-1.5 h-1.5 rounded-full bg-[#c8bfb4]" aria-hidden />
           <span>{item}</span>
         </li>
       ))}
@@ -122,11 +122,11 @@ export function ProseBlock({ label, value }: { label?: string; value: string }) 
   return (
     <div>
       {label && (
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-1.5">
           {label}
         </h3>
       )}
-      <p className="text-sm text-gray-700 leading-relaxed">{value}</p>
+      <p className="text-sm text-[#4a3f36] leading-relaxed">{value}</p>
     </div>
   );
 }
@@ -134,10 +134,10 @@ export function ProseBlock({ label, value }: { label?: string; value: string }) 
 /** Confidence pill */
 export function ConfidencePill({ level }: { level: "high" | "medium" | "low" | "none" }) {
   const styles: Record<string, string> = {
-    high: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    high: "bg-[#1a4a3a]/8 text-[#1a4a3a] border-[#1a4a3a]/20",
     medium: "bg-amber-50 text-amber-700 border-amber-200",
-    low: "bg-gray-100 text-gray-500 border-gray-200",
-    none: "bg-gray-50 text-gray-400 border-gray-200",
+    low: "bg-[#f0ece4] text-[#7a6d63] border-[#d4cdc4]",
+    none: "bg-[#f5f1e8] text-[#9c8d81] border-[#d4cdc4]",
   };
   const labels: Record<string, string> = {
     high: "High confidence",

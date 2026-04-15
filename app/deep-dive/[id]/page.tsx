@@ -20,6 +20,7 @@ import { SectionShell } from "@/components/report/SectionShell";
 import { RecommendationType, ReportScore, CandidateOverlayData, ReportTokenUsage } from "@/lib/types";
 import { useResumeStore } from "@/lib/hooks/useResumeStore";
 import { TokenUsagePanel } from "@/components/report/TokenUsagePanel";
+import { formatDateTimeParts, formatGenerationDuration, useRequestTimeZone } from "@/lib/timezone";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,8 @@ interface Report {
   }>;
   tokenUsage: ReportTokenUsage | null;
   createdAt: string;
+  requestCreatedAt: string | null;
+  completedAt: string | null;
 }
 
 interface RequestStatus {
@@ -197,24 +200,24 @@ function ProcessingScreen({ statusKey }: { statusKey: string }) {
     <div className="max-w-3xl mx-auto px-4 py-20 flex flex-col items-center gap-8">
       {/* Spinner */}
       <div className="relative w-14 h-14">
-        <div className="absolute inset-0 rounded-full border-2 border-gray-200" />
-        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-gray-900 animate-spin" />
+        <div className="absolute inset-0 rounded-full border-2 border-[#e4ddd4]" />
+        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#1a4a3a] animate-spin" />
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-2 h-2 rounded-full bg-gray-900 animate-pulse" />
+          <div className="w-2 h-2 rounded-full bg-[#1a4a3a] animate-pulse" />
         </div>
       </div>
 
       {/* Phase label */}
       <div className="text-center space-y-2">
-        <p className="text-base font-semibold text-gray-900">
+        <p className="text-base font-semibold text-[#1c1713]">
           {STATUS_LABELS[statusKey] ?? statusKey}
         </p>
         {subSteps.length > 0 && (
-          <p key={subStep} className="text-sm text-gray-400 animate-pulse">
+          <p key={subStep} className="text-sm text-[#9c8d81] animate-pulse">
             {subSteps[subStep]}
           </p>
         )}
-        <p className="text-xs text-gray-300 mt-3">Takes 45–90 seconds · Stay on this page</p>
+        <p className="text-xs text-[#b0a496] mt-3">Analysis runs in multiple steps · Stay on this page</p>
       </div>
 
       {/* Progress steps */}
@@ -229,18 +232,18 @@ function ProcessingScreen({ statusKey }: { statusKey: string }) {
                 <div
                   className={`w-2.5 h-2.5 rounded-full transition-all ${
                     isCompleted
-                      ? "bg-gray-900"
+                      ? "bg-[#1a4a3a]"
                       : isActive
-                      ? "bg-gray-900 ring-4 ring-gray-900/20"
-                      : "bg-gray-200"
+                      ? "bg-[#1a4a3a] ring-4 ring-[#1a4a3a]/20"
+                      : "bg-[#e4ddd4]"
                   }`}
                 />
-                <span className={`text-xs whitespace-nowrap ${isUpcoming ? "text-gray-300" : isActive ? "text-gray-700 font-medium" : "text-gray-400"}`}>
+                <span className={`text-xs whitespace-nowrap ${isUpcoming ? "text-[#c8bfb4]" : isActive ? "text-[#4a3f36] font-medium" : "text-[#9c8d81]"}`}>
                   {STATUS_LABELS[phase]?.replace("…", "") ?? phase}
                 </span>
               </div>
               {i < PHASE_ORDER.length - 1 && (
-                <div className={`h-px w-12 mx-1.5 mb-4 ${i < phaseIdx ? "bg-gray-900" : "bg-gray-200"}`} />
+                <div className={`h-px w-12 mx-1.5 mb-4 ${i < phaseIdx ? "bg-[#1a4a3a]" : "bg-[#e4ddd4]"}`} />
               )}
             </div>
           );
@@ -248,13 +251,13 @@ function ProcessingScreen({ statusKey }: { statusKey: string }) {
       </div>
 
       {/* Thinking log — last few messages */}
-      <div className="w-full max-w-md bg-white border border-gray-100 rounded-xl px-5 py-4 space-y-2.5">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-300 mb-1">What&apos;s happening</p>
+      <div className="w-full max-w-md bg-white border border-[#e4ddd4] rounded-xl px-5 py-4 space-y-2.5 shadow-[0_2px_8px_rgba(28,23,19,0.05)]">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#c8bfb4] mb-1">What&apos;s happening</p>
         {PHASE_ORDER.slice(0, phaseIdx + 1).map((phase) => (
           STATUS_SUBSTEPS[phase]?.slice(0, phase === statusKey ? subStep + 1 : STATUS_SUBSTEPS[phase].length).map((msg, i) => (
             <div key={`${phase}-${i}`} className="flex items-start gap-2.5">
-              <div className={`flex-shrink-0 mt-1 w-1.5 h-1.5 rounded-full ${phase === statusKey && i === subStep ? "bg-gray-900" : "bg-gray-300"}`} />
-              <span className={`text-xs leading-relaxed ${phase === statusKey && i === subStep ? "text-gray-700" : "text-gray-400"}`}>
+              <div className={`flex-shrink-0 mt-1 w-1.5 h-1.5 rounded-full ${phase === statusKey && i === subStep ? "bg-[#1a4a3a]" : "bg-[#d4cdc4]"}`} />
+              <span className={`text-xs leading-relaxed ${phase === statusKey && i === subStep ? "text-[#4a3f36]" : "text-[#9c8d81]"}`}>
                 {msg}
               </span>
             </div>
@@ -278,10 +281,10 @@ function LockedPersonalisedSection({
 }) {
   if (generating) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
+      <div className="bg-white border border-[#e4ddd4] rounded-xl overflow-hidden shadow-[0_2px_8px_rgba(28,23,19,0.05)]">
+        <div className="px-6 py-4 border-b border-[#f0ece4]">
+          <h2 className="text-sm font-semibold text-[#1c1713]">{title}</h2>
+          <p className="text-xs text-[#9c8d81] mt-0.5">{subtitle}</p>
         </div>
         <div className="px-6 py-5 space-y-2">
           <SectionSkeleton />
@@ -291,13 +294,13 @@ function LockedPersonalisedSection({
   }
 
   return (
-    <div className="bg-white border border-dashed border-gray-300 rounded-xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+    <div className="bg-white border border-dashed border-[#c8bfb4] rounded-xl overflow-hidden">
+      <div className="px-6 py-4 border-b border-[#f0ece4] flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-gray-700">{title}</h2>
-          <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
+          <h2 className="text-sm font-semibold text-[#4a3f36]">{title}</h2>
+          <p className="text-xs text-[#9c8d81] mt-0.5">{subtitle}</p>
         </div>
-        <span className="flex items-center gap-1.5 text-xs font-medium text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full flex-shrink-0">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-[#7a6d63] bg-[#f5f1e8] border border-[#d4cdc4] px-2.5 py-1 rounded-full flex-shrink-0">
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
@@ -305,13 +308,13 @@ function LockedPersonalisedSection({
         </span>
       </div>
       <div className="px-6 py-5 space-y-3">
-        <p className="text-sm text-gray-400 leading-relaxed">
+        <p className="text-sm text-[#9c8d81] leading-relaxed">
           A pursue recommendation without knowing your background isn&apos;t meaningful — this section is generated specifically for you once you upload your resume.
         </p>
         <div className="space-y-2" aria-hidden>
-          <div className="h-3 bg-gray-100 rounded w-3/4" />
-          <div className="h-3 bg-gray-100 rounded w-full" />
-          <div className="h-3 bg-gray-100 rounded w-2/3" />
+          <div className="h-3 bg-[#f0ece4] rounded w-3/4" />
+          <div className="h-3 bg-[#f0ece4] rounded w-full" />
+          <div className="h-3 bg-[#f0ece4] rounded w-2/3" />
         </div>
       </div>
     </div>
@@ -323,17 +326,17 @@ function LockedPersonalisedSection({
 function LockedOverlaySection({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div
-      className="bg-white border border-gray-200 rounded-xl overflow-hidden opacity-60"
+      className="bg-white border border-[#e4ddd4] rounded-xl overflow-hidden opacity-60"
       aria-hidden="true"
     >
-      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+      <div className="px-6 py-4 border-b border-[#f0ece4] flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+          <h2 className="text-sm font-semibold text-[#1c1713]">{title}</h2>
           {subtitle && (
-            <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
+            <p className="text-xs text-[#9c8d81] mt-0.5">{subtitle}</p>
           )}
         </div>
-        <span className="flex items-center gap-1 text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full flex-shrink-0">
+        <span className="flex items-center gap-1 text-xs text-[#9c8d81] bg-[#f0ece4] px-2.5 py-1 rounded-full flex-shrink-0">
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
@@ -341,10 +344,10 @@ function LockedOverlaySection({ title, subtitle }: { title: string; subtitle: st
         </span>
       </div>
       <div className="px-6 py-5 space-y-2">
-        <div className="h-3 bg-gray-100 rounded w-3/4" />
-        <div className="h-3 bg-gray-100 rounded w-full" />
-        <div className="h-3 bg-gray-100 rounded w-2/3" />
-        <div className="h-3 bg-gray-100 rounded w-5/6" />
+        <div className="h-3 bg-[#f0ece4] rounded w-3/4" />
+        <div className="h-3 bg-[#f0ece4] rounded w-full" />
+        <div className="h-3 bg-[#f0ece4] rounded w-2/3" />
+        <div className="h-3 bg-[#f0ece4] rounded w-5/6" />
       </div>
     </div>
   );
@@ -361,26 +364,26 @@ function ViewModeToggle({
 }) {
   return (
     <div
-      className="inline-flex items-center bg-gray-100 rounded-lg p-0.5 gap-0.5"
+      className="inline-flex items-center bg-[#f0ece4] rounded-lg p-0.5 gap-0.5"
       role="group"
       aria-label="View mode"
     >
       <button
         onClick={() => onChange("brief")}
-        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 ${
+        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 ${
           mode === "brief"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-500 hover:text-gray-700"
+            ? "bg-white text-[#1c1713] shadow-sm"
+            : "text-[#7a6d63] hover:text-[#4a3f36]"
         }`}
       >
         5-Min Brief
       </button>
       <button
         onClick={() => onChange("full")}
-        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 ${
+        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 ${
           mode === "full"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-500 hover:text-gray-700"
+            ? "bg-white text-[#1c1713] shadow-sm"
+            : "text-[#7a6d63] hover:text-[#4a3f36]"
         }`}
       >
         Full Report
@@ -402,6 +405,7 @@ export default function ReportPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [overallFeedback, setOverallFeedback] = useState<"useful" | "not_useful" | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("full");
+  const { timeZone, shortLabel } = useRequestTimeZone();
 
   const { stored: storedResume } = useResumeStore();
 
@@ -577,10 +581,10 @@ export default function ReportPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-stone-50">
+      <main className="min-h-screen bg-[#faf8f3]">
         <div className="max-w-4xl mx-auto px-4 py-16 flex flex-col items-center gap-4">
-          <div className="w-8 h-8 rounded-full border-2 border-gray-200 border-t-gray-900 animate-spin" role="status" aria-label="Loading" />
-          <p className="text-sm text-gray-400">Loading…</p>
+          <div className="w-8 h-8 rounded-full border-2 border-[#e4ddd4] border-t-[#1a4a3a] animate-spin" role="status" aria-label="Loading" />
+          <p className="text-sm text-[#9c8d81]">Loading…</p>
         </div>
       </main>
     );
@@ -590,15 +594,15 @@ export default function ReportPage() {
 
   if (error || status?.status === "failed") {
     return (
-      <main className="min-h-screen bg-stone-50">
+      <main className="min-h-screen bg-[#faf8f3]">
         <div className="max-w-3xl mx-auto px-4 py-16">
           <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center" role="alert">
             <h1 className="text-base font-semibold text-red-800 mb-2">Report Generation Failed</h1>
-            <p className="text-sm text-gray-600 mb-6">{error ?? "An error occurred while generating this report."}</p>
+            <p className="text-sm text-[#6b5e52] mb-6">{error ?? "An error occurred while generating this report."}</p>
             <button
               onClick={handleRegenerate}
               disabled={regenerating}
-              className="inline-flex items-center gap-2 bg-gray-900 text-white border border-gray-900 px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 bg-[#1a4a3a] text-white border border-[#1a4a3a] px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#153d30] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/50 disabled:opacity-50 transition-colors"
             >
               {regenerating ? "Starting…" : "Try Again"}
             </button>
@@ -612,7 +616,7 @@ export default function ReportPage() {
 
   if (status && PROCESSING_STATUSES.has(status.status)) {
     return (
-      <main className="min-h-screen bg-stone-50">
+      <main className="min-h-screen bg-[#faf8f3]">
         <ProcessingScreen statusKey={status.status} />
       </main>
     );
@@ -620,9 +624,9 @@ export default function ReportPage() {
 
   if (!report) {
     return (
-      <main className="min-h-screen bg-stone-50">
+      <main className="min-h-screen bg-[#faf8f3]">
         <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-          <p className="text-gray-400 text-sm">Report not found.</p>
+          <p className="text-[#9c8d81] text-sm">Report not found.</p>
         </div>
       </main>
     );
@@ -632,6 +636,8 @@ export default function ReportPage() {
 
   // Build a keyed lookup for sections
   const sectionByKey = Object.fromEntries(report.sections.map((s) => [s.key, s]));
+  const completedAtParts = formatDateTimeParts(report.completedAt ?? report.createdAt, timeZone);
+  const generationDuration = formatGenerationDuration(report.requestCreatedAt, report.completedAt);
 
   const hasOverlay = overlay.status === "completed" && overlay.data !== null;
   const overlayGenerating = overlay.status === "generating" || overlay.status === "uploading";
@@ -756,25 +762,23 @@ export default function ReportPage() {
   };
 
   return (
-    <main className="min-h-screen bg-stone-50">
+    <main className="min-h-screen bg-[#faf8f3]">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-3">
 
         {/* Page header */}
         <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900 mb-1.5">
+            <h1 className="text-2xl font-semibold text-[#1c1713] mb-1.5">
               Interview Intelligence Brief
             </h1>
-            <p className="text-sm text-gray-400">
-              Generated{" "}
-              {new Date(report.createdAt).toLocaleDateString("en-US", {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
-              {hasOverlay && (
-                <span className="ml-2 text-emerald-600">· Personalized with your resume</span>
-              )}
+            <p className="text-sm text-[#9c8d81]">
+              {completedAtParts
+                ? `Generated ${completedAtParts.date} at ${completedAtParts.time} ${completedAtParts.shortLabel}`
+                : "Generated recently"}
+            </p>
+            <p className="text-xs text-[#9c8d81] mt-1">
+              {generationDuration ? `Time to generate ${generationDuration}` : `Times shown in ${shortLabel}`}
+              {hasOverlay && <span className="ml-2 text-[#1a4a3a]">· Personalized with your resume</span>}
             </p>
           </div>
           <ViewModeToggle mode={viewMode} onChange={setViewMode} />
@@ -806,11 +810,11 @@ export default function ReportPage() {
 
         {/* Overlay generating banner */}
         {overlayGenerating && (
-          <div className="bg-white border border-gray-200 rounded-xl px-6 py-4 flex items-center gap-4">
-            <span className="w-5 h-5 rounded-full border-2 border-gray-200 border-t-gray-900 animate-spin flex-shrink-0" role="status" aria-label="Generating personalization" />
+          <div className="bg-white border border-[#e4ddd4] rounded-xl px-6 py-4 flex items-center gap-4 shadow-[0_2px_8px_rgba(28,23,19,0.05)]">
+            <span className="w-5 h-5 rounded-full border-2 border-[#e4ddd4] border-t-[#1a4a3a] animate-spin flex-shrink-0" role="status" aria-label="Generating personalization" />
             <div>
-              <p className="text-sm font-semibold text-gray-900">Personalizing your brief…</p>
-              <p className="text-xs text-gray-400 mt-0.5">Analyzing your background against this role. Takes about 30 seconds.</p>
+              <p className="text-sm font-semibold text-[#1c1713]">Personalizing your brief…</p>
+              <p className="text-xs text-[#9c8d81] mt-0.5">Analyzing your background against this role and updating the brief.</p>
             </div>
           </div>
         )}
@@ -857,9 +861,9 @@ export default function ReportPage() {
           <section
             id="sources"
             aria-labelledby="sources-heading"
-            className="bg-white border border-gray-200 rounded-xl px-6 py-5"
+            className="bg-white border border-[#e4ddd4] rounded-xl px-6 py-5 shadow-[0_2px_8px_rgba(28,23,19,0.05)]"
           >
-            <h2 id="sources-heading" className="text-sm font-semibold text-gray-900 mb-4">
+            <h2 id="sources-heading" className="text-sm font-semibold text-[#1c1713] mb-4">
               Evidence Sources
             </h2>
             <SourcesPanel sources={report.sources} />
@@ -872,23 +876,23 @@ export default function ReportPage() {
         )}
 
         {/* Overall feedback */}
-        <div className="bg-white border border-gray-200 rounded-xl px-6 py-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Was this brief useful overall?</h2>
+        <div className="bg-white border border-[#e4ddd4] rounded-xl px-6 py-5 shadow-[0_2px_8px_rgba(28,23,19,0.05)]">
+          <h2 className="text-sm font-semibold text-[#4a3f36] mb-3">Was this brief useful overall?</h2>
           {overallFeedback ? (
-            <p className="text-sm text-gray-400" role="status" aria-live="polite">
+            <p className="text-sm text-[#9c8d81]" role="status" aria-live="polite">
               {overallFeedback === "useful" ? "Thanks — glad it helped." : "Thanks for the feedback."}
             </p>
           ) : (
             <div className="flex gap-3" role="group" aria-label="Overall report feedback">
               <button
                 onClick={() => handleOverallFeedback("useful")}
-                className="px-4 py-2 rounded-lg bg-white text-gray-700 text-sm border border-gray-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 transition-colors"
+                className="px-4 py-2 rounded-lg bg-white text-[#4a3f36] text-sm border border-[#d4cdc4] hover:bg-[#1a4a3a]/6 hover:text-[#1a4a3a] hover:border-[#1a4a3a]/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
               >
                 Yes, useful
               </button>
               <button
                 onClick={() => handleOverallFeedback("not_useful")}
-                className="px-4 py-2 rounded-lg bg-white text-gray-700 text-sm border border-gray-300 hover:bg-red-50 hover:text-red-700 hover:border-red-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 transition-colors"
+                className="px-4 py-2 rounded-lg bg-white text-[#4a3f36] text-sm border border-[#d4cdc4] hover:bg-red-50 hover:text-red-700 hover:border-red-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
               >
                 Not useful
               </button>

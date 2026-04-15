@@ -1,7 +1,15 @@
 
 import type { Metadata } from "next";
+import { Poppins } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/Header";
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+  variable: "--font-poppins",
+});
 
 const siteUrl =
   process.env.NEXT_PUBLIC_APP_URL ??
@@ -47,7 +55,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="antialiased bg-stone-50 text-gray-900" suppressHydrationWarning>
+      <body className={`${poppins.className} ${poppins.variable} antialiased bg-[#faf8f3] text-[#1c1713]`} suppressHydrationWarning>
         <Header />
         {children}
       </body>

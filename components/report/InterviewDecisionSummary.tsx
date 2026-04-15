@@ -47,14 +47,14 @@ export function InterviewDecisionSummary({ data }: Props) {
         <Card label="Interview Watchout" icon="✕" color="text-red-700">
           {data.interview_watchout}
         </Card>
-        <Card label="Red Flag to Validate Live" icon="?" color="text-gray-600">
+        <Card label="Red Flag to Validate Live" icon="?" color="text-[#6b5e52]">
           {data.red_flag_to_validate}
         </Card>
       </div>
 
       {/* Top 3 questions */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Top 3 Questions to Ask</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#7a6d63] mb-2">Top 3 Questions to Ask</p>
         <ol className="space-y-1.5">
           {(data.top_3_questions ?? []).map((q, i) => (
             <li key={i} className="flex items-start gap-2.5">

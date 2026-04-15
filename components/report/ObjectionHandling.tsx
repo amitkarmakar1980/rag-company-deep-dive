@@ -45,7 +45,7 @@ export function ObjectionHandlingSection({ data }: Props) {
                     <p className="text-xs font-semibold text-sky-700 mb-1.5">Strongest proof points from your resume</p>
                     <ul className="space-y-1">
                       {obj.proof_points.map((p, j) => (
-                        <li key={j} className="flex items-start gap-2 text-sm text-gray-700">
+                        <li key={j} className="flex items-start gap-2 text-sm text-[#4a3f36]">
                           <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-sky-500" aria-hidden />
                           {p}
                         </li>
@@ -56,7 +56,7 @@ export function ObjectionHandlingSection({ data }: Props) {
 
                 <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
                   <p className="text-xs font-semibold text-red-700 mb-1">What not to say / not to overclaim</p>
-                  <p className="text-xs text-gray-700 leading-relaxed">{obj.what_not_to_say}</p>
+                  <p className="text-xs text-[#4a3f36] leading-relaxed">{obj.what_not_to_say}</p>
                 </div>
               </div>
             )}
@@ -71,7 +71,7 @@ function Row({ label, value, color }: { label: string; value: string; color: str
   return (
     <div>
       <p className={`text-xs font-semibold mb-0.5 ${color}`}>{label}</p>
-      <p className="text-sm text-gray-700 leading-relaxed">{value}</p>
+      <p className="text-sm text-[#4a3f36] leading-relaxed">{value}</p>
     </div>
   );
 }

@@ -20,21 +20,21 @@ export function FiveMinuteBrief({ data }: Props) {
         {rows.map(({ label, value, accent }) => (
           <div
             key={label}
-            className={`bg-white border border-gray-200 border-l-4 ${accent} rounded-lg px-4 py-3`}
+            className={`bg-white border border-[#e4ddd4] border-l-4 ${accent} rounded-lg px-4 py-3`}
           >
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">{label}</p>
-            <p className="text-sm text-gray-900 leading-relaxed">{value}</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-1">{label}</p>
+            <p className="text-sm text-[#1c1713] leading-relaxed">{value}</p>
           </div>
         ))}
       </div>
 
       {/* Top 3 smart questions */}
-      <div className="bg-gray-900 rounded-xl px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Top 3 Smart Questions</p>
+      <div className="bg-[#1a4a3a] rounded-xl px-5 py-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-3">Top 3 Smart Questions</p>
         <ol className="space-y-2">
           {(data.top_3_smart_questions ?? []).map((q, i) => (
             <li key={i} className="flex items-start gap-3">
-              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-700 text-gray-300 text-xs font-bold flex items-center justify-center mt-0.5">
+              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-700 text-[#b0a496] text-xs font-bold flex items-center justify-center mt-0.5">
                 {i + 1}
               </span>
               <span className="text-sm text-gray-100 leading-relaxed">{q}</span>

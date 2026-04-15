@@ -31,13 +31,13 @@ const SOURCE_GROUP_CONFIG: Record<string, { label: string; types: string[]; colo
   custom: {
     label: "Custom / Additional",
     types: ["custom_url", "profile_text"],
-    color: "text-gray-500",
+    color: "text-[#7a6d63]",
   },
 };
 
 export function SourcesPanel({ sources }: SourcesPanelProps) {
   if (!sources || sources.length === 0) {
-    return <p className="text-sm text-gray-400">No sources available.</p>;
+    return <p className="text-sm text-[#9c8d81]">No sources available.</p>;
   }
 
   const grouped: Record<string, SourceItem[]> = {
@@ -82,16 +82,16 @@ export function SourcesPanel({ sources }: SourcesPanelProps) {
                         href={source.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-gray-700 hover:text-gray-900 underline underline-offset-2 decoration-gray-300 hover:decoration-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 rounded transition-colors"
+                        className="text-[#4a3f36] hover:text-[#1c1713] underline underline-offset-2 decoration-gray-300 hover:decoration-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 rounded transition-colors"
                         aria-label={`Source: ${source.title} (opens in new tab)`}
                       >
                         {source.title}
                       </a>
                     ) : (
-                      <span className="text-gray-500">{source.title}</span>
+                      <span className="text-[#7a6d63]">{source.title}</span>
                     )}
                     {source.publishedAt && (
-                      <span className="ml-2 text-xs text-gray-400">
+                      <span className="ml-2 text-xs text-[#9c8d81]">
                         {new Date(source.publishedAt).toLocaleDateString("en-US", {
                           month: "short",
                           year: "numeric",

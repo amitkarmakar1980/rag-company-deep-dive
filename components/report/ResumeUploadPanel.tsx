@@ -127,21 +127,21 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
     };
 
     return (
-      <div className="bg-white border border-gray-200 rounded-xl px-6 py-5" role="region" aria-label="Personalize report">
+      <div className="bg-white border border-[#e4ddd4] rounded-xl px-6 py-5" role="region" aria-label="Personalize report">
         <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
-          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[#f0ece4] flex items-center justify-center">
+            <svg className="w-4 h-4 text-[#7a6d63]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 mb-0.5">
+            <p className="text-sm font-semibold text-[#1c1713] mb-0.5">
               Personalize with your resume
               {storedResume.fileName && (
-                <span className="font-normal text-gray-500 ml-1">· {storedResume.fileName}</span>
+                <span className="font-normal text-[#7a6d63] ml-1">· {storedResume.fileName}</span>
               )}
             </p>
-            <p className="text-sm text-gray-500 leading-relaxed">
+            <p className="text-sm text-[#7a6d63] leading-relaxed">
               Saved {savedDate}. Generate candidate-role matching, interviewer concerns, and positioning strategy tailored to you.
             </p>
             {errorMessage && <p className="text-xs text-red-600 mt-1">{errorMessage}</p>}
@@ -150,7 +150,7 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
             <button
               onClick={handleUseStored}
               disabled={uploadState === "uploading"}
-              className="inline-flex items-center gap-1.5 bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 disabled:opacity-40 transition-colors"
+              className="inline-flex items-center gap-1.5 bg-[#1a4a3a] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#153d30] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 disabled:opacity-40 transition-colors"
             >
               {uploadState === "uploading" ? (
                 <>
@@ -168,7 +168,7 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
             </button>
             <button
               onClick={() => setExpanded(true)}
-              className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors"
+              className="text-xs text-[#9c8d81] hover:text-[#6b5e52] underline underline-offset-2 transition-colors"
             >
               Use a different resume
             </button>
@@ -182,27 +182,27 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
 
     return (
       <div
-        className="bg-white border border-gray-200 rounded-xl px-6 py-5"
+        className="bg-white border border-[#e4ddd4] rounded-xl px-6 py-5"
         role="region"
         aria-label="Resume upload CTA"
       >
         <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
-          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-            <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[#f0ece4] flex items-center justify-center">
+            <svg className="w-4 h-4 text-[#7a6d63]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 mb-0.5">
+            <p className="text-sm font-semibold text-[#1c1713] mb-0.5">
               Personalize this report with your background
             </p>
-            <p className="text-sm text-gray-500 leading-relaxed">
+            <p className="text-sm text-[#7a6d63] leading-relaxed">
               Upload your resume to unlock candidate-role matching, positioning strategy, interviewer concerns, and story recommendations tailored to you.
             </p>
           </div>
           <button
             onClick={() => setExpanded(true)}
-            className="flex-shrink-0 inline-flex items-center gap-1.5 bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 transition-colors"
+            className="flex-shrink-0 inline-flex items-center gap-1.5 bg-[#1a4a3a] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#153d30] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 transition-colors"
             aria-expanded={false}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
@@ -217,20 +217,20 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
 
   return (
     <div
-      className="bg-white border border-gray-200 rounded-xl px-6 py-5 space-y-4"
+      className="bg-white border border-[#e4ddd4] rounded-xl px-6 py-5 space-y-4"
       role="region"
       aria-label="Resume upload form"
     >
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-semibold text-gray-900">Upload your resume</p>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-sm font-semibold text-[#1c1713]">Upload your resume</p>
+          <p className="text-xs text-[#9c8d81] mt-0.5">
             Your resume is used only for this analysis and is not stored beyond this session.
           </p>
         </div>
         <button
           onClick={() => setExpanded(false)}
-          className="text-gray-400 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 rounded"
+          className="text-[#9c8d81] hover:text-[#6b5e52] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 rounded"
           aria-label="Close upload panel"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
@@ -240,13 +240,13 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
       </div>
 
       {/* Mode tabs */}
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 bg-[#f0ece4] rounded-lg p-1 w-fit">
         <button
           onClick={() => setMode("paste")}
           className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
             mode === "paste"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
+              ? "bg-white text-[#1c1713] shadow-sm"
+              : "text-[#7a6d63] hover:text-[#4a3f36]"
           }`}
         >
           Paste text
@@ -255,8 +255,8 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
           onClick={() => setMode("file")}
           className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
             mode === "file"
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
+              ? "bg-white text-[#1c1713] shadow-sm"
+              : "text-[#7a6d63] hover:text-[#4a3f36]"
           }`}
         >
           Upload file
@@ -270,7 +270,7 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
           onChange={(e) => setResumeText(e.target.value)}
           placeholder="Paste your resume here — full text, LinkedIn about section, or any background summary..."
           rows={10}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 resize-y leading-relaxed"
+          className="w-full border border-[#d4cdc4] rounded-lg px-3 py-2.5 text-sm text-[#1c1713] placeholder:text-[#9c8d81] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 resize-y leading-relaxed"
           aria-label="Resume text"
         />
       ) : (
@@ -286,25 +286,25 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
           />
           <label
             htmlFor="resume-file-input"
-            className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors"
+            className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[#d4cdc4] rounded-lg cursor-pointer hover:border-gray-400 hover:bg-[#f5f1e8] transition-colors"
           >
             {fileName ? (
               <div className="text-center">
-                <svg className="mx-auto w-6 h-6 text-gray-500 mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <svg className="mx-auto w-6 h-6 text-[#7a6d63] mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <p className="text-sm font-medium text-gray-700">{fileName}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Click to change</p>
+                <p className="text-sm font-medium text-[#4a3f36]">{fileName}</p>
+                <p className="text-xs text-[#9c8d81] mt-0.5">Click to change</p>
               </div>
             ) : (
               <div className="text-center">
-                <svg className="mx-auto w-6 h-6 text-gray-400 mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <svg className="mx-auto w-6 h-6 text-[#9c8d81] mb-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                <p className="text-sm text-gray-500">
-                  <span className="font-medium text-gray-700">Click to upload</span> or drag and drop
+                <p className="text-sm text-[#7a6d63]">
+                  <span className="font-medium text-[#4a3f36]">Click to upload</span> or drag and drop
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">PDF, Word (.docx), or TXT · max 5MB</p>
+                <p className="text-xs text-[#9c8d81] mt-0.5">PDF, Word (.docx), or TXT · max 5MB</p>
               </div>
             )}
           </label>
@@ -321,7 +321,7 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
         <button
           onClick={handleSubmit}
           disabled={!hasInput || uploadState === "uploading"}
-          className="inline-flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 disabled:opacity-40 transition-colors"
+          className="inline-flex items-center gap-2 bg-[#1a4a3a] text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-[#153d30] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 disabled:opacity-40 transition-colors"
           aria-label="Generate personalized analysis"
         >
           {uploadState === "uploading" ? (
@@ -338,7 +338,7 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
             </>
           )}
         </button>
-        <p className="text-xs text-gray-400">Takes ~30 seconds</p>
+        <p className="text-xs text-[#9c8d81]">Personalization starts right after upload</p>
       </div>
     </div>
   );

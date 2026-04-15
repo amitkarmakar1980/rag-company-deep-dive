@@ -24,11 +24,11 @@ const SEVERITY_CONFIG = {
     ),
   },
   low: {
-    border: "border-gray-200",
-    bg: "bg-gray-50",
-    badge: "bg-gray-100 text-gray-700",
+    border: "border-[#e4ddd4]",
+    bg: "bg-[#f5f1e8]",
+    badge: "bg-[#f0ece4] text-[#4a3f36]",
     icon: (
-      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+      <svg className="w-4 h-4 text-[#9c8d81]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
         <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
@@ -37,7 +37,7 @@ const SEVERITY_CONFIG = {
 
 export function RisksSection({ data }: { data: RiskFlag[] }) {
   if (!data || data.length === 0) {
-    return <p className="text-sm text-gray-400">No significant risk flags identified.</p>;
+    return <p className="text-sm text-[#9c8d81]">No significant risk flags identified.</p>;
   }
 
   const sorted = [...data].sort((a, b) => {
@@ -60,18 +60,18 @@ export function RisksSection({ data }: { data: RiskFlag[] }) {
               <span className="flex-shrink-0 mt-0.5">{cfg.icon}</span>
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-gray-900">
+                  <span className="text-sm font-semibold text-[#1c1713]">
                     {risk.flag}
                   </span>
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.badge}`}>
                     {risk.severity}
                   </span>
                 </div>
-                <p className="text-xs text-gray-600 leading-relaxed">
+                <p className="text-xs text-[#6b5e52] leading-relaxed">
                   <span className="font-medium text-gray-800">Signal: </span>
                   {risk.signal}
                 </p>
-                <p className="text-xs text-gray-600 leading-relaxed">
+                <p className="text-xs text-[#6b5e52] leading-relaxed">
                   <span className="font-medium text-gray-800">Impact: </span>
                   {risk.impact}
                 </p>

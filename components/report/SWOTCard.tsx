@@ -82,7 +82,7 @@ export function SWOTCard({ data }: SWOTCardProps) {
               </h3>
             </div>
             {items.length === 0 ? (
-              <p className="text-xs text-gray-400">No items identified</p>
+              <p className="text-xs text-[#9c8d81]">No items identified</p>
             ) : (
               <ul className="space-y-2.5" role="list">
                 {items.map((item, i) => (
@@ -97,7 +97,7 @@ export function SWOTCard({ data }: SWOTCardProps) {
                       </span>
                     </div>
                     {item.evidence && (
-                      <p className="text-xs text-gray-500 pl-3.5 leading-relaxed">
+                      <p className="text-xs text-[#7a6d63] pl-3.5 leading-relaxed">
                         {item.evidence}
                       </p>
                     )}

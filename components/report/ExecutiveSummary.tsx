@@ -10,14 +10,14 @@ export function ExecutiveSummarySection({ data }: { data: Data }) {
     <div className="space-y-5">
       {/* Rationale — plain prose, no colored recommendation banner */}
       {data.recommendation_rationale && (
-        <p className="text-sm text-gray-600 leading-relaxed border-l-2 border-gray-200 pl-3">
+        <p className="text-sm text-[#6b5e52] leading-relaxed border-l-2 border-[#e4ddd4] pl-3">
           {data.recommendation_rationale}
         </p>
       )}
 
       {/* Key bullets */}
       <div>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-3">
           Key Insights
         </h3>
         <BulletList items={data.key_bullets} />

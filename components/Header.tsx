@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/auth-helpers-nextjs";
 import type { User } from "@supabase/supabase-js";
 import { isAdmin } from "@/lib/admin";
+import { BrandMark } from "@/components/BrandMark";
 
 // Persist the Supabase client across renders
 const supabase = createBrowserClient(
@@ -84,39 +85,39 @@ export function Header() {
   };
 
   return (
-    <header className="border-b border-gray-200 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-        <Link href="/" className="text-base font-semibold tracking-tight text-gray-900">
-          Deep-Dive Engine
+    <header className="border-b border-stone-800/80 bg-stone-950/95 text-stone-100 shadow-[0_18px_40px_rgba(0,0,0,0.22)] backdrop-blur supports-[backdrop-filter]:bg-stone-950/85">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-6">
+        <Link href="/" className="min-w-0">
+          <BrandMark compact tone="dark" />
         </Link>
         <nav className="flex items-center gap-6">
           {user ? (
             <>
-              <span className="text-sm text-gray-900 hidden sm:block">
-                <NavLabel icon={<UserBadgeIcon className="h-4 w-4 text-violet-600" />} label={user.user_metadata?.name || user.email || "User"} labelClassName="text-gray-900" />
+              <span className="hidden text-sm text-stone-200 sm:block">
+                <NavLabel icon={<UserBadgeIcon className="h-4 w-4 text-amber-300" />} label={user.user_metadata?.name || user.email || "User"} labelClassName="text-stone-200" />
               </span>
-              <Link href="/deep-dive/new" className="text-sm text-gray-900 hover:text-gray-900 transition-colors">
-                <NavLabel icon={<PencilSquareIcon className="h-4 w-4 text-emerald-600" />} label="New Analysis" labelClassName="text-gray-900" />
+              <Link href="/deep-dive/new" className="text-sm text-stone-100 hover:text-amber-200 transition-colors">
+                <NavLabel icon={<PencilSquareIcon className="h-4 w-4 text-emerald-300" />} label="New Analysis" labelClassName="text-stone-100" />
               </Link>
-              <Link href="/history" className="text-sm text-gray-900 hover:text-gray-900 transition-colors">
-                <NavLabel icon={<ClockIcon className="h-4 w-4 text-sky-600" />} label="History" labelClassName="text-gray-900" />
+              <Link href="/history" className="text-sm text-stone-100 hover:text-amber-200 transition-colors">
+                <NavLabel icon={<ClockIcon className="h-4 w-4 text-sky-300" />} label="History" labelClassName="text-stone-100" />
               </Link>
               {isAdmin(user.email) && (
-                <Link href="/admin" className="text-sm text-gray-900 hover:text-gray-900 transition-colors">
-                  <NavLabel icon={<ShieldIcon className="h-4 w-4 text-amber-600" />} label="Admin" labelClassName="text-gray-900" />
+                <Link href="/admin" className="text-sm text-stone-100 hover:text-amber-200 transition-colors">
+                  <NavLabel icon={<ShieldIcon className="h-4 w-4 text-amber-300" />} label="Admin" labelClassName="text-stone-100" />
                 </Link>
               )}
               <button
                 onClick={handleSignOut}
-                className="text-sm text-gray-900 hover:text-gray-900 transition-colors"
+                className="text-sm text-stone-100 hover:text-rose-200 transition-colors"
               >
-                <NavLabel icon={<ArrowRightOnRectangleIcon className="h-4 w-4 text-rose-600" />} label="Sign out" labelClassName="text-gray-900" />
+                <NavLabel icon={<ArrowRightOnRectangleIcon className="h-4 w-4 text-rose-300" />} label="Sign out" labelClassName="text-stone-100" />
               </button>
             </>
           ) : (
             <Link
               href="/auth"
-              className="text-sm font-medium text-gray-900 hover:underline underline-offset-4"
+              className="rounded-full border border-white/12 bg-white/8 px-4 py-2 text-sm font-medium text-stone-100 hover:bg-white/14 transition-colors shadow-[0_10px_20px_rgba(0,0,0,0.18)]"
             >
               Sign in
             </Link>

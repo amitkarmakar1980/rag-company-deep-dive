@@ -64,26 +64,26 @@ export function HomepageResumePanel() {
   if (stored && !expanded) {
     const savedDate = new Date(stored.savedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
     return (
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+      <div className="bg-[#1a4a3a]/6 border border-[#1a4a3a]/20 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+          <div className="w-8 h-8 rounded-lg bg-[#1a4a3a]/12 flex items-center justify-center flex-shrink-0">
+            <svg className="w-4 h-4 text-[#1a4a3a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold text-emerald-800">
+            <p className="text-sm font-semibold text-[#1a4a3a]">
               Resume saved
-              {stored.fileName && <span className="font-normal ml-1 text-emerald-700">· {stored.fileName}</span>}
+              {stored.fileName && <span className="font-normal ml-1 text-[#1a4a3a]/80">· {stored.fileName}</span>}
             </p>
-            <p className="text-xs text-emerald-600">Saved {savedDate} · Used automatically when you generate a deep dive</p>
+            <p className="text-xs text-[#1a4a3a]/70">Saved {savedDate} · Used automatically when you generate a deep dive</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setExpanded(true)} className="text-sm font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2">
+          <button onClick={() => setExpanded(true)} className="text-sm font-medium text-[#1a4a3a] hover:text-[#153d30] underline underline-offset-2">
             Replace
           </button>
-          <button onClick={clear} className="text-sm font-medium text-emerald-600 hover:text-red-600 underline underline-offset-2">
+          <button onClick={clear} className="text-sm font-medium text-[#1a4a3a]/70 hover:text-red-600 underline underline-offset-2">
             Remove
           </button>
         </div>
@@ -93,18 +93,18 @@ export function HomepageResumePanel() {
 
   if (!expanded) {
     return (
-      <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+      <div className="bg-[#f5f1e8] border border-dashed border-[#c8bfb4] rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <p className="text-sm font-semibold text-gray-700">
-            Add your resume <span className="text-gray-400 font-normal">(optional)</span>
+          <p className="text-sm font-semibold text-[#4a3f36]">
+            Add your resume <span className="text-[#9c8d81] font-normal">(optional)</span>
           </p>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="text-sm text-[#7a6d63] mt-0.5">
             Get a personalized candidate match, interviewer concerns, and positioning strategy alongside every deep dive.
           </p>
         </div>
         <button
           onClick={() => setExpanded(true)}
-          className="flex-shrink-0 inline-flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 transition-colors"
+          className="flex-shrink-0 inline-flex items-center gap-2 bg-[#1a4a3a] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#153d30] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/50 transition-colors shadow-[0_2px_8px_rgba(26,74,58,0.2)]"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -116,15 +116,15 @@ export function HomepageResumePanel() {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl px-5 py-5 space-y-4">
+    <div className="bg-white border border-[#e4ddd4] rounded-xl px-5 py-5 space-y-4 shadow-[0_2px_12px_rgba(28,23,19,0.06)]">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-semibold text-gray-900">Upload your resume</p>
-          <p className="text-xs text-gray-400 mt-0.5">Saved to your browser. Used to personalize every report you generate.</p>
+          <p className="text-sm font-semibold text-[#1c1713]">Upload your resume</p>
+          <p className="text-xs text-[#9c8d81] mt-0.5">Saved to your browser. Used to personalize every report you generate.</p>
         </div>
         <button
           onClick={() => setExpanded(false)}
-          className="text-gray-400 hover:text-gray-600 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900"
+          className="text-[#9c8d81] hover:text-[#4a3f36] rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30"
           aria-label="Close"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
@@ -133,13 +133,13 @@ export function HomepageResumePanel() {
         </button>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 bg-[#f0ece4] rounded-lg p-1 w-fit">
         {(["paste", "file"] as const).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
             className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              mode === m ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              mode === m ? "bg-white text-[#1c1713] shadow-sm" : "text-[#7a6d63] hover:text-[#4a3f36]"
             }`}
           >
             {m === "paste" ? "Paste text" : "Upload file"}
@@ -153,7 +153,7 @@ export function HomepageResumePanel() {
           onChange={(e) => setResumeText(e.target.value)}
           placeholder="Paste your resume — full text, LinkedIn About section, or any background summary…"
           rows={9}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 resize-y leading-relaxed"
+          className="w-full border border-[#d4cdc4] rounded-lg px-3 py-2.5 text-sm text-[#1c1713] placeholder:text-[#b0a496] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 focus:border-[#1a4a3a]/40 resize-y leading-relaxed"
         />
       ) : (
         <div>
@@ -167,19 +167,19 @@ export function HomepageResumePanel() {
           />
           <label
             htmlFor="homepage-resume-input"
-            className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-colors"
+            className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-[#c8bfb4] rounded-lg cursor-pointer hover:border-[#1a4a3a]/40 hover:bg-[#f5f1e8] transition-colors"
           >
             {fileName ? (
               <div className="text-center">
-                <p className="text-sm font-medium text-gray-700">{fileName}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Click to change</p>
+                <p className="text-sm font-medium text-[#4a3f36]">{fileName}</p>
+                <p className="text-xs text-[#9c8d81] mt-0.5">Click to change</p>
               </div>
             ) : (
               <div className="text-center px-4">
-                <p className="text-sm text-gray-500">
-                  <span className="font-medium text-gray-700">Click to upload</span>
+                <p className="text-sm text-[#7a6d63]">
+                  <span className="font-medium text-[#4a3f36]">Click to upload</span>
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">PDF, Word (.docx), or TXT</p>
+                <p className="text-xs text-[#9c8d81] mt-0.5">PDF, Word (.docx), or TXT</p>
               </div>
             )}
           </label>
@@ -187,7 +187,7 @@ export function HomepageResumePanel() {
       )}
 
       {fileError && (
-        <p className={`text-xs mt-1 ${fileError === "Extracting text…" ? "text-gray-400" : "text-amber-700"}`}>
+        <p className={`text-xs mt-1 ${fileError === "Extracting text…" ? "text-[#9c8d81]" : "text-amber-700"}`}>
           {fileError}
         </p>
       )}
@@ -195,11 +195,11 @@ export function HomepageResumePanel() {
         <button
           onClick={handleSave}
           disabled={!hasInput}
-          className="inline-flex items-center gap-1.5 bg-gray-900 text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 disabled:opacity-40 transition-colors"
+          className="inline-flex items-center gap-1.5 bg-[#1a4a3a] text-white text-sm font-medium px-5 py-2.5 rounded-lg hover:bg-[#153d30] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/50 disabled:opacity-40 transition-colors shadow-[0_2px_8px_rgba(26,74,58,0.2)]"
         >
           Save Resume
         </button>
-        <p className="text-xs text-gray-400">Saved locally in your browser only</p>
+        <p className="text-xs text-[#9c8d81]">Saved locally in your browser only</p>
       </div>
     </div>
   );

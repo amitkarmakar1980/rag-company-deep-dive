@@ -44,17 +44,17 @@ export function UnknownsToValidate({ data }: Props) {
               <div className="px-5 pb-4 pt-1 space-y-3 border-t border-amber-200">
                 <Detail label="Why it matters" value={u.why_it_matters} />
                 <div className="bg-white rounded-lg px-4 py-3 border border-amber-100">
-                  <p className="text-xs font-semibold text-gray-500 mb-1">Ask this</p>
-                  <p className="text-sm text-gray-900 font-medium leading-relaxed italic">&ldquo;{u.question_to_ask}&rdquo;</p>
+                  <p className="text-xs font-semibold text-[#7a6d63] mb-1">Ask this</p>
+                  <p className="text-sm text-[#1c1713] font-medium leading-relaxed italic">&ldquo;{u.question_to_ask}&rdquo;</p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
                     <p className="text-xs font-semibold text-emerald-700 mb-1">Reassuring answer</p>
-                    <p className="text-xs text-gray-700 leading-relaxed">{u.reassuring_answer}</p>
+                    <p className="text-xs text-[#4a3f36] leading-relaxed">{u.reassuring_answer}</p>
                   </div>
                   <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
                     <p className="text-xs font-semibold text-red-700 mb-1">Concerning answer</p>
-                    <p className="text-xs text-gray-700 leading-relaxed">{u.concerning_answer}</p>
+                    <p className="text-xs text-[#4a3f36] leading-relaxed">{u.concerning_answer}</p>
                   </div>
                 </div>
               </div>
@@ -70,7 +70,7 @@ function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-xs font-semibold text-amber-800 mb-0.5">{label}</p>
-      <p className="text-sm text-gray-700 leading-relaxed">{value}</p>
+      <p className="text-sm text-[#4a3f36] leading-relaxed">{value}</p>
     </div>
   );
 }

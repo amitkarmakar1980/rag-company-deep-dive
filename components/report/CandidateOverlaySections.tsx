@@ -15,10 +15,10 @@ function OverlayLabel({ children, color }: { children: React.ReactNode; color: s
 function SectionSkeleton() {
   return (
     <div className="space-y-3 animate-pulse">
-      <div className="h-4 bg-gray-100 rounded w-3/4" />
-      <div className="h-3 bg-gray-100 rounded w-full" />
-      <div className="h-3 bg-gray-100 rounded w-5/6" />
-      <div className="h-3 bg-gray-100 rounded w-2/3" />
+      <div className="h-4 bg-[#f0ece4] rounded w-3/4" />
+      <div className="h-3 bg-[#f0ece4] rounded w-full" />
+      <div className="h-3 bg-[#f0ece4] rounded w-5/6" />
+      <div className="h-3 bg-[#f0ece4] rounded w-2/3" />
     </div>
   );
 }
@@ -75,7 +75,7 @@ export function CandidateRoleMatchSection({
     <div className="space-y-5">
       <div className="flex items-start gap-4 flex-wrap">
         <FitBadge fit={data.overall_fit} score={data.match_score} />
-        <p className="text-sm text-gray-700 leading-relaxed flex-1 min-w-[200px]">
+        <p className="text-sm text-[#4a3f36] leading-relaxed flex-1 min-w-[200px]">
           {data.rationale}
         </p>
       </div>
@@ -86,8 +86,8 @@ export function CandidateRoleMatchSection({
           <ul className="mt-2 space-y-2">
             {data.key_alignments.map((a, i) => (
               <li key={i} className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 space-y-0.5">
-                <p className="text-sm font-medium text-gray-900">{a.alignment}</p>
-                <p className="text-xs text-gray-500">{a.resume_evidence}</p>
+                <p className="text-sm font-medium text-[#1c1713]">{a.alignment}</p>
+                <p className="text-xs text-[#7a6d63]">{a.resume_evidence}</p>
               </li>
             ))}
           </ul>
@@ -99,7 +99,7 @@ export function CandidateRoleMatchSection({
           <OverlayLabel color="text-red-600">Gaps vs Role Requirements</OverlayLabel>
           <ul className="mt-2 space-y-1.5">
             {data.key_gaps.map((g, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+              <li key={i} className="flex items-start gap-2 text-sm text-[#4a3f36]">
                 <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400" aria-hidden />
                 {g}
               </li>
@@ -123,16 +123,16 @@ export function StrengthsToEmphasizeSection({
       {data.strengths.map((s, i) => (
         <li
           key={i}
-          className="bg-white border border-gray-200 rounded-lg p-4 space-y-2"
+          className="bg-white border border-[#e4ddd4] rounded-lg p-4 space-y-2"
         >
-          <p className="text-sm font-semibold text-gray-900">{s.strength}</p>
+          <p className="text-sm font-semibold text-[#1c1713]">{s.strength}</p>
           <div className="flex items-start gap-1.5">
-            <span className="text-xs font-medium text-gray-400 shrink-0 mt-0.5">Evidence:</span>
-            <p className="text-xs text-gray-600 leading-relaxed">{s.evidence_from_resume}</p>
+            <span className="text-xs font-medium text-[#9c8d81] shrink-0 mt-0.5">Evidence:</span>
+            <p className="text-xs text-[#6b5e52] leading-relaxed">{s.evidence_from_resume}</p>
           </div>
           <div className="flex items-start gap-1.5">
             <span className="text-xs font-medium text-emerald-700 shrink-0 mt-0.5">Why it matters:</span>
-            <p className="text-xs text-gray-600 leading-relaxed">{s.why_it_matters_for_role}</p>
+            <p className="text-xs text-[#6b5e52] leading-relaxed">{s.why_it_matters_for_role}</p>
           </div>
         </li>
       ))}
@@ -145,7 +145,7 @@ export function StrengthsToEmphasizeSection({
 const CONCERN_CONFIG = {
   high: { bg: "bg-red-50", border: "border-red-200", badge: "bg-red-100 text-red-800" },
   medium: { bg: "bg-amber-50", border: "border-amber-200", badge: "bg-amber-100 text-amber-800" },
-  low: { bg: "bg-gray-50", border: "border-gray-200", badge: "bg-gray-100 text-gray-700" },
+  low: { bg: "bg-[#f5f1e8]", border: "border-[#e4ddd4]", badge: "bg-[#f0ece4] text-[#4a3f36]" },
 };
 
 export function InterviewerConcernsSection({
@@ -168,13 +168,13 @@ export function InterviewerConcernsSection({
             className={`${cfg.bg} border ${cfg.border} rounded-lg p-4 space-y-2`}
           >
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold text-gray-900">{c.concern}</p>
+              <p className="text-sm font-semibold text-[#1c1713]">{c.concern}</p>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.badge}`}>
                 {c.severity}
               </span>
             </div>
-            <p className="text-xs text-gray-600">
-              <span className="font-medium text-gray-700">Likely question: </span>
+            <p className="text-xs text-[#6b5e52]">
+              <span className="font-medium text-[#4a3f36]">Likely question: </span>
               &ldquo;{c.likely_question}&rdquo;
             </p>
           </li>
@@ -194,18 +194,18 @@ export function GapManagementSection({
   return (
     <ul className="space-y-4" role="list">
       {data.gaps.map((g, i) => (
-        <li key={i} className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 border-b border-gray-200 px-4 py-2.5">
-            <p className="text-sm font-semibold text-gray-900">{g.gap}</p>
+        <li key={i} className="border border-[#e4ddd4] rounded-lg overflow-hidden">
+          <div className="bg-[#f5f1e8] border-b border-[#e4ddd4] px-4 py-2.5">
+            <p className="text-sm font-semibold text-[#1c1713]">{g.gap}</p>
           </div>
           <div className="px-4 py-3 space-y-2">
             <div>
               <p className="text-xs font-medium text-amber-700 mb-0.5">Reframe</p>
-              <p className="text-sm text-gray-700 leading-relaxed">{g.reframe}</p>
+              <p className="text-sm text-[#4a3f36] leading-relaxed">{g.reframe}</p>
             </div>
             <div>
               <p className="text-xs font-medium text-emerald-700 mb-0.5">What to say</p>
-              <p className="text-sm text-gray-700 italic leading-relaxed">&ldquo;{g.talking_point}&rdquo;</p>
+              <p className="text-sm text-[#4a3f36] italic leading-relaxed">&ldquo;{g.talking_point}&rdquo;</p>
             </div>
           </div>
         </li>
@@ -224,15 +224,15 @@ export function StoryRecommendationsSection({
   return (
     <ul className="space-y-4" role="list">
       {data.stories.map((s, i) => (
-        <li key={i} className="border border-gray-200 rounded-lg overflow-hidden">
+        <li key={i} className="border border-[#e4ddd4] rounded-lg overflow-hidden">
           <div className="bg-sky-50 border-b border-sky-200 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
             <p className="text-sm font-semibold text-sky-800">{s.theme}</p>
-            <span className="text-xs text-gray-500 bg-white border border-gray-200 rounded px-2 py-0.5">
+            <span className="text-xs text-[#7a6d63] bg-white border border-[#e4ddd4] rounded px-2 py-0.5">
               {s.maps_to_requirement}
             </span>
           </div>
           <div className="px-4 py-3">
-            <p className="text-sm text-gray-700 leading-relaxed">{s.suggested_story}</p>
+            <p className="text-sm text-[#4a3f36] leading-relaxed">{s.suggested_story}</p>
           </div>
         </li>
       ))}
@@ -249,18 +249,18 @@ export function PositioningStrategySection({
 }) {
   return (
     <div className="space-y-5">
-      <div className="bg-gray-900 rounded-xl px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+      <div className="bg-[#1a4a3a] rounded-xl px-5 py-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-1.5">
           Your Headline
         </p>
         <p className="text-base font-semibold text-white leading-snug">{data.headline}</p>
       </div>
 
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-2">
           Narrative Arc
         </p>
-        <p className="text-sm text-gray-700 leading-relaxed">{data.narrative_arc}</p>
+        <p className="text-sm text-[#4a3f36] leading-relaxed">{data.narrative_arc}</p>
       </div>
 
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-4">
@@ -277,7 +277,7 @@ export function PositioningStrategySection({
           </p>
           <ul className="space-y-1.5">
             {data.what_to_avoid.map((w, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+              <li key={i} className="flex items-start gap-2 text-sm text-[#4a3f36]">
                 <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-red-400" aria-hidden />
                 {w}
               </li>

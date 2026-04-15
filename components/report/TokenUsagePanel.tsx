@@ -56,9 +56,9 @@ function modelConfig(model: string) {
   return (
     MODEL_CONFIG[model] ?? {
       label: model,
-      color: "text-gray-700",
-      bg: "bg-gray-50",
-      border: "border-gray-200",
+      color: "text-[#4a3f36]",
+      bg: "bg-[#f5f1e8]",
+      border: "border-[#e4ddd4]",
     }
   );
 }
@@ -76,37 +76,37 @@ function CallRow({ call }: { call: ReportTokenUsage["calls"][0] }) {
           <span className={`text-xs font-semibold uppercase tracking-wider ${cfg.color}`}>
             {cfg.label}
           </span>
-          <p className="text-xs text-gray-500 mt-0.5">{call.purpose}</p>
+          <p className="text-xs text-[#7a6d63] mt-0.5">{call.purpose}</p>
         </div>
-        <span className="text-sm font-semibold text-gray-900 tabular-nums">
+        <span className="text-sm font-semibold text-[#1c1713] tabular-nums">
           {formatCost(call.estimated_cost_usd)}
         </span>
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-3">
         <div>
-          <p className="text-xs text-gray-400">Input</p>
-          <p className="text-sm font-medium text-gray-700 tabular-nums">
+          <p className="text-xs text-[#9c8d81]">Input</p>
+          <p className="text-sm font-medium text-[#4a3f36] tabular-nums">
             {formatTokens(call.input_tokens)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-gray-400">Output</p>
-          <p className="text-sm font-medium text-gray-700 tabular-nums">
+          <p className="text-xs text-[#9c8d81]">Output</p>
+          <p className="text-sm font-medium text-[#4a3f36] tabular-nums">
             {formatTokens(call.output_tokens)}
           </p>
         </div>
         {call.reasoning_tokens !== undefined && call.reasoning_tokens > 0 ? (
           <div>
-            <p className="text-xs text-gray-400">Reasoning</p>
+            <p className="text-xs text-[#9c8d81]">Reasoning</p>
             <p className="text-sm font-medium text-violet-700 tabular-nums">
               {formatTokens(call.reasoning_tokens)}
             </p>
           </div>
         ) : (
           <div>
-            <p className="text-xs text-gray-400">Total</p>
-            <p className="text-sm font-medium text-gray-700 tabular-nums">
+            <p className="text-xs text-[#9c8d81]">Total</p>
+            <p className="text-sm font-medium text-[#4a3f36] tabular-nums">
               {formatTokens(totalTokens)}
             </p>
           </div>
@@ -123,8 +123,8 @@ function CallRow({ call }: { call: ReportTokenUsage["calls"][0] }) {
         </div>
       )}
       <div className="flex justify-between mt-0.5">
-        <p className="text-[10px] text-gray-400">input</p>
-        <p className="text-[10px] text-gray-400">output</p>
+        <p className="text-[10px] text-[#9c8d81]">input</p>
+        <p className="text-[10px] text-[#9c8d81]">output</p>
       </div>
     </div>
   );
@@ -139,16 +139,16 @@ export function TokenUsagePanel({ usage }: { usage: ReportTokenUsage }) {
   const pricing = MODEL_PRICING;
 
   return (
-    <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <section className="bg-white border border-[#e4ddd4] rounded-xl overflow-hidden">
       {/* Header — always visible */}
       <button
         onClick={() => setOpen((p) => !p)}
-        className="w-full px-6 py-4 flex items-center justify-between gap-4 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gray-900 transition-colors"
+        className="w-full px-6 py-4 flex items-center justify-between gap-4 hover:bg-[#f5f1e8] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a4a3a]/40 transition-colors"
         aria-expanded={open}
       >
         <div className="flex items-center gap-3">
           <svg
-            className="w-4 h-4 text-gray-400 flex-shrink-0"
+            className="w-4 h-4 text-[#9c8d81] flex-shrink-0"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -158,8 +158,8 @@ export function TokenUsagePanel({ usage }: { usage: ReportTokenUsage }) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
           </svg>
           <div className="text-left">
-            <p className="text-sm font-semibold text-gray-900">API Usage</p>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-sm font-semibold text-[#1c1713]">API Usage</p>
+            <p className="text-xs text-[#9c8d81] mt-0.5">
               {formatTokens(usage.total_tokens)} tokens · {formatCost(usage.total_cost_usd)} this report
             </p>
           </div>
@@ -180,7 +180,7 @@ export function TokenUsagePanel({ usage }: { usage: ReportTokenUsage }) {
             })}
           </div>
           <svg
-            className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+            className={`w-4 h-4 text-[#9c8d81] flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -194,7 +194,7 @@ export function TokenUsagePanel({ usage }: { usage: ReportTokenUsage }) {
 
       {/* Expanded content */}
       {open && (
-        <div className="border-t border-gray-100 px-6 py-5 space-y-4">
+        <div className="border-t border-[#f0ece4] px-6 py-5 space-y-4">
 
           {/* Per-call breakdown */}
           <div className="space-y-3">
@@ -204,49 +204,49 @@ export function TokenUsagePanel({ usage }: { usage: ReportTokenUsage }) {
           </div>
 
           {/* Totals row */}
-          <div className="border-t border-gray-100 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="border-t border-[#f0ece4] pt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs text-gray-400">Total tokens</p>
-              <p className="text-sm font-semibold text-gray-900 tabular-nums">
+              <p className="text-xs text-[#9c8d81]">Total tokens</p>
+              <p className="text-sm font-semibold text-[#1c1713] tabular-nums">
                 {formatTokens(usage.total_tokens)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">This report</p>
-              <p className="text-sm font-semibold text-gray-900 tabular-nums">
+              <p className="text-xs text-[#9c8d81]">This report</p>
+              <p className="text-sm font-semibold text-[#1c1713] tabular-nums">
                 {formatCost(usage.total_cost_usd)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">Est. 100 reports/mo</p>
-              <p className="text-sm font-semibold text-gray-900 tabular-nums">
+              <p className="text-xs text-[#9c8d81]">Est. 100 reports/mo</p>
+              <p className="text-sm font-semibold text-[#1c1713] tabular-nums">
                 {formatCost(monthly100)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-400">Models used</p>
-              <p className="text-sm font-semibold text-gray-900">
+              <p className="text-xs text-[#9c8d81]">Models used</p>
+              <p className="text-sm font-semibold text-[#1c1713]">
                 {usage.calls.map((c) => c.model).join(" + ")}
               </p>
             </div>
           </div>
 
           {/* Pricing reference */}
-          <div className="bg-gray-50 rounded-lg px-4 py-3">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+          <div className="bg-[#f5f1e8] rounded-lg px-4 py-3">
+            <p className="text-xs font-semibold text-[#7a6d63] uppercase tracking-wider mb-2">
               Pricing reference
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1">
               {Object.entries(pricing).map(([model, p]) => (
                 <div key={model} className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-500">{model}</span>
-                  <span className="text-xs text-gray-400 tabular-nums">
+                  <span className="text-xs text-[#7a6d63]">{model}</span>
+                  <span className="text-xs text-[#9c8d81] tabular-nums">
                     ${p.input}/${p.output} /1M
                   </span>
                 </div>
               ))}
             </div>
-            <p className="text-[10px] text-gray-400 mt-2">
+            <p className="text-[10px] text-[#9c8d81] mt-2">
               input / output per 1M tokens · o3 reasoning tokens billed as output
             </p>
           </div>

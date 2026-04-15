@@ -18,12 +18,12 @@ export function EvidenceContractCard({ data }: Props) {
           <ol className="space-y-2 mt-2">
             {data.next_best_actions.map((item, i) => (
               <li key={i} className="flex gap-3">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-900 text-white text-xs font-bold flex items-center justify-center mt-0.5">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[#1a4a3a] text-white text-xs font-bold flex items-center justify-center mt-0.5">
                   {i + 1}
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-gray-900 leading-snug">{item.action}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{item.rationale}</p>
+                  <p className="text-sm font-medium text-[#1c1713] leading-snug">{item.action}</p>
+                  <p className="text-xs text-[#7a6d63] mt-0.5 leading-relaxed">{item.rationale}</p>
                 </div>
               </li>
             ))}
@@ -70,7 +70,7 @@ export function EvidenceContractCard({ data }: Props) {
                   <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500" aria-hidden />
                   <div>
                     <p className="text-sm text-gray-800 leading-snug">{item.claim}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{item.source_ref}</p>
+                    <p className="text-xs text-[#9c8d81] mt-0.5">{item.source_ref}</p>
                   </div>
                 </li>
               ))}
@@ -95,7 +95,7 @@ export function EvidenceContractCard({ data }: Props) {
                   <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-amber-400" aria-hidden />
                   <div className="space-y-1">
                     <p className="text-sm text-gray-800 leading-snug">{item.inference}</p>
-                    <p className="text-xs text-gray-400 leading-relaxed">
+                    <p className="text-xs text-[#9c8d81] leading-relaxed">
                       <span className="font-medium">Basis:</span> {item.basis}
                     </p>
                     <ConfidencePill level={item.confidence as ConfidenceLevel} />
@@ -114,16 +114,16 @@ export function EvidenceContractCard({ data }: Props) {
             label="Evidence Gaps"
             description="What the system cannot assess — validate these live"
             badge={
-              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200 font-medium">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#f0ece4] text-[#7a6d63] border border-[#e4ddd4] font-medium">
                 Unknown
               </span>
             }
           />
           <ul className="space-y-2 mt-2">
             {data.evidence_gaps.map((item, i) => (
-              <li key={i} className="bg-gray-50 border border-dashed border-gray-200 rounded-lg px-4 py-3 space-y-1">
-                <p className="text-sm font-medium text-gray-700 leading-snug">{item.what_is_missing}</p>
-                <p className="text-xs text-gray-500 leading-relaxed">
+              <li key={i} className="bg-[#f5f1e8] border border-dashed border-[#e4ddd4] rounded-lg px-4 py-3 space-y-1">
+                <p className="text-sm font-medium text-[#4a3f36] leading-snug">{item.what_is_missing}</p>
+                <p className="text-xs text-[#7a6d63] leading-relaxed">
                   <span className="font-semibold">Matters because:</span> {item.why_it_matters}
                 </p>
               </li>
@@ -146,10 +146,10 @@ function SectionLabel({
 }) {
   return (
     <div className="flex items-center gap-2 flex-wrap mb-1">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-[#7a6d63]">{label}</h3>
       {badge}
       {description && (
-        <span className="text-xs text-gray-400">{description}</span>
+        <span className="text-xs text-[#9c8d81]">{description}</span>
       )}
     </div>
   );

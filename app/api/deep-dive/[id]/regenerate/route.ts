@@ -76,6 +76,8 @@ export async function POST(
     setImmediate(() => {
       (async () => {
         try {
+          let plannerQueries: string[] | undefined;
+
           if (sourceCount === 0) {
             // Stage 1: Re-ingest sources
             await updateDeepDiveStatus(requestId, "fetching_sources");
@@ -84,6 +86,7 @@ export async function POST(
               requestId,
               request.company_id,
               company?.name ?? "",
+              request.role_title,
               request.company_url ?? undefined,
               [],
               request.job_description ?? undefined,
@@ -94,12 +97,14 @@ export async function POST(
               await updateDeepDiveStatus(requestId, "failed");
               return;
             }
+
+            plannerQueries = result.researchPlan.retrievalQueries;
           }
 
           // Stage 2: LLM report generation (assembleReport handles checkpoint internally)
           await updateDeepDiveStatus(requestId, "generating_report");
           const { assembleReport } = await import("@/lib/report/assembleReport");
-          await assembleReport(requestId);
+          await assembleReport(requestId, plannerQueries);
           await updateDeepDiveStatus(requestId, "completed");
           console.log(`[Regenerate] Complete for requestId=${requestId}`);
         } catch (err) {

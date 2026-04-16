@@ -2,18 +2,19 @@
 
 > **Auto-generated.** Do not edit manually.
 > Run `npm run docs:update` to regenerate from source.
-> Last updated: 2026-04-08
+> Last updated: 2026-04-15
 
 ---
 
 ## Feature List
 
 ### Core Analysis Engine
-- **Deep dive report generation** — single LLM call producing a 14-section structured intelligence brief per company + role
-- **Automated web ingestion** — Firecrawl fetches 5–10 sources (company homepage, blog, newsroom, press, custom URLs) with HTML-to-markdown conversion and axios fallback
-- **Semantic chunking + vector search** — content split into ~500-token chunks, embedded with OpenAI text-embedding-3-small, stored with pgvector, retrieved by cosine similarity
-- **Source reranking** — reranks retrieved chunks by recency, source type weight, strategic keyword density, company/role name mentions
-- **Report regeneration** — one-click re-run that clears all prior data and reruns the full pipeline
+- **Deep dive report generation** — two-stage LLM synthesis produces a 14-section structured intelligence brief per company + role
+- **LLM research planner** — chooses up to 10 web sources before ingestion and targets at least 5 external websites beyond the company domain when possible
+- **Automated web ingestion** — Firecrawl scrapes the planned sources with HTML-to-markdown conversion and axios fallback when Firecrawl is unavailable or weak
+- **Adaptive multi-topic retrieval** — planner-selected retrieval queries drive semantic search across strategy, role charter, leadership, momentum, risks, and why-now angles
+- **Source reranking** — reranks retrieved chunks by recency, source type weight, strategic keyword density, and company/role-name mentions
+- **Report regeneration** — one-click re-run clears stale outputs and reuses checkpointed stages when possible
 
 ### Report Sections (14)
 

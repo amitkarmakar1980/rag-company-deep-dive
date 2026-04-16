@@ -59,7 +59,8 @@ Report generation fires two LLM calls simultaneously and merges the results:
 
 ```
 URL / JD input
-    → Firecrawl (v2 scrape API, axios fallback) — max 3 web sources
+  → LLM research planner — selects up to 10 sources and targets at least 5 external websites beyond the company domain when possible
+  → Firecrawl (v2 scrape API, axios fallback) — scrape planned sources
     → cleanContent()  — strip HTML, boilerplate, normalize
     → chunkContent()  — semantic + token-based, ~500 tokens/chunk, 50-token overlap
     → generateEmbeddings()  — OpenAI text-embedding-3-small, 1536 dims
@@ -70,7 +71,7 @@ URL / JD input
 ### Retrieval
 
 ```
-Broad retrieval query embedding
+Planner-selected topic query embedding
     → semanticSearch()  — Supabase RPC (cosine distance, ivfflat index)
     → rerank()  — recency boost, source type weights, strategic keyword density,
                   company/role name mentions

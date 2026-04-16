@@ -22,6 +22,18 @@ interface HistoryItem {
   } | null;
 }
 
+interface HistoryStats {
+  totalReports: number;
+  websitesSearched: number;
+  aiQueries: number;
+}
+
+const DEFAULT_STATS: HistoryStats = {
+  totalReports: 0,
+  websitesSearched: 0,
+  aiQueries: 0,
+};
+
 const REC_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
   pursue:            { label: "Aggressive Pursue", bg: "bg-[#1a4a3a]/8",  text: "text-[#1a4a3a]", dot: "bg-[#1a4a3a]" },
   pursue_cautiously: { label: "Cautious Pursue",   bg: "bg-amber-50",     text: "text-amber-700",  dot: "bg-amber-500"  },
@@ -71,6 +83,7 @@ function getFaviconUrl(domain: string | null): string | null {
 
 export default function HistoryPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [stats, setStats] = useState<HistoryStats>(DEFAULT_STATS);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const { timeZone, shortLabel } = useRequestTimeZone();
@@ -78,7 +91,21 @@ export default function HistoryPage() {
   const fetchHistory = useCallback(async () => {
     try {
       const res = await fetch("/api/history");
-      if (res.ok) setHistory(await res.json());
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setHistory(data);
+        setStats({
+          totalReports: data.filter((item) => item.report).length,
+          websitesSearched: 0,
+          aiQueries: 0,
+        });
+        return;
+      }
+
+      setHistory(data.items ?? []);
+      setStats(data.stats ?? DEFAULT_STATS);
     } finally {
       setLoading(false);
     }
@@ -104,7 +131,7 @@ export default function HistoryPage() {
 
   return (
     <main className="min-h-screen bg-[#faf8f3]">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-[#1c1713]">Your Deep Dives</h1>
           <div className="flex items-center gap-3 flex-wrap justify-end">
@@ -120,6 +147,54 @@ export default function HistoryPage() {
             </Link>
           </div>
         </div>
+
+        <section className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Your deep dive dashboard">
+          <div className="rounded-2xl border border-[#d8d0c5] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(28,23,19,0.05)]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Reports Generated</p>
+                <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#1c1713]">{stats.totalReports}</p>
+                <p className="mt-1 text-sm text-[#7a6d63]">Completed intelligence briefs in your workspace</p>
+              </div>
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#1a4a3a]/8 text-[#1a4a3a]" aria-hidden>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#d8d0c5] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(28,23,19,0.05)]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Websites Searched</p>
+                <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#1c1713]">{stats.websitesSearched}</p>
+                <p className="mt-1 text-sm text-[#7a6d63]">Distinct company, news, and career domains analyzed</p>
+              </div>
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#4a7a8a]/10 text-[#4a7a8a]" aria-hidden>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.6 9h16.8M3.6 15h16.8M12 3a15.3 15.3 0 010 18M12 3a15.3 15.3 0 000 18" />
+                </svg>
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[#d8d0c5] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(28,23,19,0.05)]">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">AI Queries</p>
+                <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#1c1713]">{stats.aiQueries}</p>
+                <p className="mt-1 text-sm text-[#7a6d63]">Total model calls used to build your briefs</p>
+              </div>
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-700" aria-hidden>
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </section>
 
         {loading ? (
           <div className="space-y-3">
@@ -147,7 +222,7 @@ export default function HistoryPage() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {history.map((item) => {
               const createdAtParts = formatDateTimeParts(item.createdAt, timeZone);
               const faviconUrl = getFaviconUrl(item.companyUrl);
@@ -298,11 +373,11 @@ export default function HistoryPage() {
               );
 
               return isReady ? (
-                <Link key={item.requestId} href={`/deep-dive/${item.requestId}`}>
+                <Link key={item.requestId} href={`/deep-dive/${item.requestId}`} className="block">
                   {card}
                 </Link>
               ) : (
-                <div key={item.requestId}>{card}</div>
+                <div key={item.requestId} className="block">{card}</div>
               );
             })}
           </div>

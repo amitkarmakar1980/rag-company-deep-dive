@@ -77,7 +77,6 @@ export function ReportSectionCard({
           subtitle="Founding, scale, products, markets, and recent milestones"
           feedback={feedback}
           collapsible
-          defaultCollapsed
         >
           <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-4">
             {d.founded && <MetaField label="Founded" value={d.founded} />}
@@ -106,7 +105,6 @@ export function ReportSectionCard({
           subtitle="Mission, vision, operating principles, and leadership team"
           feedback={feedback}
           collapsible
-          defaultCollapsed
         >
           <ProseBlock label="Mission" value={d.mission} />
           <ProseBlock label="Vision" value={d.vision} />
@@ -236,7 +234,6 @@ export function ReportSectionCard({
           evidenceBacked={evidenceBacked}
           feedback={feedback}
           collapsible
-          defaultCollapsed
         >
           <ProseBlock label="Business Model" value={d.business_model} />
           <BulletGroup label="Strategic Priorities" items={d.strategic_priorities} />
@@ -256,7 +253,6 @@ export function ReportSectionCard({
           subtitle="Relevant to role context and interview positioning"
           feedback={feedback}
           collapsible
-          defaultCollapsed
         >
           <SWOTCard data={data as StructuredReport["company_swot"]} />
         </SectionShell>
@@ -271,7 +267,6 @@ export function ReportSectionCard({
           subtitle="Inferred charter, success metrics, and first-year expectations"
           feedback={feedback}
           collapsible
-          defaultCollapsed
         >
           <ProseBlock label="Likely Charter" value={d.likely_charter} />
           <BulletGroup label="Success Metrics (12 months)" items={d.success_metrics} />
@@ -291,7 +286,6 @@ export function ReportSectionCard({
           subtitle="Strengths, weaknesses, opportunities, and threats specific to this role's charter"
           feedback={feedback}
           collapsible
-          defaultCollapsed
         >
           <SWOTCard data={data as StructuredReport["role_swot"]} />
         </SectionShell>
@@ -326,7 +320,6 @@ export function ReportSectionCard({
           subtitle="Grouped by intent — click any question to see why it matters and what to listen for"
           feedback={feedback}
           collapsible
-          defaultCollapsed
         >
           <QuestionsSection data={data as StructuredReport["questions_to_ask"]} />
         </SectionShell>
@@ -352,7 +345,6 @@ export function ReportSectionCard({
           subtitle="What we know vs. inferred vs. unknown — with your next actions"
           feedback={feedback}
           collapsible
-          defaultCollapsed
         >
           <EvidenceContractCard data={data as StructuredReport["evidence_contract"]} />
         </SectionShell>

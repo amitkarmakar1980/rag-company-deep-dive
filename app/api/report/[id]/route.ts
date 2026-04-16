@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDeepDiveRequest, getReportById, getReportSections, getRequestSources } from "@/lib/db/operations";
+import { supabaseAdmin } from "@/lib/db/supabase";
 
 export async function GET(
   _req: NextRequest,
@@ -17,7 +18,18 @@ export async function GET(
     }
 
     const sections = await getReportSections(reportId);
-  const request = await getDeepDiveRequest(report.request_id);
+    const request = await getDeepDiveRequest(report.request_id);
+    const { data: company, error: companyError } = request?.company_id
+      ? await supabaseAdmin
+          .from("companies")
+          .select("name, website_url")
+          .eq("id", request.company_id)
+          .single()
+      : { data: null, error: null };
+
+    if (companyError && companyError.code !== "PGRST116") {
+      throw companyError;
+    }
 
     // Get sources for evidence
     const sources = await getRequestSources(report.request_id);
@@ -48,6 +60,13 @@ export async function GET(
       })),
       tokenUsage: report.summary_json?.token_usage ?? null,
       createdAt: report.created_at,
+      company: {
+        name: company?.name ?? "Unknown Company",
+        websiteUrl: company?.website_url ?? null,
+      },
+      roleTitle: request?.role_title ?? null,
+      companyUrl: request?.company_url ?? company?.website_url ?? null,
+      jobDescription: request?.job_description ?? null,
       requestCreatedAt: request?.created_at ?? null,
       completedAt: request?.status === "completed"
         ? (request.updated_at ?? report.created_at)

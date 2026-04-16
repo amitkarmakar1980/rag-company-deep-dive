@@ -14,7 +14,7 @@ export interface RetrievalResult {
  * Each covers a distinct analytical dimension so that no single dimension
  * dominates the embedding space of a broad query.
  */
-const TOPIC_QUERIES = [
+const DEFAULT_TOPIC_QUERIES = [
   // 1. Company strategy, business model, and competitive position
   "company strategy business model revenue growth market position competitive advantage core products platform",
   // 2. Role scope, charter, and success criteria
@@ -273,10 +273,13 @@ export async function multiTopicSearch(
   requestId: string,
   /** Max chunks to retrieve per topic query (total before dedup = topics × perTopicLimit) */
   perTopicLimit = 8,
-  similarityThreshold = 0.35
+  similarityThreshold = 0.35,
+  topicQueries?: string[]
 ): Promise<RetrievalResult[]> {
+  const activeQueries = topicQueries?.length ? topicQueries : DEFAULT_TOPIC_QUERIES;
+
   // 1. Batch-embed all topic queries in a single API call
-  const embeddings = await generateEmbeddings(TOPIC_QUERIES);
+  const embeddings = await generateEmbeddings(activeQueries);
 
   // 2. Run all topic searches in parallel
   const topicResults = await Promise.all(

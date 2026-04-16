@@ -1,5 +1,7 @@
 "use client";
 
+import { normalizeHttpUrl } from "@/lib/report/sourceLinks";
+
 interface SourceItem {
   id: string;
   type: string;
@@ -70,37 +72,43 @@ export function SourcesPanel({ sources }: SourcesPanelProps) {
               {cfg.label}
             </h3>
             <ul className="space-y-1.5" role="list">
-              {items.map((source) => (
-                <li
-                  key={source.id}
-                  className="flex items-start gap-2 text-sm"
-                >
-                  <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden />
-                  <div className="min-w-0">
-                    {source.url ? (
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#4a3f36] hover:text-[#1c1713] underline underline-offset-2 decoration-gray-300 hover:decoration-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 rounded transition-colors"
-                        aria-label={`Source: ${source.title} (opens in new tab)`}
-                      >
-                        {source.title}
-                      </a>
-                    ) : (
-                      <span className="text-[#7a6d63]">{source.title}</span>
-                    )}
-                    {source.publishedAt && (
-                      <span className="ml-2 text-xs text-[#9c8d81]">
-                        {new Date(source.publishedAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </span>
-                    )}
-                  </div>
-                </li>
-              ))}
+              {items.map((source) => {
+                const normalizedUrl = normalizeHttpUrl(source.url);
+
+                return (
+                  <li key={source.id} className="flex items-start gap-2 text-sm">
+                    <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-gray-300" aria-hidden />
+                    <div className="min-w-0">
+                      {normalizedUrl ? (
+                        <a
+                          href={normalizedUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#4a3f36] hover:text-[#1c1713] underline underline-offset-2 decoration-gray-300 hover:decoration-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 rounded transition-colors"
+                          aria-label={`Source: ${source.title} (opens in new tab)`}
+                        >
+                          {source.title}
+                        </a>
+                      ) : (
+                        <div>
+                          <span className="text-[#7a6d63]">{source.title}</span>
+                          {source.url && (
+                            <p className="mt-0.5 text-xs text-[#b0a496]">Link unavailable</p>
+                          )}
+                        </div>
+                      )}
+                      {source.publishedAt && (
+                        <span className="ml-2 text-xs text-[#9c8d81]">
+                          {new Date(source.publishedAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         );

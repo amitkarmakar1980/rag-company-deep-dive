@@ -134,7 +134,7 @@ const DEFAULT_SCORES = {
  * then runs interview layer (gpt-4o-mini), saves result, then finalizes.
  * On retry, completed stages are skipped using the saved checkpoint.
  */
-export async function assembleReport(requestId: string): Promise<Report | null> {
+export async function assembleReport(requestId: string, retrievalQueries?: string[]): Promise<Report | null> {
   // 1. Load request
   const request = await getDeepDiveRequest(requestId);
   if (!request) throw new Error("Request not found");
@@ -162,7 +162,7 @@ export async function assembleReport(requestId: string): Promise<Report | null> 
   }
 
   // Multi-topic retrieval: 6 focused queries × 8 chunks each → deduped pool
-  const rawResults = await multiTopicSearch(requestId, 8, 0.35);
+  const rawResults = await multiTopicSearch(requestId, 8, 0.35, retrievalQueries);
 
   const { data: company } = await supabaseAdmin
     .from("companies")

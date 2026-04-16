@@ -1,4 +1,4 @@
-import { buildSourceUrls, fetchPageWithFirecrawl } from "./firecrawl";
+import { buildSourceUrls, fetchPageWithFirecrawl, ResearchPlan } from "./firecrawl";
 import { cleanContent, calculateContentHash } from "./clean";
 import { chunkContent } from "./chunk";
 import { generateEmbeddings } from "@/lib/ai/embeddings";
@@ -28,6 +28,7 @@ export async function ingestSources(
   requestId: string,
   companyId: string,
   companyName: string,
+  roleTitle: string,
   companyUrl?: string,
   customUrls: string[] = [],
   jobDescription?: string,
@@ -36,10 +37,16 @@ export async function ingestSources(
   success: boolean;
   sourcesCreated: number;
   chunksCreated: number;
+  researchPlan: ResearchPlan;
   error?: string;
 }> {
   const sources: SourceInput[] = [];
   const stats = { success: true, sourcesCreated: 0, chunksCreated: 0 };
+  const fallbackPlan: ResearchPlan = {
+    strategySummary: `Fallback research plan for ${companyName}.`,
+    selectedSources: [],
+    retrievalQueries: [],
+  };
 
   try {
     console.log(`[Ingest] START requestId=${requestId} jd=${!!jobDescription} profile=${!!profileContext} companyUrl=${companyUrl}`);
@@ -63,15 +70,19 @@ export async function ingestSources(
     }
 
     // Fetch web sources
-    const urlSources = await buildSourceUrls(
+    const researchPlan = await buildSourceUrls(
       companyName,
+      roleTitle,
       companyUrl,
-      customUrls
+      customUrls,
+      jobDescription
     );
+    console.log(`[Ingest] Research plan: ${researchPlan.strategySummary}`);
+    console.log(`[Ingest] Planned web sources=${researchPlan.selectedSources.length} retrievalQueries=${researchPlan.retrievalQueries.length}`);
 
     // Fetch all web sources in parallel
     const fetchResults = await Promise.allSettled(
-      urlSources.map((urlSource) =>
+      researchPlan.selectedSources.map((urlSource) =>
         fetchPageWithFirecrawl(urlSource.url).then((response) => ({ urlSource, response }))
       )
     );
@@ -102,7 +113,10 @@ export async function ingestSources(
     });
 
     console.log(`[Ingest] COMPLETE sources=${stats.sourcesCreated} chunks=${stats.chunksCreated}`);
-    return stats;
+    return {
+      ...stats,
+      researchPlan,
+    };
   } catch (error) {
     console.error("[Ingest] ERROR:", error instanceof Error ? error.message : error);
     console.error(error);
@@ -110,6 +124,7 @@ export async function ingestSources(
       success: false,
       sourcesCreated: stats.sourcesCreated,
       chunksCreated: stats.chunksCreated,
+      researchPlan: fallbackPlan,
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }

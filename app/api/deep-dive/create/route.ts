@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
         company.id,
         user.id,
         companyName,
+        roleTitle,
         companyUrl,
         customUrls,
         jobDescription,
@@ -85,6 +86,7 @@ async function runPipeline(
   companyId: string,
   userId: string,
   companyName: string,
+  roleTitle: string,
   companyUrl: string | undefined,
   customUrls: string[] | undefined,
   jobDescription: string | undefined,
@@ -102,6 +104,7 @@ async function runPipeline(
       requestId,
       companyId,
       companyName,
+      roleTitle,
       companyUrl,
       customUrls || [],
       jobDescription,
@@ -117,7 +120,7 @@ async function runPipeline(
 
       const { assembleReport } = await import("@/lib/report/assembleReport");
       console.log("[Pipeline] Calling assembleReport...");
-      await assembleReport(requestId);
+      await assembleReport(requestId, result.researchPlan.retrievalQueries);
       console.log("[Pipeline] assembleReport complete");
 
       // If resume was provided, create the overlay record BEFORE marking completed.

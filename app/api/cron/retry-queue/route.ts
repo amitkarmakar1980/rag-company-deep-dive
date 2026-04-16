@@ -35,14 +35,14 @@ export async function GET(req: NextRequest) {
   // Find stuck (processing too long) + failed-with-checkpoint requests
   const { data: stuck } = await supabaseAdmin
     .from("deep_dive_requests")
-    .select("id, status, company_id, company_url, job_description, profile_context, updated_at")
+    .select("id, status, company_id, role_title, company_url, job_description, profile_context, updated_at")
     .in("status", PROCESSING_STATUSES)
     .lt("updated_at", stuckCutoff)
     .limit(2);
 
   const { data: failed } = await supabaseAdmin
     .from("deep_dive_requests")
-    .select("id, status, company_id, company_url, job_description, profile_context")
+    .select("id, status, company_id, role_title, company_url, job_description, profile_context")
     .eq("status", "failed")
     .gte("updated_at", new Date(Date.now() - 30 * 60 * 1000).toISOString()) // failed in last 30 min
     .limit(2);
@@ -57,6 +57,8 @@ export async function GET(req: NextRequest) {
 
   for (const request of candidates) {
     try {
+      let plannerQueries: string[] | undefined;
+
       // Check what we already have
       const { data: existingReport } = await supabaseAdmin
         .from("reports")
@@ -100,6 +102,7 @@ export async function GET(req: NextRequest) {
           request.id,
           request.company_id,
           company?.name ?? "",
+          request.role_title,
           request.company_url ?? undefined,
           [],
           request.job_description ?? undefined,
@@ -114,6 +117,8 @@ export async function GET(req: NextRequest) {
           results.push({ requestId: request.id, action: "ingest_failed" });
           continue;
         }
+
+        plannerQueries = result.researchPlan.retrievalQueries;
       }
 
       await supabaseAdmin
@@ -122,7 +127,7 @@ export async function GET(req: NextRequest) {
         .eq("id", request.id);
 
       const { assembleReport } = await import("@/lib/report/assembleReport");
-      await assembleReport(request.id);
+      await assembleReport(request.id, plannerQueries);
 
       await supabaseAdmin
         .from("deep_dive_requests")

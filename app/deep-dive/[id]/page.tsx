@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { ReportSectionCard } from "@/components/ReportSectionCard";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
 import { SourcesPanel } from "@/components/report/SourcesPanel";
+import { CitationResourcesPanel } from "@/components/report/CitationResourcesPanel";
 import { ResumeUploadPanel } from "@/components/report/ResumeUploadPanel";
 import { BrandMark } from "@/components/BrandMark";
 import {
@@ -20,10 +21,8 @@ import { ObjectionHandlingSection } from "@/components/report/ObjectionHandling"
 import { SectionShell } from "@/components/report/SectionShell";
 import { RecommendationType, ReportScore, CandidateOverlayData, ReportTokenUsage } from "@/lib/types";
 import { useResumeStore } from "@/lib/hooks/useResumeStore";
-import { TokenUsagePanel } from "@/components/report/TokenUsagePanel";
-import { formatDateTimeParts, formatGenerationDuration, useRequestTimeZone } from "@/lib/timezone";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
+import { normalizeHttpUrl } from "@/lib/report/sourceLinks";
+import { formatDateTimeParts, useRequestTimeZone } from "@/lib/timezone";
 
 interface Report {
   id: string;
@@ -72,8 +71,6 @@ interface OverlayState {
 
 type ViewMode = "full" | "brief";
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
 const PROCESSING_STATUSES = new Set([
   "pending",
   "fetching_sources",
@@ -84,71 +81,47 @@ const PROCESSING_STATUSES = new Set([
 ]);
 
 const STATUS_LABELS: Record<string, string> = {
-  pending: "Starting analysis…",
-  fetching_sources: "Fetching sources from the web…",
-  indexing: "Indexing and embedding content…",
-  generating_report: "Generating your intelligence brief…",
-  generating_deep_analysis: "Running deep strategic analysis…",
-  generating_interview_layer: "Running interview prep layer…",
+  pending: "Starting analysis...",
+  fetching_sources: "Fetching sources from the web...",
+  indexing: "Indexing and embedding content...",
+  generating_report: "Generating your intelligence brief...",
+  generating_deep_analysis: "Running deep strategic analysis...",
+  generating_interview_layer: "Running interview prep layer...",
 };
 
-// Animated sub-step messages shown per status phase
 const STATUS_SUBSTEPS: Record<string, string[]> = {
-  pending: ["Initializing the analysis pipeline…", "Preparing retrieval context…"],
+  pending: ["Initializing the analysis pipeline...", "Preparing retrieval context..."],
   fetching_sources: [
-    "Crawling company website…",
-    "Pulling recent news and press releases…",
-    "Retrieving earnings reports and investor docs…",
-    "Scanning industry analyst coverage…",
-    "Fetching job posting context…",
-    "Gathering competitive landscape data…",
+    "Crawling company website...",
+    "Pulling recent news and press releases...",
+    "Retrieving earnings reports and investor docs...",
+    "Scanning industry analyst coverage...",
+    "Fetching job posting context...",
+    "Gathering competitive landscape data...",
   ],
   indexing: [
-    "Embedding retrieved content into vector store…",
-    "Ranking sources by relevance to the role…",
-    "Deduplicating and chunking evidence…",
+    "Embedding retrieved content into vector store...",
+    "Ranking sources by relevance to the role...",
+    "Deduplicating and chunking evidence...",
   ],
   generating_report: [
-    "Preparing retrieval context for LLM calls…",
-    "Running semantic search over sources…",
+    "Preparing retrieval context for model calls...",
+    "Running semantic search over the evidence set...",
   ],
   generating_deep_analysis: [
-    "Running o3 deep strategic analysis…",
-    "Building SWOT quadrants from evidence…",
-    "Classifying strategic role significance…",
-    "Identifying why this role exists now…",
-    "Surfacing risks and red flags…",
+    "Running deep strategic analysis...",
+    "Building SWOT quadrants from evidence...",
+    "Identifying why this role exists now...",
+    "Surfacing risks and red flags...",
+    "Synthesizing decision-level judgment...",
   ],
   generating_interview_layer: [
-    "Running gpt-4o-mini interview prep layer…",
-    "Synthesizing candidate positioning angles…",
-    "Generating executive-caliber questions…",
-    "Assembling interview decision summary…",
-    "Building 5-minute brief…",
+    "Generating interview prep layer...",
+    "Synthesizing candidate positioning angles...",
+    "Generating executive-caliber questions...",
+    "Building the 5-minute brief...",
+    "Finalizing personalized recommendations...",
   ],
-};
-
-const RECOMMENDATION_META: Record<string, { label: string; tone: string; icon: string }> = {
-  pursue: {
-    label: "Aggressive Pursue",
-    tone: "bg-[#1a4a3a]/8 text-[#1a4a3a] border-[#1a4a3a]/15",
-    icon: "↑",
-  },
-  pursue_cautiously: {
-    label: "Cautious Pursue",
-    tone: "bg-amber-50 text-amber-700 border-amber-200",
-    icon: "~",
-  },
-  avoid: {
-    label: "Pass",
-    tone: "bg-red-50 text-red-700 border-red-200",
-    icon: "×",
-  },
-  need_more_signal: {
-    label: "Need More Signal",
-    tone: "bg-[#f0ece4] text-[#7a6d63] border-[#d4cdc4]",
-    icon: "?",
-  },
 };
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
@@ -159,6 +132,41 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   custom_url: "External URL",
   profile_text: "Provided Context",
 };
+
+const RECOMMENDATION_META: Record<RecommendationType, { label: string; icon: string; tone: string }> = {
+  pursue: {
+    label: "Pursue",
+    icon: "↑",
+    tone: "border-[#cfe1d8] bg-[#edf6f0] text-[#1a4a3a]",
+  },
+  pursue_cautiously: {
+    label: "Pursue Cautiously",
+    icon: "~",
+    tone: "border-[#d8e5ea] bg-[#eef5f8] text-[#2d5c6a]",
+  },
+  avoid: {
+    label: "Avoid",
+    icon: "!",
+    tone: "border-[#ead7d2] bg-[#fbefeb] text-[#8a3d2f]",
+  },
+  need_more_signal: {
+    label: "Need More Signal",
+    icon: "?",
+    tone: "border-[#e8dfd0] bg-[#f7f2ea] text-[#6b5e52]",
+  },
+};
+
+const OVERLAY_SECTIONS = [
+  { key: "candidate_role_match", title: "Candidate Role Match", subtitle: "How your background maps to the role, seniority, and likely hiring bar." },
+  { key: "strengths_to_emphasize", title: "Strengths to Emphasize", subtitle: "Themes to lean into when positioning your experience." },
+  { key: "objection_handling", title: "Objection Handling", subtitle: "Likely pushback and the strongest response frames." },
+  { key: "interviewer_concerns", title: "Interviewer Concerns", subtitle: "Concerns that may surface and how they are likely to be interpreted." },
+  { key: "gap_management", title: "Gap Management", subtitle: "How to discuss missing experience or ambiguity without overreaching." },
+  { key: "story_recommendations", title: "Story Recommendations", subtitle: "Narratives and examples that best support your candidacy." },
+  { key: "positioning_strategy", title: "Positioning Strategy", subtitle: "Overall angle for how to frame yourself against this role." },
+] as const;
+
+const BRIEF_SECTION_KEYS = new Set(["executive_summary", "interview_decision_summary", "five_minute_brief", "assessment_snapshot"]);
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
@@ -178,7 +186,6 @@ function formatUsd(value: number): string {
 
 function extractHostname(url: string | null | undefined): string | null {
   if (!url) return null;
-
   try {
     return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
   } catch {
@@ -207,36 +214,18 @@ function scoreBarTone(value: number | null | undefined): string {
   return "bg-red-400";
 }
 
-function HeroMetricCard({
-  label,
-  value,
-  detail,
-  icon,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: React.ReactNode;
-}) {
+function ReadingMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-2xl border border-[#d9d0c5] bg-white/88 px-4 py-4 shadow-[0_10px_24px_rgba(28,23,19,0.05)] backdrop-blur-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">{label}</p>
-          <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{value}</p>
-        </div>
-        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#f5f1e8] text-[#4a3f36]" aria-hidden>
-          {icon}
-        </span>
-      </div>
-      <p className="mt-3 text-sm leading-6 text-[#7a6d63]">{detail}</p>
+    <div className="space-y-1.5 rounded-2xl bg-[#f7f2ea] px-3 py-3 sm:px-4 sm:py-4">
+      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">{label}</p>
+      <p className="text-[1.45rem] font-semibold tracking-[-0.05em] text-[#1c1713] sm:text-[1.65rem]">{value}</p>
+      <p className="text-[0.86rem] leading-6 text-[#7a6d63] sm:text-sm">{detail}</p>
     </div>
   );
 }
 
 function ScoreMeter({ label, value }: { label: string; value: number | null | undefined }) {
   const normalized = value == null ? null : Math.max(0, Math.min(100, Math.round(value * 10)));
-
   return (
     <div className="space-y-2.5 rounded-2xl border border-[#ebe4da] bg-[#fffdfa] px-4 py-4">
       <div className="flex items-center justify-between gap-3">
@@ -246,299 +235,166 @@ function ScoreMeter({ label, value }: { label: string; value: number | null | un
         </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-[#ece5db]">
-        <div
-          className={`h-full rounded-full ${scoreBarTone(value)}`}
-          style={{ width: `${normalized ?? 0}%` }}
-        />
+        <div className={`h-full rounded-full ${scoreBarTone(value)}`} style={{ width: `${normalized ?? 0}%` }} />
       </div>
     </div>
   );
 }
 
-function SectionGroupLabel({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
+function SectionGroupLabel({ title, description }: { title: string; description: string }) {
   return (
-    <div className="px-1 pt-3">
-      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#9c8d81]">{title}</p>
-      <p className="mt-1 text-sm text-[#7a6d63]">{description}</p>
+    <div className="pb-1 pt-6 sm:pt-7">
+      <p className="text-[1.38rem] font-semibold uppercase tracking-[0.12em] text-[#5f554c] sm:text-[1.47rem]">{title}</p>
+      <p className="mt-1.5 max-w-3xl text-sm leading-5 text-[#7a6d63]">{description}</p>
     </div>
   );
 }
 
-/**
- * Sections that appear in the "5-Minute Brief" view only.
- * All other base sections are full-report only.
- */
-const BRIEF_SECTION_KEYS = new Set([
-  "interview_decision_summary",
-  "five_minute_brief",
-  "assessment_snapshot",
-]);
-
-// Candidate overlay section config — order matters
-const OVERLAY_SECTIONS: Array<{
-  key: keyof CandidateOverlayData;
-  title: string;
-  subtitle: string;
-}> = [
-  {
-    key: "candidate_role_match",
-    title: "Candidate–Role Match",
-    subtitle: "How your background aligns with this specific role and where the gaps are",
-  },
-  {
-    key: "strengths_to_emphasize",
-    title: "Strengths to Emphasize",
-    subtitle: "Resume-grounded strengths mapped to what this hiring manager actually cares about",
-  },
-  {
-    key: "objection_handling",
-    title: "Objections You Must Overcome",
-    subtitle: "The hardest objections this interviewer will raise — and exactly how to handle them",
-  },
-  {
-    key: "interviewer_concerns",
-    title: "Likely Interviewer Concerns",
-    subtitle: "What they're probably worried about — and the questions they'll ask to probe it",
-  },
-  {
-    key: "gap_management",
-    title: "Gap Management",
-    subtitle: "Your real gaps, honest reframes, and specific talking points for each",
-  },
-  {
-    key: "story_recommendations",
-    title: "Story Recommendations",
-    subtitle: "Specific stories from your background mapped to this role's requirements",
-  },
-  {
-    key: "positioning_strategy",
-    title: "Positioning Strategy",
-    subtitle: "Your headline, narrative arc, and a ready-to-use Tell Me About Yourself",
-  },
-];
-
-// ─── Processing screen with animated thinking messages ────────────────────────
-
-const PHASE_ORDER = [
-  "fetching_sources",
-  "indexing",
-  "generating_deep_analysis",
-  "generating_interview_layer",
-];
-
-function ProcessingScreen({ statusKey }: { statusKey: string }) {
-  const [subStep, setSubStep] = useState(0);
-  const subSteps = STATUS_SUBSTEPS[statusKey] ?? [];
-  const phaseIdx = PHASE_ORDER.indexOf(statusKey);
-
-  useEffect(() => {
-    if (subSteps.length === 0) return;
-    setSubStep(0);
-    const id = setInterval(() => {
-      setSubStep((prev) => (prev + 1) % subSteps.length);
-    }, 2800);
-    return () => clearInterval(id);
-  }, [statusKey, subSteps.length]);
-
+function BackToTopButton({ onClick }: { onClick: () => void }) {
   return (
-    <div className="max-w-3xl mx-auto px-4 py-20 flex flex-col items-center gap-8">
-      {/* Spinner */}
-      <div className="relative w-14 h-14">
-        <div className="absolute inset-0 rounded-full border-2 border-[#e4ddd4]" />
-        <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#1a4a3a] animate-spin" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-2 h-2 rounded-full bg-[#1a4a3a] animate-pulse" />
-        </div>
-      </div>
-
-      {/* Phase label */}
-      <div className="text-center space-y-2">
-        <p className="text-base font-semibold text-[#1c1713]">
-          {STATUS_LABELS[statusKey] ?? statusKey}
-        </p>
-        {subSteps.length > 0 && (
-          <p key={subStep} className="text-sm text-[#9c8d81] animate-pulse">
-            {subSteps[subStep]}
-          </p>
-        )}
-        <p className="text-xs text-[#b0a496] mt-3">Analysis runs in multiple steps · Stay on this page</p>
-      </div>
-
-      {/* Progress steps */}
-      <div className="flex items-center gap-0">
-        {PHASE_ORDER.map((phase, i) => {
-          const isCompleted = i < phaseIdx;
-          const isActive = i === phaseIdx;
-          const isUpcoming = i > phaseIdx;
-          return (
-            <div key={phase} className="flex items-center">
-              <div className="flex flex-col items-center gap-1.5">
-                <div
-                  className={`w-2.5 h-2.5 rounded-full transition-all ${
-                    isCompleted
-                      ? "bg-[#1a4a3a]"
-                      : isActive
-                      ? "bg-[#1a4a3a] ring-4 ring-[#1a4a3a]/20"
-                      : "bg-[#e4ddd4]"
-                  }`}
-                />
-                <span className={`text-xs whitespace-nowrap ${isUpcoming ? "text-[#c8bfb4]" : isActive ? "text-[#4a3f36] font-medium" : "text-[#9c8d81]"}`}>
-                  {STATUS_LABELS[phase]?.replace("…", "") ?? phase}
-                </span>
-              </div>
-              {i < PHASE_ORDER.length - 1 && (
-                <div className={`h-px w-12 mx-1.5 mb-4 ${i < phaseIdx ? "bg-[#1a4a3a]" : "bg-[#e4ddd4]"}`} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Thinking log — last few messages */}
-      <div className="w-full max-w-md bg-white border border-[#e4ddd4] rounded-xl px-5 py-4 space-y-2.5 shadow-[0_2px_8px_rgba(28,23,19,0.05)]">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#c8bfb4] mb-1">What&apos;s happening</p>
-        {PHASE_ORDER.slice(0, phaseIdx + 1).map((phase) => (
-          STATUS_SUBSTEPS[phase]?.slice(0, phase === statusKey ? subStep + 1 : STATUS_SUBSTEPS[phase].length).map((msg, i) => (
-            <div key={`${phase}-${i}`} className="flex items-start gap-2.5">
-              <div className={`flex-shrink-0 mt-1 w-1.5 h-1.5 rounded-full ${phase === statusKey && i === subStep ? "bg-[#1a4a3a]" : "bg-[#d4cdc4]"}`} />
-              <span className={`text-xs leading-relaxed ${phase === statusKey && i === subStep ? "text-[#4a3f36]" : "text-[#9c8d81]"}`}>
-                {msg}
-              </span>
-            </div>
-          ))
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Locked personalised section (resume required) ───────────────────────────
-
-function LockedPersonalisedSection({
-  title,
-  subtitle,
-  generating,
-}: {
-  title: string;
-  subtitle: string;
-  generating?: boolean;
-}) {
-  if (generating) {
-    return (
-      <div className="bg-white border border-[#e4ddd4] rounded-xl overflow-hidden shadow-[0_2px_8px_rgba(28,23,19,0.05)]">
-        <div className="px-6 py-4 border-b border-[#f0ece4]">
-          <h2 className="text-sm font-semibold text-[#1c1713]">{title}</h2>
-          <p className="text-xs text-[#9c8d81] mt-0.5">{subtitle}</p>
-        </div>
-        <div className="px-6 py-5 space-y-2">
-          <SectionSkeleton />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-white border border-dashed border-[#c8bfb4] rounded-xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-[#f0ece4] flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-[#4a3f36]">{title}</h2>
-          <p className="text-xs text-[#9c8d81] mt-0.5">{subtitle}</p>
-        </div>
-        <span className="flex items-center gap-1.5 text-xs font-medium text-[#7a6d63] bg-[#f5f1e8] border border-[#d4cdc4] px-2.5 py-1 rounded-full flex-shrink-0">
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          Requires your resume
-        </span>
-      </div>
-      <div className="px-6 py-5 space-y-3">
-        <p className="text-sm text-[#9c8d81] leading-relaxed">
-          A pursue recommendation without knowing your background isn&apos;t meaningful — this section is generated specifically for you once you upload your resume.
-        </p>
-        <div className="space-y-2" aria-hidden>
-          <div className="h-3 bg-[#f0ece4] rounded w-3/4" />
-          <div className="h-3 bg-[#f0ece4] rounded w-full" />
-          <div className="h-3 bg-[#f0ece4] rounded w-2/3" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Locked overlay placeholder ───────────────────────────────────────────────
-
-function LockedOverlaySection({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <div
-      className="bg-white border border-[#e4ddd4] rounded-xl overflow-hidden opacity-60"
-      aria-hidden="true"
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-[#8a7b6d] hover:text-[#1a4a3a] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30"
     >
-      <div className="px-6 py-4 border-b border-[#f0ece4] flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-[#1c1713]">{title}</h2>
-          {subtitle && (
-            <p className="text-xs text-[#9c8d81] mt-0.5">{subtitle}</p>
-          )}
-        </div>
-        <span className="flex items-center gap-1 text-xs text-[#9c8d81] bg-[#f0ece4] px-2.5 py-1 rounded-full flex-shrink-0">
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-          Resume required
-        </span>
-      </div>
-      <div className="px-6 py-5 space-y-2">
-        <div className="h-3 bg-[#f0ece4] rounded w-3/4" />
-        <div className="h-3 bg-[#f0ece4] rounded w-full" />
-        <div className="h-3 bg-[#f0ece4] rounded w-2/3" />
-        <div className="h-3 bg-[#f0ece4] rounded w-5/6" />
-      </div>
-    </div>
+      Top
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7 7 7M12 3v18" />
+      </svg>
+    </button>
   );
 }
 
-// ─── View mode toggle ─────────────────────────────────────────────────────────
-
-function ViewModeToggle({
-  mode,
-  onChange,
-}: {
-  mode: ViewMode;
-  onChange: (m: ViewMode) => void;
-}) {
+function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: ViewMode) => void }) {
   return (
-    <div
-      className="inline-flex items-center bg-[#f0ece4] rounded-lg p-0.5 gap-0.5"
-      role="group"
-      aria-label="View mode"
-    >
-      <button
-        onClick={() => onChange("brief")}
-        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 ${
-          mode === "brief"
-            ? "bg-white text-[#1c1713] shadow-sm"
-            : "text-[#7a6d63] hover:text-[#4a3f36]"
-        }`}
-      >
+    <div className="inline-flex w-full rounded-full border border-[#ddd4c8] bg-white/85 p-1 shadow-[0_8px_18px_rgba(28,23,19,0.04)] sm:w-auto">
+      <button type="button" onClick={() => onChange("brief")} className={`flex-1 rounded-full px-3.5 py-2 text-sm font-medium transition-colors sm:flex-none ${mode === "brief" ? "bg-[#1a4a3a] text-white" : "text-[#6b5e52]"}`}>
         5-Min Brief
       </button>
-      <button
-        onClick={() => onChange("full")}
-        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 ${
-          mode === "full"
-            ? "bg-white text-[#1c1713] shadow-sm"
-            : "text-[#7a6d63] hover:text-[#4a3f36]"
-        }`}
-      >
+      <button type="button" onClick={() => onChange("full")} className={`flex-1 rounded-full px-3.5 py-2 text-sm font-medium transition-colors sm:flex-none ${mode === "full" ? "bg-[#1a4a3a] text-white" : "text-[#6b5e52]"}`}>
         Full Report
       </button>
     </div>
+  );
+}
+
+function LockedOverlaySection({ sectionId, title, subtitle }: { sectionId: string; title: string; subtitle?: string }) {
+  return (
+    <SectionShell id={sectionId} title={title} subtitle={subtitle}>
+      <div className="rounded-2xl border border-[#e5dbcf] bg-[#faf6ef] px-4 py-4 text-sm leading-6 text-[#7a6d63]">
+        Upload a resume to unlock this personalized section.
+      </div>
+    </SectionShell>
+  );
+}
+
+function LockedPersonalisedSection({ sectionId, title, subtitle, generating = false }: { sectionId: string; title: string; subtitle?: string; generating?: boolean }) {
+  return (
+    <SectionShell id={sectionId} title={title} subtitle={subtitle}>
+      <div className="rounded-2xl border border-[#e5dbcf] bg-[#faf6ef] px-4 py-4 text-sm leading-6 text-[#7a6d63]">
+        {generating ? "Generating a personalized version of this section now..." : "Upload a resume to unlock this personalized section."}
+      </div>
+    </SectionShell>
+  );
+}
+
+function ProcessingScreen({ statusKey }: { statusKey: string }) {
+  const label = STATUS_LABELS[statusKey] ?? "Generating report...";
+  const steps = STATUS_SUBSTEPS[statusKey] ?? [];
+  return (
+    <div className="mx-auto flex min-h-screen max-w-3xl items-center px-4 py-16">
+      <div className="w-full rounded-[28px] border border-[#ddd4c8] bg-white/90 px-6 py-8 shadow-[0_24px_50px_rgba(28,23,19,0.08)]">
+        <div className="flex items-center gap-4">
+          <span className="h-10 w-10 animate-spin rounded-full border-2 border-[#e4ddd4] border-t-[#1a4a3a]" role="status" aria-label="Generating" />
+          <div>
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">In progress</p>
+            <h1 className="mt-1 text-xl font-semibold tracking-[-0.04em] text-[#1c1713]">{label}</h1>
+          </div>
+        </div>
+        {steps.length > 0 && (
+          <ul className="mt-6 space-y-3 text-sm text-[#6b5e52]">
+            {steps.map((step) => (
+              <li key={step} className="flex gap-3">
+                <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#c8bfb4]" aria-hidden />
+                <span>{step}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TocButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group ml-2 flex w-full items-start gap-2 rounded-lg px-1.5 py-0.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 ${active ? "text-[#1a4a3a]" : "text-[#5f554c] hover:text-[#1c1713]"}`}
+      aria-current={active ? "location" : undefined}
+    >
+      <span className={`mt-[0.3rem] h-1 w-1 flex-shrink-0 rounded-full transition-colors ${active ? "bg-[#1a4a3a]" : "bg-[#c8bfb4] group-hover:bg-[#8f8275]"}`} aria-hidden />
+      <span className={`text-[0.72rem] font-medium leading-[0.95rem] ${active ? "font-semibold" : ""}`}>{label}</span>
+    </button>
+  );
+}
+
+function MobileJumpMenu({ items, activeId, open, onOpen, onClose, onSelect }: { items: Array<{ id: string; label: string; group: string }>; activeId: string; open: boolean; onOpen: () => void; onClose: () => void; onSelect: (id: string) => void; }) {
+  const activeItem = items.find((item) => item.id === activeId) ?? items[0];
+  return (
+    <>
+      <div className="sticky top-0 z-20 -mx-1 rounded-[20px] border border-[#e4dacf] bg-[#fffaf3]/92 px-3 py-2.5 shadow-[0_10px_30px_rgba(28,23,19,0.08)] backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Jump to section</p>
+            <p className="mt-1 truncate text-sm font-medium text-[#1c1713]">{activeItem?.label ?? "Overview"}</p>
+          </div>
+          <button type="button" onClick={onOpen} className="inline-flex items-center gap-2 rounded-full border border-[#d7ccbf] bg-white px-3.5 py-2 text-sm font-medium text-[#4a3f36] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30" aria-haspopup="dialog" aria-expanded={open}>
+            Browse
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      {open && (
+        <div className="fixed inset-0 z-40 xl:hidden" role="dialog" aria-modal="true" aria-label="Browse report sections">
+          <button type="button" onClick={onClose} className="absolute inset-0 bg-[#1c1713]/28 backdrop-blur-[2px]" aria-label="Close section menu" />
+          <div className="absolute inset-x-0 bottom-0 max-h-[82vh] overflow-hidden rounded-t-[28px] bg-[#fffaf3] shadow-[0_-20px_60px_rgba(28,23,19,0.16)] ring-1 ring-[#eadfd2]">
+            <div className="flex items-center justify-between border-b border-[#eee4d8] px-5 py-4">
+              <div>
+                <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Mobile contents</p>
+                <h2 className="mt-1 text-base font-semibold tracking-[-0.03em] text-[#1c1713]">Choose a section</h2>
+              </div>
+              <button type="button" onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#ddd4c8] bg-white text-[#4a3f36] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30" aria-label="Close section menu">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="max-h-[calc(82vh-5rem)] overflow-y-auto px-4 py-4">
+              <div className="space-y-5">
+                {items.map((item, index) => {
+                  const showGroupLabel = index === 0 || items[index - 1].group !== item.group;
+                  return (
+                    <div key={item.id} className="space-y-2">
+                      {showGroupLabel && <p className="px-2 text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">{item.group}</p>}
+                      <button type="button" onClick={() => onSelect(item.id)} className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 ${item.id === activeId ? "border-[#1a4a3a]/20 bg-[#1a4a3a] text-white" : "border-[#e7ddd2] bg-white text-[#4a3f36]"}`}>
+                        <span className="font-medium leading-5">{item.label}</span>
+                        <svg className={`h-4 w-4 flex-shrink-0 ${item.id === activeId ? "text-white/75" : "text-[#9c8d81]"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -555,7 +411,8 @@ export default function ReportPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [overallFeedback, setOverallFeedback] = useState<"useful" | "not_useful" | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("full");
-  const { timeZone, shortLabel } = useRequestTimeZone();
+  const [mobileTocOpen, setMobileTocOpen] = useState(false);
+  const { timeZone } = useRequestTimeZone();
 
   const { stored: storedResume } = useResumeStore();
 
@@ -566,6 +423,8 @@ export default function ReportPage() {
     error: null,
   });
   const overlayPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [activeSectionId, setActiveSectionId] = useState("brief-overview");
+  const [desktopTocFloating, setDesktopTocFloating] = useState(false);
 
   // ─── Overlay polling ──────────────────────────────────────────────────────
 
@@ -727,6 +586,58 @@ export default function ReportPage() {
     });
   };
 
+  const scrollToSection = useCallback((id: string) => {
+    const target = document.getElementById(id);
+    if (!target) return;
+
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveSectionId(id);
+    setMobileTocOpen(false);
+  }, []);
+
+  const scrollReportToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    if (!report) return;
+
+    const observedSections = Array.from(document.querySelectorAll<HTMLElement>("section[id]"));
+    if (observedSections.length === 0) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0];
+
+        if (visible?.target.id) {
+          setActiveSectionId(visible.target.id);
+        }
+      },
+      {
+        root: null,
+        rootMargin: "-16% 0px -58% 0px",
+        threshold: [0.12, 0.3, 0.55, 0.8],
+      }
+    );
+
+    observedSections.forEach((section) => observer.observe(section));
+
+    return () => observer.disconnect();
+  }, [report, viewMode, overlay.status]);
+
+  useEffect(() => {
+    const updateFloatingState = () => {
+      setDesktopTocFloating(window.scrollY >= window.innerHeight * 0.9);
+    };
+
+    updateFloatingState();
+    window.addEventListener("scroll", updateFloatingState, { passive: true });
+
+    return () => window.removeEventListener("scroll", updateFloatingState);
+  }, [report]);
+
   // ─── Loading state ────────────────────────────────────────────────────────
 
   if (loading) {
@@ -787,7 +698,6 @@ export default function ReportPage() {
   // Build a keyed lookup for sections
   const sectionByKey = Object.fromEntries(report.sections.map((s) => [s.key, s]));
   const completedAtParts = formatDateTimeParts(report.completedAt ?? report.createdAt, timeZone);
-  const generationDuration = formatGenerationDuration(report.requestCreatedAt, report.completedAt);
   const companyName = report.company.name || "Unknown Company";
   const roleTitle = report.roleTitle || "Target Role";
   const companyHref = report.companyUrl ?? report.company.websiteUrl;
@@ -812,27 +722,74 @@ export default function ReportPage() {
   const effectiveCandidateFitScore = hasOverlay
     ? overlay.data?.candidate_role_match?.match_score ?? report.scores.candidate_fit
     : report.scores.candidate_fit;
+  const hasValidCitations = report.sections.some((section) =>
+    (section.citations ?? []).some((citation) => {
+      const source = report.sources.find((item) => item.id === citation.source_id);
+      return Boolean(normalizeHttpUrl(citation.url) ?? normalizeHttpUrl(source?.url));
+    })
+  );
 
   // Sections that are visible in 5-min brief mode
   const visibleSections = (key: string) =>
     viewMode === "full" || BRIEF_SECTION_KEYS.has(key);
 
-  const quickLinks = [
-    report.jobDescription ? { href: "#job-description", label: "Job Description" } : null,
+  const tocItems = [
+    { id: "brief-overview", label: "Overview", group: "Start" },
+    report.jobDescription ? { id: "job-description", label: "Job Description", group: "Start" } : null,
     sectionByKey.executive_summary && visibleSections("executive_summary")
-      ? { href: "#executive_summary", label: "Decision" }
+      ? { id: "executive_summary", label: sectionByKey.executive_summary.title, group: "Decision Layer" }
+      : null,
+    sectionByKey.interview_decision_summary && visibleSections("interview_decision_summary")
+      ? { id: "interview_decision_summary", label: sectionByKey.interview_decision_summary.title, group: "Decision Layer" }
       : null,
     sectionByKey.five_minute_brief && visibleSections("five_minute_brief")
-      ? { href: "#five_minute_brief", label: "5-Min Brief" }
+      ? { id: "five_minute_brief", label: sectionByKey.five_minute_brief.title, group: "Decision Layer" }
       : null,
+    sectionByKey.assessment_snapshot && visibleSections("assessment_snapshot")
+      ? { id: "assessment_snapshot", label: sectionByKey.assessment_snapshot.title, group: "Decision Layer" }
+      : null,
+    viewMode === "full" ? { id: OVERLAY_SECTIONS[0].key, label: OVERLAY_SECTIONS[0].title, group: "Candidate Positioning" } : null,
     sectionByKey.strategic_bet_analysis && visibleSections("strategic_bet_analysis")
-      ? { href: "#strategic_bet_analysis", label: "Strategic Bet" }
+      ? { id: "strategic_bet_analysis", label: sectionByKey.strategic_bet_analysis.title, group: "Candidate Positioning" }
+      : null,
+    viewMode === "full"
+      ? OVERLAY_SECTIONS.slice(1).map((section) => ({ id: section.key, label: section.title, group: "Candidate Positioning" }))
       : null,
     sectionByKey.likely_interview_agenda && visibleSections("likely_interview_agenda")
-      ? { href: "#likely_interview_agenda", label: "Interview Agenda" }
+      ? { id: "likely_interview_agenda", label: sectionByKey.likely_interview_agenda.title, group: "Interview Preparation" }
       : null,
-    viewMode === "full" && report.sources.length > 0 ? { href: "#sources", label: "Sources" } : null,
-  ].filter((item): item is { href: string; label: string } => Boolean(item));
+    sectionByKey.questions_to_ask && visibleSections("questions_to_ask")
+      ? { id: "questions_to_ask", label: sectionByKey.questions_to_ask.title, group: "Interview Preparation" }
+      : null,
+    sectionByKey.risks_red_flags && visibleSections("risks_red_flags")
+      ? { id: "risks_red_flags", label: sectionByKey.risks_red_flags.title, group: "Interview Preparation" }
+      : null,
+    sectionByKey.unknowns_to_validate && visibleSections("unknowns_to_validate")
+      ? { id: "unknowns_to_validate", label: sectionByKey.unknowns_to_validate.title, group: "Interview Preparation" }
+      : null,
+    sectionByKey.company_snapshot && visibleSections("company_snapshot")
+      ? { id: "company_snapshot", label: sectionByKey.company_snapshot.title, group: "Strategic Context" }
+      : null,
+    sectionByKey.company_swot && visibleSections("company_swot")
+      ? { id: "company_swot", label: sectionByKey.company_swot.title, group: "Strategic Context" }
+      : null,
+    sectionByKey.role_snapshot && visibleSections("role_snapshot")
+      ? { id: "role_snapshot", label: sectionByKey.role_snapshot.title, group: "Strategic Context" }
+      : null,
+    sectionByKey.role_swot && visibleSections("role_swot")
+      ? { id: "role_swot", label: sectionByKey.role_swot.title, group: "Strategic Context" }
+      : null,
+    sectionByKey.why_role_exists_now && visibleSections("why_role_exists_now")
+      ? { id: "why_role_exists_now", label: sectionByKey.why_role_exists_now.title, group: "Strategic Context" }
+      : null,
+    viewMode === "full" && hasValidCitations ? { id: "citations", label: "Citations", group: "Evidence" } : null,
+    viewMode === "full" ? { id: "research-footprint", label: "Research Footprint", group: "Evidence" } : null,
+    viewMode === "full" ? { id: "ai-activity", label: "AI Activity", group: "Evidence" } : null,
+    viewMode === "full" && report.sources.length > 0 ? { id: "sources", label: "Evidence Sources", group: "Evidence" } : null,
+  ]
+    .flat()
+    .filter((item): item is { id: string; label: string; group: string } => Boolean(item));
+  const currentTocItem = tocItems.find((item) => item.id === activeSectionId) ?? tocItems[0] ?? null;
 
   // Helper: merge overlay candidate_role_match into assessment_snapshot content
   const getAssessmentSnapshotContent = (section: typeof report.sections[0]): string => {
@@ -870,6 +827,7 @@ export default function ReportPage() {
         return (
           <LockedPersonalisedSection
             key={key}
+            sectionId={key}
             title={section.title}
             subtitle="Personalised pursue recommendation — generating now…"
             generating
@@ -880,6 +838,7 @@ export default function ReportPage() {
         return (
           <LockedPersonalisedSection
             key={key}
+            sectionId={key}
             title={section.title}
             subtitle="Pursue recommendation, positioning angle, top questions, and key watchouts"
           />
@@ -907,7 +866,7 @@ export default function ReportPage() {
   };
 
   // Helper: render an overlay section
-  const renderOverlaySection = ({ key, title, subtitle }: typeof OVERLAY_SECTIONS[0]) => {
+  const renderOverlaySection = ({ key, title, subtitle }: (typeof OVERLAY_SECTIONS)[number]) => {
     if (viewMode === "brief") return null; // overlay sections hidden in brief mode
 
     if (hasOverlay && overlay.data![key]) {
@@ -946,428 +905,473 @@ export default function ReportPage() {
       );
     }
 
-    return <LockedOverlaySection key={key} title={title} subtitle={subtitle} />;
+    return <LockedOverlaySection key={key} sectionId={key} title={title} subtitle={subtitle} />;
   };
 
   return (
-    <main id="top" className="min-h-screen bg-[#faf8f3]">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-5">
-        <section className="relative overflow-hidden rounded-[30px] border border-[#d9d0c5] bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.96),rgba(255,255,255,0.9)_38%,rgba(245,241,232,0.92)_100%)] px-6 py-6 shadow-[0_24px_60px_rgba(28,23,19,0.08)] sm:px-8 sm:py-8">
-          <div className="absolute -left-10 top-10 h-40 w-40 rounded-full bg-[#1a4a3a]/6 blur-3xl" aria-hidden />
-          <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-[#4a7a8a]/10 blur-3xl" aria-hidden />
+    <main id="top" className="min-h-screen bg-[linear-gradient(180deg,#f8f4ed_0%,#f6f1e8_45%,#f4efe6_100%)]">
+      <div className="mx-auto max-w-[1600px] px-4 py-4 sm:px-6 xl:py-3">
+        <div className="xl:grid xl:grid-cols-[250px_minmax(0,1fr)] xl:gap-6">
+          <aside className="mt-[30px] hidden xl:block xl:self-start xl:sticky xl:top-4 xl:h-fit">
+            <div className="transition-all duration-300">
+              <nav className="relative pl-3 pr-1" aria-label="Report table of contents">
+                <div className="absolute bottom-0 left-0 top-0 w-px bg-[linear-gradient(180deg,rgba(201,191,180,0.18),rgba(201,191,180,0.88)_16%,rgba(201,191,180,0.88)_84%,rgba(201,191,180,0.18))]" aria-hidden />
+                <div className={`transition-all duration-300 ${desktopTocFloating ? "py-1.5" : "py-0.5"}`}>
+                  <div className="space-y-1.5">
+                    {tocItems.map((item, index) => {
+                      const showGroupLabel = index === 0 || tocItems[index - 1].group !== item.group;
 
-          <div className="relative space-y-6">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="inline-flex items-center gap-3 rounded-full border border-[#ddd4c8] bg-white/80 px-3 py-2 shadow-[0_8px_24px_rgba(28,23,19,0.05)] backdrop-blur-sm">
-                <BrandMark compact />
-                <div>
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#9c8d81]">Interview Intelligence Brief</p>
-                  <p className="text-xs text-[#7a6d63]">Times shown in {shortLabel}</p>
-                </div>
-              </div>
-              <ViewModeToggle mode={viewMode} onChange={setViewMode} />
-            </div>
-
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-              <div className="space-y-5">
-                <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0 flex h-14 w-14 items-center justify-center overflow-hidden rounded-[18px] border border-[#d9d0c5] bg-white shadow-[0_10px_24px_rgba(28,23,19,0.06)] mt-0.5">
-                    {companyLogoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={companyLogoUrl} alt={`${companyName} logo`} className="h-9 w-9" />
-                    ) : (
-                      <span className="text-lg font-semibold tracking-[-0.04em] text-[#1a4a3a]">{companyName.charAt(0).toUpperCase()}</span>
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <h1 className="text-[1.65rem] font-bold tracking-[-0.04em] text-[#1c1713] leading-[1.1] sm:text-[2rem]">
-                      {companyName}
-                    </h1>
-                    <p className="text-[0.95rem] font-medium text-[#5f554c] leading-snug">
-                      {roleTitle}
-                    </p>
+                      return (
+                        <div key={item.id} className="space-y-0">
+                          {showGroupLabel && (
+                            <p className="px-1.5 pb-0.5 pt-6 text-[0.74rem] font-semibold uppercase leading-none tracking-[0.15em] text-[#5f554c] first:pt-0">
+                              {item.group}
+                            </p>
+                          )}
+                          <TocButton
+                            label={item.label}
+                            active={activeSectionId === item.id}
+                            onClick={() => scrollToSection(item.id)}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-
-                <p className="max-w-3xl text-sm leading-7 text-[#5f554c] sm:text-[0.98rem]">
-                  A recruiter-grade briefing assembled from {formatNumber(report.sources.length)} evidence sources across {formatNumber(uniqueWebsiteCount)} websites, organized for fast interview preparation and sharper decision-making.
-                </p>
-
-                <div className="flex flex-wrap gap-2.5">
-                  <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium ${recommendationMeta.tone}`}>
-                    <span aria-hidden>{recommendationMeta.icon}</span>
-                    {recommendationMeta.label}
-                  </span>
-                  <span className="inline-flex items-center gap-2 rounded-full border border-[#ddd4c8] bg-white/80 px-3 py-1.5 text-sm text-[#5f554c]">
-                    <svg className="h-4 w-4 text-[#7a6d63]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-12 9h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v11a2 2 0 002 2z" />
-                    </svg>
-                    {completedAtParts
-                      ? `Generated ${completedAtParts.date} at ${completedAtParts.time} ${completedAtParts.shortLabel}`
-                      : "Generated recently"}
-                  </span>
-                  <span className="inline-flex items-center gap-2 rounded-full border border-[#ddd4c8] bg-white/80 px-3 py-1.5 text-sm text-[#5f554c]">
-                    <svg className="h-4 w-4 text-[#7a6d63]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {generationDuration ? `Generated in ${generationDuration}` : `Times shown in ${shortLabel}`}
-                  </span>
-                  {hasOverlay && (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-[#1a4a3a]/20 bg-[#1a4a3a]/8 px-3 py-1.5 text-sm text-[#1a4a3a]">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                      Personalized with your resume
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  {companyHref && (
-                    <a
-                      href={companyHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-xl border border-[#d1c7ba] bg-white px-4 py-2.5 text-sm font-medium text-[#1c1713] shadow-[0_8px_18px_rgba(28,23,19,0.05)] hover:border-[#bfb3a4] hover:bg-[#fffdfa] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/35 transition-colors"
-                    >
-                      Company Site
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 4h6m0 0v6m0-6L10 14" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 10v9a1 1 0 001 1h9" />
-                      </svg>
-                    </a>
-                  )}
-                  {report.jobDescription && (
-                    <a
-                      href="#job-description"
-                      className="inline-flex items-center gap-2 rounded-xl border border-[#d1c7ba] bg-[#f5f1e8] px-4 py-2.5 text-sm font-medium text-[#4a3f36] hover:border-[#bfb3a4] hover:text-[#1c1713] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/35 transition-colors"
-                    >
-                      View Job Description
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-2">
-                <HeroMetricCard
-                  label="Recommendation"
-                  value={recommendationMeta.label}
-                  detail="Current decision signal based on the evidence assembled for this role."
-                  icon={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                />
-                <HeroMetricCard
-                  label="Candidate Fit"
-                  value={effectiveCandidateFitScore != null ? `${effectiveCandidateFitScore.toFixed(1)}/10` : "N/A"}
-                  detail={hasOverlay
-                    ? "Personalized candidate-role match based on your resume and the inferred interview bar."
-                    : "How well your background appears to map to the charter and likely interview bar."}
-                  icon={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M12 11c0-1.657 1.567-3 3.5-3S19 9.343 19 11c0 1.306-.835 2.417-2 2.83V16a1 1 0 01-1 1h-1m-6 0H8a1 1 0 01-1-1v-2.17C5.835 13.417 5 12.306 5 11c0-1.657 1.567-3 3.5-3S12 9.343 12 11zm0 0v1" /></svg>}
-                />
-                <HeroMetricCard
-                  label="Evidence Sources"
-                  value={formatNumber(report.sources.length)}
-                  detail={`${formatNumber(uniqueWebsiteCount)} distinct websites researched for this brief.`}
-                  icon={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M3.6 9h16.8M3.6 15h16.8M12 3a15.3 15.3 0 010 18M12 3a15.3 15.3 0 000 18" /></svg>}
-                />
-                <HeroMetricCard
-                  label="AI Queries"
-                  value={formatNumber(aiQueryCount)}
-                  detail={report.tokenUsage ? `${formatTokenCount(report.tokenUsage.total_tokens)} total tokens across all model calls.` : "No token usage trace stored for this report."}
-                  icon={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
-                />
-              </div>
+              </nav>
             </div>
+          </aside>
 
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
-              <div className="rounded-[26px] border border-[#ddd4c8] bg-white/82 px-5 py-5 shadow-[0_14px_28px_rgba(28,23,19,0.05)] backdrop-blur-sm">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div>
+          <div
+            data-report-scroll-root="true"
+            className="xl:rounded-[34px] xl:border xl:border-[#ddd4c8] xl:shadow-[0_28px_70px_rgba(28,23,19,0.08)]"
+          >
+            <article className="mx-auto w-[90%] max-w-none px-3 py-4 sm:px-7 sm:py-7">
+              <section
+                id="brief-overview"
+                className="relative overflow-hidden px-4 py-5 sm:px-8 sm:py-8"
+              >
+                <div className="absolute -left-16 top-6 h-28 w-28 rounded-full bg-[#1a4a3a]/6 blur-3xl sm:top-8 sm:h-40 sm:w-40" aria-hidden />
+                <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#4a7a8a]/10 blur-3xl sm:h-32 sm:w-32" aria-hidden />
+
+                <div className="relative">
+                  <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="inline-flex w-full items-center gap-3 rounded-full border border-[#e0d6ca] bg-white/85 px-3 py-2 shadow-[0_8px_20px_rgba(28,23,19,0.04)] sm:w-auto">
+                      <BrandMark compact />
+                      <div>
+                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#9c8d81]">Interview Intelligence Brief</p>
+                        <p className="text-xs text-[#7a6d63]">Structured for fast reading and easier prep</p>
+                      </div>
+                    </div>
+                    <div className="w-full xl:hidden sm:w-auto">
+                      <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-5 sm:mt-8 sm:gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(290px,0.85fr)] xl:items-end">
+                    <div>
+                      <div className="flex items-start gap-3 sm:gap-4">
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-[18px] bg-white shadow-[0_10px_24px_rgba(28,23,19,0.06)] ring-1 ring-[#e2d8cc] sm:h-16 sm:w-16 sm:rounded-[22px]">
+                          {companyLogoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={companyLogoUrl} alt={`${companyName} logo`} className="h-8 w-8 sm:h-10 sm:w-10" />
+                          ) : (
+                            <span className="text-lg font-semibold tracking-[-0.04em] text-[#1a4a3a] sm:text-xl">{companyName.charAt(0).toUpperCase()}</span>
+                          )}
+                        </div>
+                        <div className="space-y-1.5 sm:space-y-2">
+                          <h1 className="text-[1.7rem] font-semibold tracking-[-0.055em] text-[#1c1713] leading-[0.98] sm:text-[2.6rem]">
+                            {companyName}
+                          </h1>
+                          <p className="text-[0.96rem] font-medium leading-snug text-[#5f554c] sm:text-[1.08rem]">{roleTitle}</p>
+                        </div>
+                      </div>
+
+                      <p className="mt-4 max-w-3xl text-[0.93rem] leading-7 text-[#5f554c] sm:mt-6 sm:text-[0.98rem] sm:leading-8">
+                        A recruiter-grade briefing assembled from {formatNumber(report.sources.length)} evidence sources across {formatNumber(uniqueWebsiteCount)} websites, organized into a single reading flow for sharper decisions and faster interview preparation.
+                      </p>
+
+                      <div className="mt-4 flex flex-wrap gap-2 sm:mt-5 sm:gap-2.5">
+                        <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[0.82rem] font-medium sm:text-sm ${recommendationMeta.tone}`}>
+                          <span aria-hidden>{recommendationMeta.icon}</span>
+                          {recommendationMeta.label}
+                        </span>
+                        <span className="inline-flex items-center gap-2 rounded-full border border-[#ddd4c8] bg-white/80 px-3 py-1.5 text-[0.82rem] text-[#5f554c] sm:text-sm">
+                          <svg className="h-4 w-4 text-[#7a6d63]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-12 9h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v11a2 2 0 002 2z" />
+                          </svg>
+                          {completedAtParts
+                            ? `Generated ${completedAtParts.date} at ${completedAtParts.time} ${completedAtParts.shortLabel}`
+                            : "Generated recently"}
+                        </span>
+                        {hasOverlay && (
+                          <span className="inline-flex items-center gap-2 rounded-full border border-[#1a4a3a]/20 bg-[#1a4a3a]/8 px-3 py-1.5 text-[0.82rem] text-[#1a4a3a] sm:text-sm">
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            Personalized with your resume
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2.5 sm:mt-5 sm:gap-3">
+                        {companyHref && (
+                          <a
+                            href={companyHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 rounded-full border border-[#d3c7b9] bg-white px-3.5 py-2.5 text-[0.82rem] font-medium text-[#1c1713] hover:border-[#bfb3a4] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/35 sm:px-4 sm:text-sm transition-colors"
+                          >
+                            Company Site
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M14 4h6m0 0v6m0-6L10 14" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 10v9a1 1 0 001 1h9" />
+                            </svg>
+                          </a>
+                        )}
+                        {report.jobDescription && (
+                          <button
+                            type="button"
+                            onClick={() => scrollToSection("job-description")}
+                            className="inline-flex items-center gap-2 rounded-full border border-[#d3c7b9] bg-[#f5f1e8] px-3.5 py-2.5 text-[0.82rem] font-medium text-[#4a3f36] hover:border-[#bfb3a4] hover:text-[#1c1713] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/35 sm:px-4 sm:text-sm transition-colors"
+                          >
+                            View Job Description
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                      <div className="rounded-[24px] border border-[#e2d8cc] bg-white/68 px-4 py-4 backdrop-blur-sm sm:rounded-[28px] sm:px-5 sm:py-5">
+                      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Reading Snapshot</p>
+                        <div className="mt-3 grid gap-3 sm:mt-4 sm:gap-5 sm:grid-cols-2 xl:grid-cols-1">
+                        <ReadingMetric
+                          label="Recommendation"
+                          value={recommendationMeta.label}
+                          detail="Current decision signal based on the evidence assembled for this role."
+                        />
+                        <ReadingMetric
+                          label="Candidate Fit"
+                          value={effectiveCandidateFitScore != null ? `${effectiveCandidateFitScore.toFixed(1)}/10` : "N/A"}
+                          detail={hasOverlay
+                            ? "Resume-personalized candidate-role match."
+                            : "How your background appears to map to the charter and interview bar."}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                    <div className="mt-6 grid grid-cols-2 gap-3 border-t border-[#e7ddd2] pt-5 sm:mt-8 sm:gap-6 sm:pt-6 xl:grid-cols-4">
+                    <ReadingMetric
+                      label="Evidence Sources"
+                      value={formatNumber(report.sources.length)}
+                      detail={`${formatNumber(uniqueWebsiteCount)} distinct websites researched.`}
+                    />
+                    <ReadingMetric
+                      label="AI Queries"
+                      value={formatNumber(aiQueryCount)}
+                      detail={report.tokenUsage ? `${formatTokenCount(report.tokenUsage.total_tokens)} total tokens across all model calls.` : "No token trace stored."}
+                    />
+                    <ReadingMetric
+                      label="Company Momentum"
+                      value={`${report.scores.company_momentum.toFixed(1)}/10`}
+                      detail="Composite signal across market position, momentum, and public evidence."
+                    />
+                    <ReadingMetric
+                      label="Execution Risk"
+                      value={`${report.scores.execution_risk.toFixed(1)}/10`}
+                      detail="Higher scores mean more friction or ambiguity around successful execution."
+                    />
+                  </div>
+
+                    <div className="mt-6 rounded-[24px] border border-[#e2d8cc] bg-[#fffdfa]/76 px-4 py-4 sm:mt-8 sm:rounded-[28px] sm:px-5 sm:py-5">
                     <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Signal Scorecard</p>
-                    <h2 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-[#1c1713]">How this opportunity reads at a glance</h2>
+                      <div className="mt-3 grid gap-3 sm:mt-4 sm:grid-cols-2">
+                      <ScoreMeter label="Company Momentum" value={report.scores.company_momentum} />
+                      <ScoreMeter label="Org Clarity" value={report.scores.org_clarity} />
+                      <ScoreMeter label="Role Leverage" value={report.scores.role_leverage} />
+                      <ScoreMeter label="Execution Risk" value={report.scores.execution_risk} />
+                    </div>
                   </div>
                 </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <ScoreMeter label="Company Momentum" value={report.scores.company_momentum} />
-                  <ScoreMeter label="Org Clarity" value={report.scores.org_clarity} />
-                  <ScoreMeter label="Role Leverage" value={report.scores.role_leverage} />
-                  <ScoreMeter label="Execution Risk" value={report.scores.execution_risk} />
-                </div>
-              </div>
+              </section>
 
-              <div className="rounded-[26px] border border-[#ddd4c8] bg-[#fffdf9] px-5 py-5 shadow-[0_14px_28px_rgba(28,23,19,0.05)]">
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Navigation</p>
-                <h2 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-[#1c1713]">Jump to the parts that matter most</h2>
-                <div className="mt-4 flex flex-wrap gap-2.5">
-                  {quickLinks.map((link) => (
-                    <a
-                      key={link.href}
-                      href={link.href}
-                      className="inline-flex items-center gap-2 rounded-full border border-[#d8d0c5] bg-white px-3 py-1.5 text-sm text-[#4a3f36] hover:border-[#bfb3a4] hover:text-[#1c1713] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/35 transition-colors"
-                    >
-                      {link.label}
-                    </a>
-                  ))}
-                </div>
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-[#ebe4da] bg-white px-4 py-4">
-                    <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Websites</p>
-                    <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatNumber(uniqueWebsiteCount)}</p>
-                  </div>
-                  <div className="rounded-2xl border border-[#ebe4da] bg-white px-4 py-4">
-                    <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Model Calls</p>
-                    <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatNumber(aiQueryCount)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+              <section className="mt-4 xl:hidden">
+                <MobileJumpMenu
+                  items={tocItems}
+                  activeId={currentTocItem?.id ?? "brief-overview"}
+                  open={mobileTocOpen}
+                  onOpen={() => setMobileTocOpen(true)}
+                  onClose={() => setMobileTocOpen(false)}
+                  onSelect={scrollToSection}
+                />
+              </section>
 
-        {viewMode === "brief" && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3.5 flex items-center gap-3">
-            <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <p className="text-xs text-amber-800">
-              <span className="font-semibold">5-Minute Brief mode</span> shows only the decision-critical sections.
-              <button onClick={() => setViewMode("full")} className="ml-1 underline hover:text-amber-900 focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-700 rounded">
-                Switch to Full Report
-              </button>
-            </p>
-          </div>
-        )}
-
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-          <section className="rounded-[26px] border border-[#ddd4c8] bg-white px-6 py-5 shadow-[0_14px_30px_rgba(28,23,19,0.05)]">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Research Footprint</p>
-                <h2 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-[#1c1713]">Where the brief pulled evidence from</h2>
-              </div>
-              <div className="rounded-2xl border border-[#ebe4da] bg-[#faf8f3] px-4 py-3 text-right">
-                <p className="text-xs text-[#9c8d81]">Distinct websites</p>
-                <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatNumber(uniqueWebsiteCount)}</p>
-              </div>
-            </div>
-
-            <div className="mt-5 overflow-hidden rounded-2xl border border-[#ebe4da] bg-[#fffdfa]">
-              <table className="w-full text-sm">
-                <thead className="bg-[#f5f1e8] text-[#7a6d63]">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Source Type</th>
-                    <th className="px-4 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sourceBreakdown.length > 0 ? (
-                    sourceBreakdown.map(([label, count]) => (
-                      <tr key={label} className="border-t border-[#f0ece4]">
-                        <td className="px-4 py-3 text-[#4a3f36]">{label}</td>
-                        <td className="px-4 py-3 text-right font-medium text-[#1c1713]">{formatNumber(count)}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={2} className="px-4 py-4 text-[#9c8d81]">No source trace was stored for this report.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="rounded-[26px] border border-[#ddd4c8] bg-white px-6 py-5 shadow-[0_14px_30px_rgba(28,23,19,0.05)]">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">AI Activity</p>
-                <h2 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-[#1c1713]">Model workflow behind the brief</h2>
-              </div>
-              {report.tokenUsage && (
-                <div className="rounded-2xl border border-[#ebe4da] bg-[#faf8f3] px-4 py-3 text-right">
-                  <p className="text-xs text-[#9c8d81]">Estimated cost</p>
-                  <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatUsd(report.tokenUsage.total_cost_usd)}</p>
+              {viewMode === "brief" && (
+                <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3.5 flex items-center gap-3">
+                  <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <p className="text-xs text-amber-800">
+                    <span className="font-semibold">5-Minute Brief mode</span> shows only the decision-critical sections.
+                    <button onClick={() => setViewMode("full")} className="ml-1 underline hover:text-amber-900 focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-700 rounded">
+                      Switch to Full Report
+                    </button>
+                  </p>
                 </div>
               )}
-            </div>
 
-            {report.tokenUsage ? (
-              <div className="mt-5 overflow-hidden rounded-2xl border border-[#ebe4da] bg-[#fffdfa]">
-                <table className="w-full text-sm">
-                  <thead className="bg-[#f5f1e8] text-[#7a6d63]">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Model</th>
-                      <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Purpose</th>
-                      <th className="px-4 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Tokens</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.tokenUsage.calls.map((call, index) => (
-                      <tr key={`${call.model}-${index}`} className="border-t border-[#f0ece4] align-top">
-                        <td className="px-4 py-3 font-medium text-[#1c1713]">{call.model}</td>
-                        <td className="px-4 py-3 text-[#4a3f36]">{call.purpose}</td>
-                        <td className="px-4 py-3 text-right font-medium text-[#1c1713]">{formatTokenCount(call.input_tokens + call.output_tokens + (call.reasoning_tokens ?? 0))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="mt-5 text-sm text-[#9c8d81]">Token usage details were not persisted for this report.</p>
-            )}
-          </section>
-        </div>
+              {report.jobDescription && (
+                <section id="job-description" className="mt-8 rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:mt-9 sm:rounded-[30px] sm:px-7 sm:py-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div />
+                    <BackToTopButton onClick={scrollReportToTop} />
+                  </div>
+                  <div className="mt-2 grid gap-7 xl:grid-cols-[minmax(220px,0.65fr)_minmax(0,1.35fr)]">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Role Brief</p>
+                        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">Job Description</h2>
+                        <p className="mt-2.5 text-sm leading-5 text-[#7a6d63]">Keep the original role language close while reading the decision and interview analysis.</p>
+                      </div>
+                      <div className="space-y-3 text-sm text-[#4a3f36]">
+                        <p><span className="font-semibold text-[#1c1713]">Company:</span> {companyName}</p>
+                        <p><span className="font-semibold text-[#1c1713]">Role:</span> {roleTitle}</p>
+                        <p>
+                          <span className="font-semibold text-[#1c1713]">Generated:</span>{" "}
+                          {completedAtParts ? `${completedAtParts.date} · ${completedAtParts.time} ${completedAtParts.shortLabel}` : "Recently"}
+                        </p>
+                      </div>
+                    </div>
 
-        {report.jobDescription && (
-          <section id="job-description" className="rounded-[26px] border border-[#ddd4c8] bg-white px-6 py-6 shadow-[0_14px_30px_rgba(28,23,19,0.05)]">
-            <div className="grid gap-5 xl:grid-cols-[minmax(240px,0.72fr)_minmax(0,1.28fr)]">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Role Brief</p>
-                  <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-[#1c1713]">Job Description</h2>
-                  <p className="mt-2 text-sm leading-6 text-[#7a6d63]">Keep the original role language close at hand while reading the interview analysis.</p>
+                    <div className="rounded-[22px] bg-white px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] ring-1 ring-[#e8ded2] sm:rounded-[26px] sm:px-5 sm:py-5">
+                      <div className="max-h-[24rem] overflow-y-auto pr-2">
+                        <p className="whitespace-pre-line text-sm leading-6 text-[#4a3f36]">{report.jobDescription}</p>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {!hasOverlay && !overlayGenerating && viewMode === "full" && (
+                <div className="mt-10">
+                  <ResumeUploadPanel
+                    requestId={requestId}
+                    onUploaded={handleOverlayUploaded}
+                    storedResume={storedResume}
+                  />
                 </div>
-                <div className="rounded-2xl border border-[#ebe4da] bg-[#faf8f3] px-4 py-4 space-y-3">
+              )}
+
+              {overlayGenerating && (
+                <div className="mt-8 rounded-2xl border border-[#e4ddd4] bg-white px-4 py-4 flex items-center gap-3 shadow-[0_8px_20px_rgba(28,23,19,0.05)] sm:mt-10 sm:px-6 sm:gap-4">
+                  <span className="w-5 h-5 rounded-full border-2 border-[#e4ddd4] border-t-[#1a4a3a] animate-spin flex-shrink-0" role="status" aria-label="Generating personalization" />
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9c8d81]">Company</p>
-                    <p className="mt-1 text-sm text-[#1c1713]">{companyName}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9c8d81]">Role</p>
-                    <p className="mt-1 text-sm text-[#1c1713]">{roleTitle}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9c8d81]">Generated</p>
-                    <p className="mt-1 text-sm text-[#1c1713]">
-                      {completedAtParts ? `${completedAtParts.date} · ${completedAtParts.time} ${completedAtParts.shortLabel}` : "Recently"}
-                    </p>
+                    <p className="text-sm font-semibold text-[#1c1713]">Personalizing your brief…</p>
+                    <p className="text-xs text-[#9c8d81] mt-0.5">Analyzing your background against this role and updating the brief.</p>
                   </div>
                 </div>
-              </div>
+              )}
 
-              <div className="rounded-2xl border border-[#ebe4da] bg-[#fffdfa] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-                <div className="max-h-[24rem] overflow-auto pr-2">
-                  <p className="whitespace-pre-line text-sm leading-7 text-[#4a3f36]">{report.jobDescription}</p>
+              {overlay.status === "failed" && (
+                <div className="mt-8 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 sm:mt-10 sm:px-6" role="alert">
+                  <p className="text-sm font-semibold text-red-800">Personalization failed</p>
+                  <p className="text-xs text-red-600 mt-0.5">
+                    {overlay.error ?? "Could not generate personalized sections."} You can try uploading again.
+                  </p>
                 </div>
+              )}
+
+              <div className="mt-9 space-y-1.5 sm:mt-10">
+                <SectionGroupLabel
+                  title="Decision Layer"
+                  description="Start with the core recommendation, top-line judgment, and the fastest version of the story."
+                />
+                {renderBaseSection("executive_summary")}
+                {renderBaseSection("interview_decision_summary")}
+                {renderBaseSection("five_minute_brief")}
+                {renderBaseSection("assessment_snapshot")}
+
+                <SectionGroupLabel
+                  title="Candidate Positioning"
+                  description="How your background maps to the role, where friction will show up, and how to address it."
+                />
+                {renderOverlaySection(OVERLAY_SECTIONS[0])}
+                {renderBaseSection("strategic_bet_analysis")}
+                {OVERLAY_SECTIONS.slice(1).map(renderOverlaySection)}
+
+                <SectionGroupLabel
+                  title="Interview Preparation"
+                  description="Use this layer to rehearse the likely agenda, shape your questions, and pressure-test risk areas."
+                />
+                {renderBaseSection("likely_interview_agenda")}
+                {renderBaseSection("questions_to_ask")}
+                {renderBaseSection("risks_red_flags")}
+                {renderBaseSection("unknowns_to_validate")}
+
+                <SectionGroupLabel
+                  title="Strategic Context"
+                  description="Expanded company and role context for deeper prep and better calibration before final-round conversations."
+                />
+                {renderBaseSection("company_snapshot")}
+                {renderBaseSection("company_swot")}
+                {renderBaseSection("role_snapshot")}
+                {renderBaseSection("role_swot")}
+                {renderBaseSection("why_role_exists_now")}
               </div>
-            </div>
-          </section>
-        )}
 
-        {!hasOverlay && !overlayGenerating && viewMode === "full" && (
-          <ResumeUploadPanel
-            requestId={requestId}
-            onUploaded={handleOverlayUploaded}
-            storedResume={storedResume}
-          />
-        )}
+              {viewMode === "full" && (
+                <div className="mt-9 sm:mt-10">
+                  <CitationResourcesPanel sections={report.sections} sources={report.sources} onBackToTop={scrollReportToTop} />
+                </div>
+              )}
 
-        {overlayGenerating && (
-          <div className="bg-white border border-[#e4ddd4] rounded-2xl px-6 py-4 flex items-center gap-4 shadow-[0_8px_20px_rgba(28,23,19,0.05)]">
-            <span className="w-5 h-5 rounded-full border-2 border-[#e4ddd4] border-t-[#1a4a3a] animate-spin flex-shrink-0" role="status" aria-label="Generating personalization" />
-            <div>
-              <p className="text-sm font-semibold text-[#1c1713]">Personalizing your brief…</p>
-              <p className="text-xs text-[#9c8d81] mt-0.5">Analyzing your background against this role and updating the brief.</p>
-            </div>
+              {viewMode === "full" && (
+                <div className="mt-9 grid gap-6 sm:mt-10 sm:gap-7 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
+                  <section id="research-footprint" className="rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:rounded-[30px] sm:px-6 sm:py-6">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div>
+                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Research Footprint</p>
+                        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">Where the brief pulled evidence from</h2>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <BackToTopButton onClick={scrollReportToTop} />
+                        <div className="rounded-2xl bg-white px-4 py-3 text-right ring-1 ring-[#e9dfd3]">
+                          <p className="text-xs text-[#9c8d81]">Distinct websites</p>
+                          <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatNumber(uniqueWebsiteCount)}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 overflow-hidden rounded-[20px] bg-white ring-1 ring-[#e8ded2] sm:mt-5 sm:rounded-[24px]">
+                      <table className="w-full text-sm">
+                        <thead className="bg-[#f5f1e8] text-[#7a6d63]">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Source Type</th>
+                            <th className="px-4 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Count</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sourceBreakdown.length > 0 ? (
+                            sourceBreakdown.map(([label, count]) => (
+                              <tr key={label} className="border-t border-[#f0ece4]">
+                                <td className="px-4 py-3 text-[#4a3f36]">{label}</td>
+                                <td className="px-4 py-3 text-right font-medium text-[#1c1713]">{formatNumber(count)}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={2} className="px-4 py-4 text-[#9c8d81]">No source trace was stored for this report.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+
+                  <section id="ai-activity" className="rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:rounded-[30px] sm:px-6 sm:py-6">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div>
+                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">AI Activity</p>
+                        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">Model workflow behind the brief</h2>
+                      </div>
+                      <div className="flex items-start gap-2.5">
+                        <BackToTopButton onClick={scrollReportToTop} />
+                        {report.tokenUsage && (
+                          <div className="rounded-2xl bg-white px-4 py-3 text-right ring-1 ring-[#e9dfd3]">
+                            <p className="text-xs text-[#9c8d81]">Estimated cost</p>
+                            <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatUsd(report.tokenUsage.total_cost_usd)}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {report.tokenUsage ? (
+                      <div className="mt-4 overflow-hidden rounded-[20px] bg-white ring-1 ring-[#e8ded2] sm:mt-5 sm:rounded-[24px]">
+                        <table className="w-full text-sm">
+                          <thead className="bg-[#f5f1e8] text-[#7a6d63]">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Model</th>
+                              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Purpose</th>
+                              <th className="px-4 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Tokens</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {report.tokenUsage.calls.map((call, index) => (
+                              <tr key={`${call.model}-${index}`} className="border-t border-[#f0ece4] align-top">
+                                <td className="px-4 py-3 font-medium text-[#1c1713]">{call.model}</td>
+                                <td className="px-4 py-3 text-[#4a3f36]">{call.purpose}</td>
+                                <td className="px-4 py-3 text-right font-medium text-[#1c1713]">{formatTokenCount(call.input_tokens + call.output_tokens + (call.reasoning_tokens ?? 0))}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="mt-5 text-sm text-[#9c8d81]">Token usage details were not persisted for this report.</p>
+                    )}
+                  </section>
+                </div>
+              )}
+
+              {viewMode === "full" && (
+                <section
+                  id="sources"
+                  aria-labelledby="sources-heading"
+                  className="mt-9 rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:mt-10 sm:rounded-[30px] sm:px-6 sm:py-6"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 id="sources-heading" className="text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">
+                        Evidence Sources
+                      </h2>
+                      <p className="mt-2 text-sm leading-5 text-[#7a6d63]">
+                        Full source trace for the report, including company-owned sources and additional external inputs that supported retrieval.
+                      </p>
+                    </div>
+                    <BackToTopButton onClick={scrollReportToTop} />
+                  </div>
+                  <div className="mt-4 rounded-[20px] bg-white px-4 py-4 ring-1 ring-[#e8ded2] sm:mt-5 sm:rounded-[24px] sm:px-5 sm:py-5">
+                    <SourcesPanel sources={report.sources} />
+                  </div>
+                </section>
+              )}
+
+              <section className="mt-10 rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:mt-12 sm:rounded-[30px] sm:px-6 sm:py-6">
+                <h2 className="text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">Was this brief useful overall?</h2>
+                {overallFeedback ? (
+                  <p className="mt-3 text-sm text-[#9c8d81]" role="status" aria-live="polite">
+                    {overallFeedback === "useful" ? "Thanks — glad it helped." : "Thanks for the feedback."}
+                  </p>
+                ) : (
+                  <div className="mt-4 flex gap-3" role="group" aria-label="Overall report feedback">
+                    <button
+                      onClick={() => handleOverallFeedback("useful")}
+                      className="px-4 py-2 rounded-full bg-white text-[#4a3f36] text-sm border border-[#d4cdc4] hover:bg-[#1a4a3a]/6 hover:text-[#1a4a3a] hover:border-[#1a4a3a]/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
+                    >
+                      Yes, useful
+                    </button>
+                    <button
+                      onClick={() => handleOverallFeedback("not_useful")}
+                      className="px-4 py-2 rounded-full bg-white text-[#4a3f36] text-sm border border-[#d4cdc4] hover:bg-red-50 hover:text-red-700 hover:border-red-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
+                    >
+                      Not useful
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-6 text-center xl:hidden">
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={regenerating}
+                    className="text-sm text-[#7a6d63] underline underline-offset-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 rounded disabled:opacity-40 transition-colors"
+                  >
+                    {regenerating ? "Starting regeneration…" : "Re-run analysis"}
+                  </button>
+                </div>
+              </section>
+            </article>
           </div>
-        )}
-
-        {overlay.status === "failed" && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl px-6 py-4" role="alert">
-            <p className="text-sm font-semibold text-red-800">Personalization failed</p>
-            <p className="text-xs text-red-600 mt-0.5">
-              {overlay.error ?? "Could not generate personalized sections."} You can try uploading again.
-            </p>
-          </div>
-        )}
-
-        <SectionGroupLabel
-          title="Decision Layer"
-          description="Start with the core recommendation, top-line judgment, and the fastest version of the story."
-        />
-        {renderBaseSection("executive_summary")}
-        {renderBaseSection("interview_decision_summary")}
-        {renderBaseSection("five_minute_brief")}
-        {renderBaseSection("assessment_snapshot")}
-
-        <SectionGroupLabel
-          title="Candidate Positioning"
-          description="How your background maps to the role, where friction will show up, and how to address it."
-        />
-        {renderOverlaySection(OVERLAY_SECTIONS[0])}
-        {renderBaseSection("strategic_bet_analysis")}
-        {OVERLAY_SECTIONS.slice(1).map(renderOverlaySection)}
-
-        <SectionGroupLabel
-          title="Interview Preparation"
-          description="Use this layer to rehearse the likely agenda, shape your questions, and pressure-test risk areas."
-        />
-        {renderBaseSection("likely_interview_agenda")}
-        {renderBaseSection("questions_to_ask")}
-        {renderBaseSection("risks_red_flags")}
-        {renderBaseSection("unknowns_to_validate")}
-
-        <SectionGroupLabel
-          title="Strategic Context"
-          description="Expanded company and role context for deeper prep and better calibration before final-round conversations."
-        />
-        {renderBaseSection("company_snapshot")}
-        {renderBaseSection("company_swot")}
-        {renderBaseSection("role_snapshot")}
-        {renderBaseSection("role_swot")}
-        {renderBaseSection("why_role_exists_now")}
-
-        {viewMode === "full" && (
-          <section
-            id="sources"
-            aria-labelledby="sources-heading"
-            className="bg-white border border-[#e4ddd4] rounded-[26px] px-6 py-5 shadow-[0_12px_24px_rgba(28,23,19,0.05)]"
-          >
-            <h2 id="sources-heading" className="text-sm font-semibold text-[#1c1713] mb-4">
-              Evidence Sources
-            </h2>
-            <SourcesPanel sources={report.sources} />
-          </section>
-        )}
-
-        {report.tokenUsage && viewMode === "full" && (
-          <TokenUsagePanel usage={report.tokenUsage} />
-        )}
-
-        <div className="bg-white border border-[#e4ddd4] rounded-[26px] px-6 py-5 shadow-[0_12px_24px_rgba(28,23,19,0.05)]">
-          <h2 className="text-sm font-semibold text-[#4a3f36] mb-3">Was this brief useful overall?</h2>
-          {overallFeedback ? (
-            <p className="text-sm text-[#9c8d81]" role="status" aria-live="polite">
-              {overallFeedback === "useful" ? "Thanks — glad it helped." : "Thanks for the feedback."}
-            </p>
-          ) : (
-            <div className="flex gap-3" role="group" aria-label="Overall report feedback">
-              <button
-                onClick={() => handleOverallFeedback("useful")}
-                className="px-4 py-2 rounded-lg bg-white text-[#4a3f36] text-sm border border-[#d4cdc4] hover:bg-[#1a4a3a]/6 hover:text-[#1a4a3a] hover:border-[#1a4a3a]/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
-              >
-                Yes, useful
-              </button>
-              <button
-                onClick={() => handleOverallFeedback("not_useful")}
-                className="px-4 py-2 rounded-lg bg-white text-[#4a3f36] text-sm border border-[#d4cdc4] hover:bg-red-50 hover:text-red-700 hover:border-red-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
-              >
-                Not useful
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="text-center py-2">
-          <button
-            onClick={handleRegenerate}
-            disabled={regenerating}
-            className="text-sm text-gray-400 hover:text-gray-700 underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 rounded disabled:opacity-40 transition-colors"
-          >
-            {regenerating ? "Starting regeneration…" : "Re-run analysis"}
-          </button>
         </div>
       </div>
     </main>

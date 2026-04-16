@@ -1,6 +1,6 @@
 "use client";
 
-import { normalizeHttpUrl } from "@/lib/report/sourceLinks";
+import { getMeaningfulSourceLinkText, normalizeHttpUrl } from "@/lib/report/sourceLinks";
 
 interface SourceItem {
   id: string;
@@ -74,6 +74,7 @@ export function SourcesPanel({ sources }: SourcesPanelProps) {
             <ul className="space-y-1.5" role="list">
               {items.map((source) => {
                 const normalizedUrl = normalizeHttpUrl(source.url);
+                const linkText = getMeaningfulSourceLinkText(source.title, normalizedUrl ?? source.url);
 
                 return (
                   <li key={source.id} className="flex items-start gap-2 text-sm">
@@ -85,13 +86,13 @@ export function SourcesPanel({ sources }: SourcesPanelProps) {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[#4a3f36] hover:text-[#1c1713] underline underline-offset-2 decoration-gray-300 hover:decoration-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 rounded transition-colors"
-                          aria-label={`Source: ${source.title} (opens in new tab)`}
+                          aria-label={`Source: ${linkText} (opens in new tab)`}
                         >
-                          {source.title}
+                          {linkText}
                         </a>
                       ) : (
                         <div>
-                          <span className="text-[#7a6d63]">{source.title}</span>
+                          <span className="text-[#7a6d63]">{linkText}</span>
                           {source.url && (
                             <p className="mt-0.5 text-xs text-[#b0a496]">Link unavailable</p>
                           )}

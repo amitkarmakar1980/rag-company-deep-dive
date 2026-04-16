@@ -1,6 +1,6 @@
 "use client";
 
-import { getHostnameFromUrl, normalizeHttpUrl } from "@/lib/report/sourceLinks";
+import { getHostnameFromUrl, getMeaningfulSourceLinkText, normalizeHttpUrl } from "@/lib/report/sourceLinks";
 
 interface CitationItem {
   source_id: string;
@@ -69,7 +69,7 @@ export function CitationResourcesPanel({ sections, sources, onBackToTop }: Citat
 
       aggregated.set(key, {
         key,
-        title: citationTitle,
+        title: getMeaningfulSourceLinkText(citationTitle, resolvedUrl),
         url: resolvedUrl,
         hostname: getHostnameFromUrl(resolvedUrl),
         sourceType: source?.type ?? "citation",
@@ -138,6 +138,7 @@ export function CitationResourcesPanel({ sections, sources, onBackToTop }: Citat
                   href={citation.url}
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label={`Citation: ${citation.title} (opens in new tab)`}
                   className="text-sm font-medium text-[#4a3f36] underline decoration-[#d4cdc4] underline-offset-2 hover:text-[#1c1713] hover:decoration-[#7a6d63] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 rounded transition-colors"
                 >
                   {citation.title}

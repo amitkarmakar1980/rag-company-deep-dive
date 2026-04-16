@@ -71,7 +71,7 @@ function getDetailedRecommendation(report: HistoryMetricReport | null): string |
     executiveRecommendation: executiveSummary?.recommendation,
     pursuitStance: executiveSummary?.pursuit_stance,
     interviewRecommendation: interviewDecision?.pursue_recommendation,
-    candidateFitScore: report?.candidateFitScore ?? null,
+    candidateFitScore: report?.candidate_fit_score ?? null,
   });
 
   return canonical.displayLabel;

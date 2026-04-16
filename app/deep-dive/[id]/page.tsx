@@ -259,14 +259,6 @@ function getFaviconUrl(domain: string | null | undefined): string | null {
   return host ? `https://www.google.com/s2/favicons?domain=${host}&sz=128` : null;
 }
 
-function scoreTone(value: number | null | undefined): string {
-  if (value == null) return "bg-[#f0ece4] text-[#7a6d63]";
-  if (value >= 8) return "bg-[#1a4a3a] text-white";
-  if (value >= 6) return "bg-[#4a7a8a] text-white";
-  if (value >= 4) return "bg-amber-400 text-[#1c1713]";
-  return "bg-red-400 text-white";
-}
-
 function getScoreMeterTheme(value: number | null | undefined) {
   if (value == null) {
     return {
@@ -1029,7 +1021,6 @@ export default function ReportPage() {
         : freshestSourceAgeDays === 1
         ? "1 day"
         : `${freshestSourceAgeDays} days`;
-      const badge = freshestSourceAgeDays == null ? "Missing Dates" : freshestSourceAgeDays <= 30 ? "Fresh" : freshestSourceAgeDays <= 90 ? "Aging" : "Stale";
 
       return {
         label: "Evidence Freshness",
@@ -1044,7 +1035,6 @@ export default function ReportPage() {
     (() => {
       const style = getRiskCountStyle(unresolvedRiskCount);
       const unknownCount = unknownsToValidateData?.unknowns.length ?? 0;
-      const badge = unresolvedRiskCount === 0 ? "Clear" : unresolvedRiskCount <= 2 ? "Monitor" : "Needs Validation";
 
       return {
         label: "Unresolved Risks",

@@ -3,10 +3,18 @@
 import { StructuredReport, ScoreDetail, RiskScoreDetail } from "@/lib/types";
 
 type Data = StructuredReport["assessment_snapshot"];
+type MetricDetail = ScoreDetail | RiskScoreDetail;
+
+const FALLBACK_DETAIL: ScoreDetail = {
+  score: null,
+  label: "NOT_ASSESSED",
+  rationale: "This metric was not stored for this report.",
+  confidence: "low",
+};
 
 interface MetricCardProps {
   label: string;
-  detail: ScoreDetail | RiskScoreDetail;
+  detail?: MetricDetail | null;
   inverse?: boolean;
 }
 
@@ -68,18 +76,30 @@ function getBarColor(label: string, inverse: boolean) {
   }
 }
 
+function normalizeDetail(detail?: MetricDetail | null): MetricDetail {
+  if (!detail) {
+    return FALLBACK_DETAIL;
+  }
+
+  return {
+    ...FALLBACK_DETAIL,
+    ...detail,
+  };
+}
+
 function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
-  const isNotAssessed = detail.label === "NOT_ASSESSED" || detail.score === null;
-  const labelStyle = getLabelStyle(detail.label, inverse);
-  const barColor = getBarColor(detail.label, inverse);
-  const score = detail.score ?? 0;
+  const resolvedDetail = normalizeDetail(detail);
+  const isNotAssessed = resolvedDetail.label === "NOT_ASSESSED" || resolvedDetail.score === null;
+  const labelStyle = getLabelStyle(resolvedDetail.label, inverse);
+  const barColor = getBarColor(resolvedDetail.label, inverse);
+  const score = resolvedDetail.score ?? 0;
   const barWidth = isNotAssessed
     ? "0%"
     : inverse
     ? `${((10 - score + 1) / 10) * 100}%`
     : `${(score / 10) * 100}%`;
 
-  const icon = SIGNAL_ICONS[detail.label as keyof typeof SIGNAL_ICONS];
+  const icon = SIGNAL_ICONS[resolvedDetail.label as keyof typeof SIGNAL_ICONS];
 
   if (isNotAssessed) {
     return (
@@ -90,7 +110,7 @@ function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
       >
         <div className="text-xs font-semibold text-[#9c8d81] leading-tight">{label}</div>
         <div className="text-sm font-medium text-[#9c8d81]">Not assessed</div>
-        <p className="text-xs text-[#9c8d81] leading-relaxed">{detail.rationale}</p>
+        <p className="text-xs text-[#9c8d81] leading-relaxed">{resolvedDetail.rationale}</p>
       </div>
     );
   }
@@ -99,16 +119,16 @@ function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
     <div
       className="bg-white border border-[#e4ddd4] rounded-lg p-4 space-y-3"
       role="group"
-      aria-label={`${label}: ${detail.label}`}
+      aria-label={`${label}: ${resolvedDetail.label}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="text-xs font-semibold text-[#7a6d63] leading-tight">{label}</div>
         <div
           className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium flex-shrink-0 ${labelStyle}`}
-          aria-label={`Signal strength: ${detail.label}`}
+          aria-label={`Signal strength: ${resolvedDetail.label}`}
         >
           {icon}
-          {detail.label}
+          {resolvedDetail.label}
         </div>
       </div>
 
@@ -133,20 +153,20 @@ function MetricCard({ label, detail, inverse = false }: MetricCardProps) {
         />
       </div>
 
-      <p className="text-xs text-[#7a6d63] leading-relaxed">{detail.rationale}</p>
+      <p className="text-xs text-[#7a6d63] leading-relaxed">{resolvedDetail.rationale}</p>
 
       <div className="flex items-center gap-1.5">
         <span className="text-xs text-[#9c8d81]">Confidence:</span>
         <span
           className={`text-xs font-medium ${
-            detail.confidence === "high"
+            resolvedDetail.confidence === "high"
               ? "text-emerald-600"
-              : detail.confidence === "medium"
+              : resolvedDetail.confidence === "medium"
               ? "text-amber-600"
               : "text-[#9c8d81]"
           }`}
         >
-          {detail.confidence}
+          {resolvedDetail.confidence}
         </span>
       </div>
     </div>

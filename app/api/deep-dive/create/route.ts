@@ -4,6 +4,11 @@ export const maxDuration = 300; // 5 minutes — needed for o4-mini + gpt-4o-min
 import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import {
+  sanitizeHttpUrl,
+  sanitizeMultiLineText,
+  sanitizeSingleLineText,
+} from "@/lib/ai/untrustedInput";
+import {
   getOrCreateCompany,
   createDeepDiveRequest,
   updateDeepDiveStatus,
@@ -16,10 +21,21 @@ export async function POST(req: NextRequest) {
       roleTitle,
       jobDescription,
       companyUrl,
-      profileContext,
-      customUrls,
       resumeText,
     } = await req.json();
+
+    const safeCompanyName = sanitizeSingleLineText(companyName, 140);
+    const safeRoleTitle = sanitizeSingleLineText(roleTitle, 180);
+    const safeCompanyUrl = sanitizeHttpUrl(companyUrl);
+    const safeJobDescription = sanitizeMultiLineText(jobDescription, 20000);
+    const safeResumeText = sanitizeMultiLineText(resumeText, 24000);
+
+    if (!safeCompanyName || !safeRoleTitle) {
+      return NextResponse.json(
+        { error: "Company name and role title are required." },
+        { status: 400 }
+      );
+    }
 
     // Get current user from session cookie
     const supabase = createRouteClient(req);
@@ -37,16 +53,16 @@ export async function POST(req: NextRequest) {
       .upsert({ id: user.id, email: user.email ?? "" }, { onConflict: "id", ignoreDuplicates: true });
 
     // Get or create company
-    const company = await getOrCreateCompany(companyName, companyUrl);
+    const company = await getOrCreateCompany(safeCompanyName, safeCompanyUrl);
 
     // Create deep dive request
     const request = await createDeepDiveRequest(
       user.id,
       company.id,
-      roleTitle,
-      jobDescription,
-      companyUrl,
-      profileContext
+      safeRoleTitle,
+      safeJobDescription,
+      safeCompanyUrl,
+      undefined
     );
 
     // after() keeps the serverless function alive after the response is sent (Vercel waitUntil).
@@ -56,13 +72,13 @@ export async function POST(req: NextRequest) {
         request.id,
         company.id,
         user.id,
-        companyName,
-        roleTitle,
-        companyUrl,
-        customUrls,
-        jobDescription,
-        profileContext,
-        resumeText || undefined
+        safeCompanyName,
+        safeRoleTitle,
+        safeCompanyUrl,
+        undefined,
+        safeJobDescription,
+        undefined,
+        safeResumeText
       ).catch((err) =>
         console.error("[Pipeline] Unhandled top-level error:", err)
       )

@@ -1,6 +1,7 @@
 "use client";
 
 import { StructuredReport, PursueRecommendation } from "@/lib/types";
+import { getCanonicalRecommendation } from "@/lib/report/recommendation";
 
 type Props = { data: StructuredReport["interview_decision_summary"] };
 
@@ -28,6 +29,9 @@ function isRequiresResume(value: string | null | undefined): boolean {
 }
 
 export function InterviewDecisionSummary({ data }: Props) {
+  const recommendation = getCanonicalRecommendation({
+    interviewRecommendation: data.pursue_recommendation,
+  });
   const cfg = PURSUE_CONFIG[data.pursue_recommendation] ?? PURSUE_CONFIG["Selective Pursue"];
   const hasPositioningAngle = !isRequiresResume(data.best_positioning_angle);
 
@@ -36,7 +40,7 @@ export function InterviewDecisionSummary({ data }: Props) {
       {/* Recommendation header */}
       <div className="px-5 py-4 border-b border-black/5 flex items-start gap-3 flex-wrap">
         <span className={`flex-shrink-0 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-full ${cfg.badge}`}>
-          {data.pursue_recommendation}
+          {recommendation.displayLabel}
         </span>
         <p className={`text-sm font-medium ${cfg.text} leading-relaxed`}>{data.why}</p>
       </div>

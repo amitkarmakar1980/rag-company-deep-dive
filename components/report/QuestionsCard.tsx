@@ -1,18 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { StructuredReport, QuestionItem } from "@/lib/types";
 
 type Data = StructuredReport["questions_to_ask"];
 
 function QuestionRow({ item, rank }: { item: QuestionItem; rank?: number }) {
   const [open, setOpen] = useState(false);
+  const contentId = useId();
 
   return (
     <li className="border border-[#e4ddd4] rounded-xl overflow-hidden bg-white">
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
+        aria-controls={contentId}
         className="w-full text-left px-4 py-3.5 flex items-start justify-between gap-3 hover:bg-[#f5f1e8] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/40 transition-colors"
       >
         <div className="flex items-start gap-3 min-w-0">
@@ -32,7 +35,7 @@ function QuestionRow({ item, rank }: { item: QuestionItem; rank?: number }) {
       </button>
 
       {open && (
-        <div className="px-4 pb-4 pt-1 space-y-3 border-t border-[#f0ece4]">
+        <div id={contentId} className="px-4 pb-4 pt-1 space-y-3 border-t border-[#f0ece4]">
           <div>
             <p className="text-xs font-semibold text-[#9c8d81] uppercase tracking-wide mb-1">Why it matters</p>
             <p className="text-sm text-[#4a3f36] leading-relaxed">{item.why_it_matters}</p>

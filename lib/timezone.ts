@@ -44,6 +44,18 @@ function isValidDate(value: Date): boolean {
   return !Number.isNaN(value.getTime());
 }
 
+function parseTimestamp(value: string): Date | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const normalized = /(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(trimmed)
+    ? trimmed
+    : `${trimmed.replace(" ", "T")}Z`;
+
+  const date = new Date(normalized);
+  return isValidDate(date) ? date : null;
+}
+
 export function getRequestTimeZoneLabel(timeZone: string): string {
   return US_TIME_ZONE_LABELS[timeZone] ?? getIntlTimeZoneLabel(timeZone);
 }
@@ -62,8 +74,8 @@ export function useRequestTimeZone() {
 }
 
 export function formatDateTimeParts(iso: string, timeZone: string) {
-  const date = new Date(iso);
-  if (!isValidDate(date)) {
+  const date = parseTimestamp(iso);
+  if (!date) {
     return null;
   }
 
@@ -96,9 +108,9 @@ export function formatDateTimeWithZone(iso: string | null | undefined, timeZone:
 export function formatGenerationDuration(startIso: string | null | undefined, endIso: string | null | undefined): string | null {
   if (!startIso || !endIso) return null;
 
-  const start = new Date(startIso);
-  const end = new Date(endIso);
-  if (!isValidDate(start) || !isValidDate(end)) return null;
+  const start = parseTimestamp(startIso);
+  const end = parseTimestamp(endIso);
+  if (!start || !end) return null;
 
   const totalSeconds = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000));
   const hours = Math.floor(totalSeconds / 3600);

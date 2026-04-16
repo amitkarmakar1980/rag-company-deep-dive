@@ -18,15 +18,17 @@ const siteUrl =
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : "http://localhost:3000");
 
+const faviconPath = "/icon.svg?v=brain-2";
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Company Deep-Dive Engine - Candidate Decision Intelligence",
   description: "AI-powered company and role analysis tool. Get grounded intelligence before your interviews.",
   keywords: "job search, company analysis, role evaluation, interview preparation",
   icons: {
-    icon: "/icon.svg",
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
+    icon: faviconPath,
+    shortcut: faviconPath,
+    apple: faviconPath,
   },
   openGraph: {
     title: "Company Deep-Dive Engine",

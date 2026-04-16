@@ -200,11 +200,11 @@ export function GapManagementSection({
           </div>
           <div className="px-4 py-3 space-y-2">
             <div>
-              <p className="text-xs font-medium text-amber-700 mb-0.5">Reframe</p>
+              <p className="text-xs font-medium text-amber-700 mb-0.5">Honest framing</p>
               <p className="text-sm text-[#4a3f36] leading-relaxed">{g.reframe}</p>
             </div>
             <div>
-              <p className="text-xs font-medium text-emerald-700 mb-0.5">What to say</p>
+              <p className="text-xs font-medium text-emerald-700 mb-0.5">What to say honestly</p>
               <p className="text-sm text-[#4a3f36] italic leading-relaxed">&ldquo;{g.talking_point}&rdquo;</p>
             </div>
           </div>
@@ -250,10 +250,10 @@ export function PositioningStrategySection({
   return (
     <div className="space-y-5">
       <div className="bg-[#1a4a3a] rounded-xl px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-1.5">
+        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[#d8f3e7]">
           Your Headline
         </p>
-        <p className="text-base font-semibold text-white leading-snug">{data.headline}</p>
+        <p className="text-base font-semibold leading-snug text-[#f6fbf8]">{data.headline}</p>
       </div>
 
       <div>

@@ -103,6 +103,9 @@ export interface Report {
   role_leverage_score: number;
   execution_risk_score: number;
   candidate_fit_score: number;
+  ai_query_count?: number;
+  source_count?: number;
+  source_host_count?: number;
   summary_json?: Record<string, any>;
   created_at: string;
 }

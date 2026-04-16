@@ -26,6 +26,19 @@ import {
   ReportTokenUsage,
   LLMCallUsage,
 } from "@/lib/types";
+import { getCanonicalRecommendation } from "@/lib/report/recommendation";
+
+function getHostname(url: string | null | undefined): string | null {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
 
 // ─── Evidence quality assessment ─────────────────────────────────────────────
 
@@ -267,6 +280,19 @@ export async function assembleReport(requestId: string, retrievalQueries?: strin
     ...interviewData!,
   };
 
+  const candidateFitScore = structured.assessment_snapshot.candidate_role_match.score ?? 0;
+
+  const canonicalRecommendation = getCanonicalRecommendation({
+    executiveRecommendation: structured.executive_summary.recommendation,
+    pursuitStance: structured.executive_summary.pursuit_stance,
+    interviewRecommendation: structured.interview_decision_summary.pursue_recommendation,
+    candidateFitScore,
+  });
+
+  structured.executive_summary.recommendation = canonicalRecommendation.reportRecommendation;
+  structured.executive_summary.pursuit_stance = canonicalRecommendation.pursuitStance;
+  structured.interview_decision_summary.pursue_recommendation = canonicalRecommendation.interviewRecommendation;
+
   // 7. Build token usage
   const tokenUsage: ReportTokenUsage = {
     calls: [deepUsage!, interviewUsage!],
@@ -279,6 +305,18 @@ export async function assembleReport(requestId: string, retrievalQueries?: strin
       deepUsage!.estimated_cost_usd + interviewUsage!.estimated_cost_usd,
   };
 
+  const distinctSourceHosts = new Set(
+    sources
+      .map((source) => getHostname(source.url))
+      .filter((host): host is string => !!host)
+  );
+
+  const reportMetrics = {
+    ai_query_count: tokenUsage.calls.length,
+    source_count: sources.length,
+    source_host_count: distinctSourceHosts.size,
+  };
+
   // 8. Finalize report record (update with real scores + clear checkpoint)
   const snap = structured.assessment_snapshot;
   const scores = {
@@ -286,10 +324,10 @@ export async function assembleReport(requestId: string, retrievalQueries?: strin
     org_clarity: snap.org_clarity.score ?? 5,
     role_leverage: snap.role_leverage.score ?? 5,
     execution_risk: snap.execution_risk.score ?? 5,
-    candidate_fit: snap.candidate_role_match.score ?? 0, // 0 = not assessed
+    candidate_fit: candidateFitScore, // 0 = not assessed
   };
   const recommendation = validateRecommendation(
-    structured.executive_summary.recommendation
+    canonicalRecommendation.reportRecommendation
   );
 
   let finalReport: Report;
@@ -297,13 +335,13 @@ export async function assembleReport(requestId: string, retrievalQueries?: strin
     // Clear checkpoint (no longer needed) and store final token usage
     finalReport = await updateReport(existingReport.id, recommendation, scores, {
       token_usage: tokenUsage,
-    });
+    }, reportMetrics);
     // Clear any stale sections from a prior partial run
     await clearReportSections(finalReport.id);
   } else {
     finalReport = await createReport(requestId, recommendation, scores, {
       token_usage: tokenUsage,
-    });
+    }, reportMetrics);
   }
 
   // 9. Store sections

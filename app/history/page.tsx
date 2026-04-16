@@ -18,6 +18,9 @@ interface HistoryItem {
     createdAt: string | null;
     recommendation: string;
     candidateFitScore: number | null;
+    aiQueryCount: number;
+    sourceCount: number;
+    sourceHostCount: number;
     sectionKeys: string[];
   } | null;
 }
@@ -28,6 +31,42 @@ interface HistoryStats {
   aiQueries: number;
 }
 
+function deriveHistoryStats(items: HistoryItem[]): HistoryStats {
+  const websiteHosts = new Set<string>();
+  let totalReports = 0;
+  let aiQueries = 0;
+
+  for (const item of items) {
+    if (item.report) {
+      totalReports += 1;
+      aiQueries += item.report.aiQueryCount;
+    }
+
+    const host = getFaviconUrl(item.companyUrl);
+    if (host) {
+      try {
+        websiteHosts.add(new URL(host).searchParams.get("domain") ?? host);
+      } catch {
+        websiteHosts.add(host);
+      }
+    }
+  }
+
+  return {
+    totalReports,
+    websitesSearched: websiteHosts.size,
+    aiQueries,
+  };
+}
+
+function mergeHistoryStats(primary: Partial<HistoryStats> | null | undefined, fallback: HistoryStats): HistoryStats {
+  return {
+    totalReports: Math.max(primary?.totalReports ?? 0, fallback.totalReports),
+    websitesSearched: Math.max(primary?.websitesSearched ?? 0, fallback.websitesSearched),
+    aiQueries: Math.max(primary?.aiQueries ?? 0, fallback.aiQueries),
+  };
+}
+
 const DEFAULT_STATS: HistoryStats = {
   totalReports: 0,
   websitesSearched: 0,
@@ -35,10 +74,15 @@ const DEFAULT_STATS: HistoryStats = {
 };
 
 const REC_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
-  pursue:            { label: "Aggressive Pursue", bg: "bg-[#1a4a3a]/8",  text: "text-[#1a4a3a]", dot: "bg-[#1a4a3a]" },
-  pursue_cautiously: { label: "Cautious Pursue",   bg: "bg-amber-50",     text: "text-amber-700",  dot: "bg-amber-500"  },
-  avoid:             { label: "Pass",               bg: "bg-red-50",       text: "text-red-700",    dot: "bg-red-500"    },
-  need_more_signal:  { label: "Need More Signal",   bg: "bg-[#f0ece4]",   text: "text-[#7a6d63]",  dot: "bg-[#9c8d81]"  },
+  pursue:              { label: "Pursue",             bg: "bg-[#1a4a3a]/8", text: "text-[#1a4a3a]", dot: "bg-[#1a4a3a]" },
+  pursue_cautiously:   { label: "Cautious Pursue",    bg: "bg-amber-50",    text: "text-amber-700", dot: "bg-amber-500" },
+  avoid:               { label: "Do Not Pursue",     bg: "bg-red-50",      text: "text-red-700",   dot: "bg-red-500" },
+  need_more_signal:    { label: "Do Not Pursue",     bg: "bg-red-50",      text: "text-red-700",   dot: "bg-red-500" },
+  "Aggressive Pursue": { label: "Aggressive Pursue", bg: "bg-[#1a4a3a]/8", text: "text-[#1a4a3a]", dot: "bg-[#1a4a3a]" },
+  "Selective Pursue":  { label: "Selective Pursue",  bg: "bg-sky-50",      text: "text-sky-700",   dot: "bg-sky-500" },
+  "Cautious Pursue":   { label: "Cautious Pursue",   bg: "bg-amber-50",    text: "text-amber-700", dot: "bg-amber-500" },
+  Pass:                { label: "Do Not Pursue",     bg: "bg-red-50",      text: "text-red-700",   dot: "bg-red-500" },
+  "Do Not Pursue":    { label: "Do Not Pursue",     bg: "bg-red-50",      text: "text-red-700",   dot: "bg-red-500" },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
@@ -81,6 +125,75 @@ function getFaviconUrl(domain: string | null): string | null {
   }
 }
 
+function HistoryStatCard({
+  label,
+  value,
+  description,
+  icon,
+  iconTone,
+  loading,
+}: {
+  label: string;
+  value: number;
+  description: string;
+  icon: React.ReactNode;
+  iconTone: string;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#d8d0c5] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(28,23,19,0.05)]">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">{label}</p>
+          {loading ? (
+            <div className="mt-3 h-9 w-20 animate-pulse rounded-lg bg-[#f0ece4]" aria-hidden />
+          ) : (
+            <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#1c1713]">{value}</p>
+          )}
+          <p className="mt-1 text-sm text-[#7a6d63]">{description}</p>
+        </div>
+        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${iconTone}`} aria-hidden>
+          {icon}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function HistoryListSkeleton() {
+  return (
+    <div className="space-y-4" aria-hidden>
+      {[1, 2, 3].map((item) => (
+        <div key={item} className="bg-white border border-[#e4ddd4] rounded-xl p-5 shadow-[0_1px_4px_rgba(28,23,19,0.05),0_4px_16px_rgba(28,23,19,0.04)] animate-pulse">
+          <div className="flex items-start gap-4">
+            <div className="h-9 w-9 rounded-lg bg-[#f0ece4] mt-0.5" />
+            <div className="flex-1 min-w-0 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-2">
+                  <div className="h-4 w-36 rounded bg-[#f0ece4]" />
+                  <div className="h-4 w-52 max-w-full rounded bg-[#f0ece4]" />
+                </div>
+                <div className="h-6 w-28 rounded-full bg-[#f0ece4]" />
+              </div>
+              <div className="h-4 w-40 rounded bg-[#f0ece4]" />
+              <div className="flex flex-wrap gap-1.5">
+                <div className="h-6 w-20 rounded-md bg-[#f0ece4]" />
+                <div className="h-6 w-24 rounded-md bg-[#f0ece4]" />
+                <div className="h-6 w-16 rounded-md bg-[#f0ece4]" />
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <div className="h-4 w-40 rounded bg-[#f0ece4]" />
+                <div className="h-4 w-28 rounded bg-[#f0ece4]" />
+                <div className="h-4 w-24 rounded bg-[#f0ece4]" />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function HistoryPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [stats, setStats] = useState<HistoryStats>(DEFAULT_STATS);
@@ -96,16 +209,14 @@ export default function HistoryPage() {
       const data = await res.json();
       if (Array.isArray(data)) {
         setHistory(data);
-        setStats({
-          totalReports: data.filter((item) => item.report).length,
-          websitesSearched: 0,
-          aiQueries: 0,
-        });
+        setStats(deriveHistoryStats(data));
         return;
       }
 
-      setHistory(data.items ?? []);
-      setStats(data.stats ?? DEFAULT_STATS);
+      const nextItems = data.items ?? [];
+      const derivedStats = deriveHistoryStats(nextItems);
+      setHistory(nextItems);
+      setStats(mergeHistoryStats(data.stats, derivedStats));
     } finally {
       setLoading(false);
     }
@@ -120,7 +231,9 @@ export default function HistoryPage() {
     setDeleting(requestId);
     try {
       const res = await fetch(`/api/history/${requestId}`, { method: "DELETE" });
-      if (res.ok) setHistory((prev) => prev.filter((h) => h.requestId !== requestId));
+      if (res.ok) {
+        await fetchHistory();
+      }
       else alert("Failed to delete. Please try again.");
     } catch {
       alert("Failed to delete. Please try again.");
@@ -149,68 +262,49 @@ export default function HistoryPage() {
         </div>
 
         <section className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Your deep dive dashboard">
-          <div className="rounded-2xl border border-[#d8d0c5] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(28,23,19,0.05)]">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Reports Generated</p>
-                <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#1c1713]">{stats.totalReports}</p>
-                <p className="mt-1 text-sm text-[#7a6d63]">Completed intelligence briefs in your workspace</p>
-              </div>
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#1a4a3a]/8 text-[#1a4a3a]" aria-hidden>
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </span>
-            </div>
-          </div>
+          <HistoryStatCard
+            label="Reports Generated"
+            value={stats.totalReports}
+            description="Completed intelligence briefs in your workspace"
+            loading={loading}
+            iconTone="bg-[#1a4a3a]/8 text-[#1a4a3a]"
+            icon={
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            }
+          />
 
-          <div className="rounded-2xl border border-[#d8d0c5] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(28,23,19,0.05)]">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Websites Searched</p>
-                <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#1c1713]">{stats.websitesSearched}</p>
-                <p className="mt-1 text-sm text-[#7a6d63]">Distinct company, news, and career domains analyzed</p>
-              </div>
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#4a7a8a]/10 text-[#4a7a8a]" aria-hidden>
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.6 9h16.8M3.6 15h16.8M12 3a15.3 15.3 0 010 18M12 3a15.3 15.3 0 000 18" />
-                </svg>
-              </span>
-            </div>
-          </div>
+          <HistoryStatCard
+            label="Websites Searched"
+            value={stats.websitesSearched}
+            description="Distinct company, news, and career domains analyzed"
+            loading={loading}
+            iconTone="bg-[#4a7a8a]/10 text-[#4a7a8a]"
+            icon={
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.6 9h16.8M3.6 15h16.8M12 3a15.3 15.3 0 010 18M12 3a15.3 15.3 0 000 18" />
+              </svg>
+            }
+          />
 
-          <div className="rounded-2xl border border-[#d8d0c5] bg-white px-5 py-5 shadow-[0_8px_24px_rgba(28,23,19,0.05)]">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">AI Queries</p>
-                <p className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-[#1c1713]">{stats.aiQueries}</p>
-                <p className="mt-1 text-sm text-[#7a6d63]">Total model calls used to build your briefs</p>
-              </div>
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-700" aria-hidden>
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </span>
-            </div>
-          </div>
+          <HistoryStatCard
+            label="AI Queries"
+            value={stats.aiQueries}
+            description="Total model calls used to build your briefs"
+            loading={loading}
+            iconTone="bg-amber-100 text-amber-700"
+            icon={
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            }
+          />
         </section>
 
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white border border-[#e4ddd4] rounded-xl p-5 shadow-[0_1px_4px_rgba(28,23,19,0.06)] animate-pulse">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-[#f0ece4]" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-[#f0ece4] rounded w-1/3" />
-                    <div className="h-3 bg-[#f0ece4] rounded w-1/2" />
-                    <div className="h-3 bg-[#f0ece4] rounded w-2/3" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <HistoryListSkeleton />
         ) : history.length === 0 ? (
           <div className="text-center py-16 bg-white border border-[#e4ddd4] rounded-xl shadow-[0_2px_12px_rgba(28,23,19,0.05)]">
             <p className="text-[#7a6d63] text-sm mb-5">No deep dives yet.</p>
@@ -317,6 +411,31 @@ export default function HistoryPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             Generated in {generationDuration}
+                          </span>
+                        )}
+                        {item.report && (
+                          <span className="text-xs text-[#9c8d81] flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            {item.report.aiQueryCount} AI queries
+                          </span>
+                        )}
+                        {item.report && item.report.sourceHostCount > 0 && (
+                          <span className="text-xs text-[#9c8d81] flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3.6 9h16.8M3.6 15h16.8M12 3a15.3 15.3 0 010 18M12 3a15.3 15.3 0 000 18" />
+                            </svg>
+                            {item.report.sourceHostCount} websites
+                          </span>
+                        )}
+                        {item.report && item.report.sourceCount > 0 && (
+                          <span className="text-xs text-[#9c8d81] flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            {item.report.sourceCount} sources
                           </span>
                         )}
                         {item.hasJobDescription && (

@@ -29,19 +29,21 @@ export function FiveMinuteBrief({ data }: Props) {
       </div>
 
       {/* Top 3 smart questions */}
-      <div className="bg-[#1a4a3a] rounded-xl px-5 py-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-3">Top 3 Smart Questions</p>
+      <section aria-labelledby="five-minute-brief-smart-questions" className="bg-[#1a4a3a] rounded-xl px-5 py-4">
+        <h3 id="five-minute-brief-smart-questions" className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#d8f3e7]">
+          Top 3 Smart Questions
+        </h3>
         <ol className="space-y-2">
           {(data.top_3_smart_questions ?? []).map((q, i) => (
             <li key={i} className="flex items-start gap-3">
-              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-700 text-[#b0a496] text-xs font-bold flex items-center justify-center mt-0.5">
+              <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/12 text-xs font-bold text-white">
                 {i + 1}
               </span>
-              <span className="text-sm text-gray-100 leading-relaxed">{q}</span>
+              <span className="text-sm leading-relaxed text-[#f6fbf8]">{q}</span>
             </li>
           ))}
         </ol>
-      </div>
+      </section>
     </div>
   );
 }

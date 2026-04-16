@@ -260,8 +260,6 @@ export function DeepDiveForm() {
     roleTitle: "",
     companyUrl: "",
     jobDescription: "",
-    profileContext: "",
-    customUrls: "",
   });
   const [progress, setProgress] = useState<string | null>(null);
 
@@ -313,10 +311,6 @@ export function DeepDiveForm() {
           roleTitle: formData.roleTitle,
           companyUrl: formData.companyUrl || undefined,
           jobDescription: formData.jobDescription || undefined,
-          profileContext: formData.profileContext || undefined,
-          customUrls: formData.customUrls
-            ? formData.customUrls.split("\n").filter((u) => u.trim())
-            : undefined,
           // Send resume if already stored — pipeline will auto-personalize at the end
           resumeText: stored?.text || undefined,
         }),
@@ -374,6 +368,10 @@ export function DeepDiveForm() {
 
       {step === "details" && (
         <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <p className="font-semibold uppercase tracking-[0.08em]">Important</p>
+            <p className="mt-1 font-medium">Verify the extracted details before generating the brief. If anything looks off, edit it manually here.</p>
+          </div>
           {urlError && (
             <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm">
               {urlError}
@@ -417,28 +415,8 @@ export function DeepDiveForm() {
               value={formData.jobDescription}
               onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
               className={INPUT_CLASS}
-              rows={4}
+              rows={8}
               placeholder="Paste the full job description here…"
-            />
-          </div>
-          <div>
-            <label className={LABEL_CLASS}>Hiring Manager / Recruiter Profile</label>
-            <textarea
-              value={formData.profileContext}
-              onChange={(e) => setFormData({ ...formData, profileContext: e.target.value })}
-              className={INPUT_CLASS}
-              rows={3}
-              placeholder="Notes about the hiring manager or recruiter…"
-            />
-          </div>
-          <div>
-            <label className={LABEL_CLASS}>Additional URLs</label>
-            <textarea
-              value={formData.customUrls}
-              onChange={(e) => setFormData({ ...formData, customUrls: e.target.value })}
-              className={INPUT_CLASS}
-              rows={3}
-              placeholder="One URL per line…"
             />
           </div>
 

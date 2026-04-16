@@ -7,7 +7,7 @@ import { FeedbackButtons } from "@/components/FeedbackButtons";
 import { SourcesPanel } from "@/components/report/SourcesPanel";
 import { CitationResourcesPanel } from "@/components/report/CitationResourcesPanel";
 import { ResumeUploadPanel } from "@/components/report/ResumeUploadPanel";
-import { BrandMark } from "@/components/BrandMark";
+import { getCanonicalRecommendation } from "@/lib/report/recommendation";
 import {
   CandidateRoleMatchSection,
   StrengthsToEmphasizeSection,
@@ -19,7 +19,7 @@ import {
 } from "@/components/report/CandidateOverlaySections";
 import { ObjectionHandlingSection } from "@/components/report/ObjectionHandling";
 import { SectionShell } from "@/components/report/SectionShell";
-import { RecommendationType, ReportScore, CandidateOverlayData, ReportTokenUsage } from "@/lib/types";
+import { RecommendationType, ReportScore, CandidateOverlayData, ReportTokenUsage, StructuredReport } from "@/lib/types";
 import { useResumeStore } from "@/lib/hooks/useResumeStore";
 import { normalizeHttpUrl } from "@/lib/report/sourceLinks";
 import { formatDateTimeParts, useRequestTimeZone } from "@/lib/timezone";
@@ -151,10 +151,20 @@ const RECOMMENDATION_META: Record<RecommendationType, { label: string; icon: str
   },
   need_more_signal: {
     label: "Need More Signal",
-    icon: "?",
-    tone: "border-[#e8dfd0] bg-[#f7f2ea] text-[#6b5e52]",
+    icon: "!",
+    tone: "border-[#ead7d2] bg-[#fbefeb] text-[#8a3d2f]",
   },
 };
+
+function parseSectionContent<T>(content: string | null | undefined): T | null {
+  if (!content) return null;
+
+  try {
+    return JSON.parse(content) as T;
+  } catch {
+    return null;
+  }
+}
 
 const OVERLAY_SECTIONS = [
   { key: "candidate_role_match", title: "Candidate Role Match", subtitle: "How your background maps to the role, seniority, and likely hiring bar." },
@@ -184,6 +194,57 @@ function formatUsd(value: number): string {
   return `$${value.toFixed(3)}`;
 }
 
+function titleCaseWord(value: string | null | undefined): string {
+  if (!value) return "Unknown";
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
+function getOverviewCardStyle(score: number | null | undefined) {
+  if (score == null) {
+    return {
+      card: "border-[#e5dbcf] bg-[#faf6ef]",
+      label: "text-[#9c8d81]",
+      value: "text-[#1c1713]",
+      detail: "text-[#7a6d63]",
+      badge: "bg-[#f0ece4] text-[#5f554c]",
+    };
+  }
+
+  if (score >= 8) {
+    return {
+      card: "border-[#cfe1d8] bg-[#edf6f0]",
+      label: "text-[#4a7a5a]",
+      value: "text-[#1a4a3a]",
+      detail: "text-[#4f6a59]",
+      badge: "bg-[#1a4a3a] text-white",
+    };
+  }
+
+  if (score >= 5) {
+    return {
+      card: "border-[#eadfbf] bg-[#fff6e7]",
+      label: "text-[#8a6914]",
+      value: "text-[#8a5a14]",
+      detail: "text-[#8a7050]",
+      badge: "bg-[#8a5a14] text-white",
+    };
+  }
+
+  return {
+    card: "border-[#ead7d2] bg-[#fbefeb]",
+    label: "text-[#8a3d2f]",
+    value: "text-[#8a3d2f]",
+    detail: "text-[#8b6259]",
+    badge: "bg-[#8a3d2f] text-white",
+  };
+}
+
+function getRiskCountStyle(count: number) {
+  if (count <= 0) return getOverviewCardStyle(8);
+  if (count <= 2) return getOverviewCardStyle(5);
+  return getOverviewCardStyle(3);
+}
+
 function extractHostname(url: string | null | undefined): string | null {
   if (!url) return null;
   try {
@@ -206,36 +267,187 @@ function scoreTone(value: number | null | undefined): string {
   return "bg-red-400 text-white";
 }
 
-function scoreBarTone(value: number | null | undefined): string {
-  if (value == null) return "bg-[#d4cdc4]";
-  if (value >= 8) return "bg-[#1a4a3a]";
-  if (value >= 6) return "bg-[#4a7a8a]";
-  if (value >= 4) return "bg-amber-400";
-  return "bg-red-400";
+function getScoreMeterTheme(value: number | null | undefined) {
+  if (value == null) {
+    return {
+      card: "bg-[#fffdfa]",
+      accent: "#9c8d81",
+      dialFace: "#f7f2ea",
+      dialGlow: "rgba(156,141,129,0.12)",
+      needle: "#7a6d63",
+      center: "#f0ece4",
+      centerText: "#5f554c",
+      scaleText: "text-[#9c8d81]",
+    };
+  }
+
+  if (value >= 8) {
+    return {
+      card: "bg-[linear-gradient(180deg,#fffdfa_0%,#f1f8f4_100%)]",
+      accent: "#1a4a3a",
+      dialFace: "#eff6f1",
+      dialGlow: "rgba(26,74,58,0.15)",
+      needle: "#1a4a3a",
+      center: "#1a4a3a",
+      centerText: "#ffffff",
+      scaleText: "text-[#4a7a5a]",
+    };
+  }
+
+  if (value >= 5) {
+    return {
+      card: "bg-[linear-gradient(180deg,#fffdfa_0%,#fff7e7_100%)]",
+      accent: "#9b6a16",
+      dialFace: "#fff5e3",
+      dialGlow: "rgba(237,174,73,0.18)",
+      needle: "#c88b20",
+      center: "#edae49",
+      centerText: "#1c1713",
+      scaleText: "text-[#9b6a16]",
+    };
+  }
+
+  return {
+    card: "bg-[linear-gradient(180deg,#fff8f6_0%,#fcefed_100%)]",
+    accent: "#b44d43",
+    dialFace: "#fbefeb",
+    dialGlow: "rgba(199,86,76,0.18)",
+    needle: "#c7564c",
+    center: "#c7564c",
+    centerText: "#ffffff",
+    scaleText: "text-[#a54d44]",
+  };
 }
 
-function ReadingMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="space-y-1.5 rounded-2xl bg-[#f7f2ea] px-3 py-3 sm:px-4 sm:py-4">
-      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">{label}</p>
-      <p className="text-[1.45rem] font-semibold tracking-[-0.05em] text-[#1c1713] sm:text-[1.65rem]">{value}</p>
-      <p className="text-[0.86rem] leading-6 text-[#7a6d63] sm:text-sm">{detail}</p>
-    </div>
-  );
+function polarToCartesian(cx: number, cy: number, radius: number, angle: number) {
+  const angleInRadians = ((angle - 90) * Math.PI) / 180;
+  return {
+    x: cx + radius * Math.cos(angleInRadians),
+    y: cy + radius * Math.sin(angleInRadians),
+  };
+}
+
+function describeArc(cx: number, cy: number, radius: number, startAngle: number, endAngle: number) {
+  const start = polarToCartesian(cx, cy, radius, endAngle);
+  const end = polarToCartesian(cx, cy, radius, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
 }
 
 function ScoreMeter({ label, value }: { label: string; value: number | null | undefined }) {
-  const normalized = value == null ? null : Math.max(0, Math.min(100, Math.round(value * 10)));
+  const score = value == null ? null : Math.max(0, Math.min(10, value));
+  const normalized = score == null ? 0 : score / 10;
+  const sweepStart = -120;
+  const sweepEnd = 120;
+  const needleAngle = sweepStart + normalized * (sweepEnd - sweepStart);
+  const theme = getScoreMeterTheme(value);
+  const meterBands = [
+    { start: 0, end: 5, color: "#c7564c" },
+    { start: 5, end: 8, color: "#edae49" },
+    { start: 8, end: 10, color: "#1a4a3a" },
+  ];
+  const ticks = Array.from({ length: 11 }, (_, index) => {
+    const tickAngle = sweepStart + (index / 10) * (sweepEnd - sweepStart);
+    const outer = polarToCartesian(110, 112, 74, tickAngle);
+    const inner = polarToCartesian(110, 112, index % 5 === 0 ? 58 : 64, tickAngle);
+
+    return {
+      label: index,
+      isMajor: index % 5 === 0,
+      x1: inner.x,
+      y1: inner.y,
+      x2: outer.x,
+      y2: outer.y,
+      textPoint: polarToCartesian(110, 112, 44, tickAngle),
+    };
+  });
+
   return (
-    <div className="space-y-2.5 rounded-2xl border border-[#ebe4da] bg-[#fffdfa] px-4 py-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-[#4a3f36]">{label}</p>
-        <span className={`inline-flex min-w-[3rem] items-center justify-center rounded-full px-2.5 py-1 text-xs font-semibold ${scoreTone(value)}`}>
-          {value == null ? "N/A" : `${value.toFixed(1)}/10`}
-        </span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-[#ece5db]">
-        <div className={`h-full rounded-full ${scoreBarTone(value)}`} style={{ width: `${normalized ?? 0}%` }} />
+    <div className={`rounded-[1.45rem] px-4 py-4 shadow-[0_14px_34px_rgba(28,23,19,0.06)] ${theme.card}`}>
+      <p className="text-[0.94rem] font-medium leading-tight text-[#4a3f36]">{label}</p>
+
+      <div
+        className="mt-3 rounded-[1.4rem] bg-[linear-gradient(180deg,rgba(255,255,255,0.95)_0%,rgba(246,240,232,0.9)_100%)] px-3 py-3"
+        aria-label={value == null ? `${label} score unavailable` : `${label} analog score meter ${Math.round(value)} out of 10`}
+      >
+        <div className="mx-auto w-full max-w-[15rem]">
+          <svg viewBox="0 0 220 160" className="w-full overflow-visible" role="presentation" aria-hidden>
+            <defs>
+              <filter id={`score-meter-glow-${label.replace(/\s+/g, "-").toLowerCase()}`} x="-40%" y="-40%" width="180%" height="180%">
+                <feDropShadow dx="0" dy="10" stdDeviation="10" floodColor={theme.dialGlow} />
+              </filter>
+            </defs>
+
+            {meterBands.map((band) => {
+              const bandStart = sweepStart + (band.start / 10) * (sweepEnd - sweepStart);
+              const bandEnd = sweepStart + (band.end / 10) * (sweepEnd - sweepStart);
+
+              return (
+                <path
+                  key={`${label}-band-${band.start}-${band.end}`}
+                  d={describeArc(110, 112, 74, bandStart, bandEnd)}
+                  fill="none"
+                  stroke={band.color}
+                  strokeWidth="18"
+                  strokeLinecap="round"
+                />
+              );
+            })}
+
+            <circle cx="110" cy="112" r="52" fill={theme.dialFace} />
+
+            {ticks.map((tick) => (
+              <g key={`${label}-tick-${tick.label}`}>
+                <line
+                  x1={tick.x1}
+                  y1={tick.y1}
+                  x2={tick.x2}
+                  y2={tick.y2}
+                  stroke={tick.isMajor ? "rgba(28,23,19,0.55)" : "rgba(28,23,19,0.22)"}
+                  strokeWidth={tick.isMajor ? 3 : 2}
+                  strokeLinecap="round"
+                />
+                {tick.isMajor && (
+                  <text
+                    x={tick.textPoint.x}
+                    y={tick.textPoint.y + 4}
+                    textAnchor="middle"
+                    className="fill-current text-[10px] font-semibold"
+                    style={{ color: "rgba(28,23,19,0.62)" }}
+                  >
+                    {tick.label}
+                  </text>
+                )}
+              </g>
+            ))}
+
+            {score != null && (
+              <g transform={`rotate(${needleAngle} 110 112)`}>
+                <path d="M 110 62 L 116 114 L 104 114 Z" fill={theme.needle} />
+              </g>
+            )}
+
+            <circle cx="110" cy="112" r="11" fill={theme.needle} />
+            <circle cx="110" cy="112" r="5" fill="#fffdfa" fillOpacity="0.9" />
+          </svg>
+        </div>
+
+        <div className="mt-3 flex justify-center">
+          <div
+            className="min-w-[5.8rem] rounded-full px-3 py-2 text-center shadow-[0_10px_26px_rgba(28,23,19,0.12)]"
+            style={{ backgroundColor: theme.center, color: theme.centerText }}
+          >
+            <p className="text-[1.5rem] font-semibold leading-none tracking-[-0.06em]">
+              {score == null ? "N/A" : Math.round(score)}
+            </p>
+          </div>
+        </div>
+
+        <div className={`mt-1 flex items-center justify-between text-[0.66rem] font-semibold uppercase tracking-[0.16em] ${theme.scaleText}`}>
+          <span>0</span>
+          <span>10</span>
+        </div>
       </div>
     </div>
   );
@@ -302,7 +514,7 @@ function ProcessingScreen({ statusKey }: { statusKey: string }) {
   const label = STATUS_LABELS[statusKey] ?? "Generating report...";
   const steps = STATUS_SUBSTEPS[statusKey] ?? [];
   return (
-    <div className="mx-auto flex min-h-screen max-w-3xl items-center px-4 py-16">
+    <div className="mx-auto flex w-full max-w-3xl items-start px-4 py-10 sm:py-14">
       <div className="w-full rounded-[28px] border border-[#ddd4c8] bg-white/90 px-6 py-8 shadow-[0_24px_50px_rgba(28,23,19,0.08)]">
         <div className="flex items-center gap-4">
           <span className="h-10 w-10 animate-spin rounded-full border-2 border-[#e4ddd4] border-t-[#1a4a3a]" role="status" aria-label="Generating" />
@@ -331,11 +543,11 @@ function TocButton({ label, active, onClick }: { label: string; active: boolean;
     <button
       type="button"
       onClick={onClick}
-      className={`group ml-2 flex w-full items-start gap-2 rounded-lg px-1.5 py-0.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 ${active ? "text-[#1a4a3a]" : "text-[#5f554c] hover:text-[#1c1713]"}`}
+      className={`group ml-2 flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 ${active ? "text-[#1a4a3a]" : "text-[#6b5e52] hover:text-[#1c1713]"}`}
       aria-current={active ? "location" : undefined}
     >
-      <span className={`mt-[0.3rem] h-1 w-1 flex-shrink-0 rounded-full transition-colors ${active ? "bg-[#1a4a3a]" : "bg-[#c8bfb4] group-hover:bg-[#8f8275]"}`} aria-hidden />
-      <span className={`text-[0.72rem] font-medium leading-[0.95rem] ${active ? "font-semibold" : ""}`}>{label}</span>
+      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full transition-colors ${active ? "bg-[#1a4a3a]" : "bg-[#d4ccc4] group-hover:bg-[#9c8d81]"}`} aria-hidden />
+      <span className={`text-[0.73rem] leading-[1.1rem] ${active ? "font-semibold" : "font-medium"}`}>{label}</span>
     </button>
   );
 }
@@ -677,7 +889,7 @@ export default function ReportPage() {
 
   if (status && PROCESSING_STATUSES.has(status.status)) {
     return (
-      <main className="min-h-screen bg-[#faf8f3]">
+      <main className="min-h-[calc(100vh-5rem)] bg-[#faf8f3]">
         <ProcessingScreen statusKey={status.status} />
       </main>
     );
@@ -702,13 +914,46 @@ export default function ReportPage() {
   const roleTitle = report.roleTitle || "Target Role";
   const companyHref = report.companyUrl ?? report.company.websiteUrl;
   const companyLogoUrl = getFaviconUrl(companyHref);
-  const recommendationMeta = RECOMMENDATION_META[report.recommendation] ?? RECOMMENDATION_META.need_more_signal;
+  const executiveSummaryData = parseSectionContent<StructuredReport["executive_summary"]>(
+    sectionByKey.executive_summary?.content
+  );
+  const interviewDecisionData = parseSectionContent<StructuredReport["interview_decision_summary"]>(
+    sectionByKey.interview_decision_summary?.content
+  );
+  const assessmentSnapshotData = parseSectionContent<StructuredReport["assessment_snapshot"]>(
+    sectionByKey.assessment_snapshot?.content
+  );
+  const risksRedFlagsData = parseSectionContent<StructuredReport["risks_red_flags"]>(
+    sectionByKey.risks_red_flags?.content
+  ) ?? [];
+  const unknownsToValidateData = parseSectionContent<StructuredReport["unknowns_to_validate"]>(
+    sectionByKey.unknowns_to_validate?.content
+  );
+  const hasOverlay = overlay.status === "completed" && overlay.data !== null;
+  const overlayGenerating = overlay.status === "generating" || overlay.status === "uploading";
+  const effectiveCandidateFitScore = hasOverlay
+    ? overlay.data?.candidate_role_match?.match_score ?? report.scores.candidate_fit
+    : report.scores.candidate_fit;
+  const canonicalRecommendation = getCanonicalRecommendation({
+    reportRecommendation: report.recommendation,
+    executiveRecommendation: executiveSummaryData?.recommendation,
+    pursuitStance: executiveSummaryData?.pursuit_stance,
+    interviewRecommendation: interviewDecisionData?.pursue_recommendation,
+    candidateFitScore: effectiveCandidateFitScore,
+  });
+  const recommendationMeta =
+    canonicalRecommendation.level === 3
+      ? { label: canonicalRecommendation.displayLabel, icon: "~", tone: "border-[#d8e5ea] bg-[#eef5f8] text-[#2d5c6a]", pill: "bg-[#2d5c6a] text-white" }
+      : canonicalRecommendation.level === 2
+      ? { label: canonicalRecommendation.displayLabel, icon: "~", tone: "border-[#eadfbf] bg-[#fff6e7] text-[#8a5a14]", pill: "bg-amber-600 text-white" }
+      : canonicalRecommendation.level <= 1
+      ? { label: canonicalRecommendation.displayLabel, icon: "!", tone: "border-[#ead7d2] bg-[#fbefeb] text-[#8a3d2f]", pill: "bg-red-600 text-white" }
+      : { ...(RECOMMENDATION_META[canonicalRecommendation.reportRecommendation] ?? RECOMMENDATION_META.need_more_signal), pill: "bg-[#1a4a3a] text-white" };
   const uniqueWebsiteCount = new Set(
     report.sources
       .map((source) => extractHostname(source.url))
       .filter((host): host is string => Boolean(host))
   ).size;
-  const aiQueryCount = report.tokenUsage?.calls.length ?? 0;
   const sourceBreakdown = Object.entries(
     report.sources.reduce<Record<string, number>>((accumulator, source) => {
       const label = SOURCE_TYPE_LABELS[source.type] ?? source.type.replace(/_/g, " ");
@@ -716,18 +961,102 @@ export default function ReportPage() {
       return accumulator;
     }, {})
   ).sort((left, right) => right[1] - left[1]);
-
-  const hasOverlay = overlay.status === "completed" && overlay.data !== null;
-  const overlayGenerating = overlay.status === "generating" || overlay.status === "uploading";
-  const effectiveCandidateFitScore = hasOverlay
-    ? overlay.data?.candidate_role_match?.match_score ?? report.scores.candidate_fit
-    : report.scores.candidate_fit;
   const hasValidCitations = report.sections.some((section) =>
     (section.citations ?? []).some((citation) => {
       const source = report.sources.find((item) => item.id === citation.source_id);
       return Boolean(normalizeHttpUrl(citation.url) ?? normalizeHttpUrl(source?.url));
     })
   );
+
+  const freshestMeaningfulSource = report.sources
+    .filter((source) => source.type !== "job_description" && source.type !== "profile_text" && !!source.publishedAt)
+    .map((source) => ({
+      title: source.title,
+      date: new Date(source.publishedAt as string),
+    }))
+    .filter((source) => !Number.isNaN(source.date.getTime()))
+    .sort((left, right) => right.date.getTime() - left.date.getTime())[0] ?? null;
+
+  const freshestSourceAgeDays = freshestMeaningfulSource
+    ? Math.max(0, Math.floor((Date.now() - freshestMeaningfulSource.date.getTime()) / (1000 * 60 * 60 * 24)))
+    : null;
+
+  const evidenceStrength = assessmentSnapshotData?.evidence_strength;
+  const unresolvedRiskCount = risksRedFlagsData.length + (unknownsToValidateData?.unknowns.length ?? 0);
+
+  const overviewCards = [
+    (() => {
+      const style = hasOverlay ? getOverviewCardStyle(effectiveCandidateFitScore) : getOverviewCardStyle(null);
+      const badge = hasOverlay
+        ? titleCaseWord(overlay.data?.candidate_role_match?.overall_fit ?? "strong")
+        : overlayGenerating
+        ? "In Progress"
+        : "No Resume";
+
+      return {
+        label: "Candidate Role Match",
+        value: hasOverlay
+          ? `${(effectiveCandidateFitScore ?? 0).toFixed(1)}/10`
+          : overlayGenerating
+          ? "Pending"
+          : "Missing Signal",
+        detail: hasOverlay
+          ? (overlay.data?.candidate_role_match?.rationale ?? "Resume-based assessment of how your background maps to the role.")
+          : overlayGenerating
+          ? "Resume uploaded. Candidate-role match is still generating."
+          : "Upload a resume to score candidate-role match.",
+        badge,
+        style,
+      };
+    })(),
+    (() => {
+      const style = getOverviewCardStyle(evidenceStrength?.score ?? null);
+      return {
+        label: "Recommendation Confidence",
+        value: evidenceStrength?.label && evidenceStrength.label !== "NOT_ASSESSED" ? evidenceStrength.label : "Missing Signal",
+        detail: evidenceStrength?.rationale ?? `Evidence quality is based on ${formatNumber(report.sources.length)} sources across ${formatNumber(uniqueWebsiteCount)} websites.`,
+        badge: null,
+        style,
+      };
+    })(),
+    (() => {
+      const freshnessScore = freshestSourceAgeDays == null ? null : freshestSourceAgeDays <= 30 ? 8 : freshestSourceAgeDays <= 90 ? 5 : 3;
+      const style = getOverviewCardStyle(freshnessScore);
+      const value = freshestSourceAgeDays == null
+        ? "Undated"
+        : freshestSourceAgeDays === 0
+        ? "Today"
+        : freshestSourceAgeDays === 1
+        ? "1 day"
+        : `${freshestSourceAgeDays} days`;
+      const badge = freshestSourceAgeDays == null ? "Missing Dates" : freshestSourceAgeDays <= 30 ? "Fresh" : freshestSourceAgeDays <= 90 ? "Aging" : "Stale";
+
+      return {
+        label: "Evidence Freshness",
+        value,
+        detail: freshestMeaningfulSource
+          ? `${freshestMeaningfulSource.title} is the newest dated source in the evidence set.`
+          : "No published dates were available across meaningful external sources.",
+        badge: null,
+        style,
+      };
+    })(),
+    (() => {
+      const style = getRiskCountStyle(unresolvedRiskCount);
+      const unknownCount = unknownsToValidateData?.unknowns.length ?? 0;
+      const badge = unresolvedRiskCount === 0 ? "Clear" : unresolvedRiskCount <= 2 ? "Monitor" : "Needs Validation";
+
+      return {
+        label: "Unresolved Risks",
+        value: `${unresolvedRiskCount}`,
+        detail: unresolvedRiskCount === 0
+          ? "No open red flags or unresolved interview unknowns are currently tracked."
+          : `${risksRedFlagsData.length} red flags and ${unknownCount} unknowns still need validation.`,
+        badge: null,
+        style,
+      };
+    })(),
+  ];
 
   // Sections that are visible in 5-min brief mode
   const visibleSections = (key: string) =>
@@ -849,6 +1178,17 @@ export default function ReportPage() {
     const content =
       key === "assessment_snapshot"
         ? getAssessmentSnapshotContent(section)
+        : key === "executive_summary" && executiveSummaryData
+        ? JSON.stringify({
+            ...executiveSummaryData,
+            recommendation: canonicalRecommendation.reportRecommendation,
+            pursuit_stance: canonicalRecommendation.pursuitStance,
+          })
+        : key === "interview_decision_summary" && interviewDecisionData
+        ? JSON.stringify({
+            ...interviewDecisionData,
+            pursue_recommendation: canonicalRecommendation.interviewRecommendation,
+          })
         : section.content;
 
     return (
@@ -924,7 +1264,7 @@ export default function ReportPage() {
                       return (
                         <div key={item.id} className="space-y-0">
                           {showGroupLabel && (
-                            <p className="px-1.5 pb-0.5 pt-6 text-[0.74rem] font-semibold uppercase leading-none tracking-[0.15em] text-[#5f554c] first:pt-0">
+                            <p className="px-1.5 pb-1 pt-7 text-[0.68rem] font-bold uppercase leading-none tracking-[0.2em] text-[#9c8d81] first:pt-2">
                               {item.group}
                             </p>
                           )}
@@ -944,151 +1284,123 @@ export default function ReportPage() {
 
           <div
             data-report-scroll-root="true"
-            className="xl:rounded-[34px] xl:border xl:border-[#ddd4c8] xl:shadow-[0_28px_70px_rgba(28,23,19,0.08)]"
+            className="xl:border-b xl:border-x xl:border-[#ddd4c8]"
           >
-            <article className="mx-auto w-[90%] max-w-none px-3 py-4 sm:px-7 sm:py-7">
+            <article className="report-density-tight mx-auto w-[90%] max-w-none px-3 pb-4 pt-0 sm:px-7 sm:pb-7 sm:pt-0">
               <section
                 id="brief-overview"
-                className="relative overflow-hidden px-4 py-5 sm:px-8 sm:py-8"
+                className="relative overflow-hidden px-4 pb-5 pt-1 sm:px-8 sm:pb-8 sm:pt-1"
               >
                 <div className="absolute -left-16 top-6 h-28 w-28 rounded-full bg-[#1a4a3a]/6 blur-3xl sm:top-8 sm:h-40 sm:w-40" aria-hidden />
                 <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#4a7a8a]/10 blur-3xl sm:h-32 sm:w-32" aria-hidden />
 
                 <div className="relative">
-                  <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                    <div className="inline-flex w-full items-center gap-3 rounded-full border border-[#e0d6ca] bg-white/85 px-3 py-2 shadow-[0_8px_20px_rgba(28,23,19,0.04)] sm:w-auto">
-                      <BrandMark compact />
-                      <div>
-                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#9c8d81]">Interview Intelligence Brief</p>
-                        <p className="text-xs text-[#7a6d63]">Structured for fast reading and easier prep</p>
+                  {/* ── Row 1: App title + timestamp pill ─────────────────── */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h1 className="text-[2.08rem] font-semibold tracking-[-0.055em] leading-[0.93] text-[#1c1713] sm:text-[2.56rem] whitespace-nowrap">
+                        Interview Intelligence Report
+                      </h1>
+                      <p className="mt-1.5 text-[0.76rem] text-[#9c8d81]">
+                        {completedAtParts
+                          ? `Generated ${completedAtParts.date} at ${completedAtParts.time} ${completedAtParts.shortLabel}`
+                          : "Generated recently"}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-3 pt-1">
+                      <div className="hidden xl:block">
+                        <ViewModeToggle mode={viewMode} onChange={setViewMode} />
                       </div>
                     </div>
-                    <div className="w-full xl:hidden sm:w-auto">
+                  </div>
+
+                  <div className="mt-6 border-b border-[#e2d8cc]" aria-hidden />
+
+                  {/* ── Row 2: Company identity ───────────────────────────── */}
+                  <div className="mt-6 flex items-center gap-4 sm:gap-5">
+                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-[0_8px_20px_rgba(28,23,19,0.08)] ring-1 ring-[#e2d8cc] sm:h-[4.5rem] sm:w-[4.5rem] sm:rounded-[22px]">
+                      {companyLogoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={companyLogoUrl} alt={`${companyName} logo`} className="h-9 w-9 sm:h-12 sm:w-12" />
+                      ) : (
+                        <span className="text-xl font-semibold tracking-[-0.04em] text-[#1a4a3a] sm:text-2xl">{companyName.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+                    <div>
+                      <h2 className="text-[1.75rem] font-semibold tracking-[-0.05em] leading-[0.95] text-[#1c1713] sm:text-[2.4rem]">
+                        {companyName}
+                      </h2>
+                      <p className="mt-1 text-[1rem] font-medium text-[#5f554c] sm:text-[1.1rem]">{roleTitle}</p>
+                    </div>
+                  </div>
+
+                  {/* ── Action pills + links ──────────────────────────────── */}
+                  <div className="mt-5 flex flex-wrap items-center gap-2 sm:gap-2.5">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[0.82rem] font-semibold sm:text-sm ${recommendationMeta.pill}`}>
+                      <span aria-hidden>{recommendationMeta.icon}</span>
+                      {recommendationMeta.label}
+                    </span>
+                    {hasOverlay && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#1a4a3a]/20 bg-[#1a4a3a]/8 px-3.5 py-1.5 text-[0.82rem] font-medium text-[#1a4a3a] sm:text-sm">
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        Personalized with your resume
+                      </span>
+                    )}
+                    {companyHref && (
+                      <a
+                        href={companyHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-[#d3c7b9] bg-white px-3.5 py-1.5 text-[0.82rem] font-medium text-[#1c1713] hover:border-[#bfb3a4] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/35 sm:text-sm transition-colors"
+                      >
+                        Company Site
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 4h6m0 0v6m0-6L10 14" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 10v9a1 1 0 001 1h9" />
+                        </svg>
+                      </a>
+                    )}
+                    {report.jobDescription && (
+                      <button
+                        type="button"
+                        onClick={() => scrollToSection("job-description")}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-[#d3c7b9] bg-[#f5f1e8] px-3.5 py-1.5 text-[0.82rem] font-medium text-[#4a3f36] hover:border-[#bfb3a4] hover:text-[#1c1713] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/35 sm:text-sm transition-colors"
+                      >
+                        View Job Description
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    )}
+                    <div className="xl:hidden">
                       <ViewModeToggle mode={viewMode} onChange={setViewMode} />
                     </div>
                   </div>
 
-                  <div className="mt-6 grid gap-5 sm:mt-8 sm:gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(290px,0.85fr)] xl:items-end">
-                    <div>
-                      <div className="flex items-start gap-3 sm:gap-4">
-                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-[18px] bg-white shadow-[0_10px_24px_rgba(28,23,19,0.06)] ring-1 ring-[#e2d8cc] sm:h-16 sm:w-16 sm:rounded-[22px]">
-                          {companyLogoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={companyLogoUrl} alt={`${companyName} logo`} className="h-8 w-8 sm:h-10 sm:w-10" />
-                          ) : (
-                            <span className="text-lg font-semibold tracking-[-0.04em] text-[#1a4a3a] sm:text-xl">{companyName.charAt(0).toUpperCase()}</span>
-                          )}
+                  <div className="mt-7 grid grid-cols-1 gap-3 sm:mt-8 sm:grid-cols-2 xl:grid-cols-4">
+                    {overviewCards.map((card) => (
+                      <div key={card.label} className={`rounded-[24px] border px-5 py-4 sm:px-6 sm:py-5 ${card.style.card}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className={`text-[0.65rem] font-semibold uppercase tracking-[0.2em] ${card.style.label}`}>{card.label}</p>
+                            <p className={`mt-2 text-[1.45rem] font-semibold leading-none tracking-[-0.05em] sm:text-[1.7rem] ${card.style.value}`}>{card.value}</p>
+                          </div>
+                          {card.badge ? (
+                            <span className={`rounded-full px-3 py-1 text-[0.72rem] font-semibold ${card.style.badge}`}>
+                              {card.badge}
+                            </span>
+                          ) : null}
                         </div>
-                        <div className="space-y-1.5 sm:space-y-2">
-                          <h1 className="text-[1.7rem] font-semibold tracking-[-0.055em] text-[#1c1713] leading-[0.98] sm:text-[2.6rem]">
-                            {companyName}
-                          </h1>
-                          <p className="text-[0.96rem] font-medium leading-snug text-[#5f554c] sm:text-[1.08rem]">{roleTitle}</p>
-                        </div>
+                        <p className={`mt-3 text-[0.8rem] leading-[1.5] ${card.style.detail}`}>{card.detail}</p>
                       </div>
-
-                      <p className="mt-4 max-w-3xl text-[0.93rem] leading-7 text-[#5f554c] sm:mt-6 sm:text-[0.98rem] sm:leading-8">
-                        A recruiter-grade briefing assembled from {formatNumber(report.sources.length)} evidence sources across {formatNumber(uniqueWebsiteCount)} websites, organized into a single reading flow for sharper decisions and faster interview preparation.
-                      </p>
-
-                      <div className="mt-4 flex flex-wrap gap-2 sm:mt-5 sm:gap-2.5">
-                        <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[0.82rem] font-medium sm:text-sm ${recommendationMeta.tone}`}>
-                          <span aria-hidden>{recommendationMeta.icon}</span>
-                          {recommendationMeta.label}
-                        </span>
-                        <span className="inline-flex items-center gap-2 rounded-full border border-[#ddd4c8] bg-white/80 px-3 py-1.5 text-[0.82rem] text-[#5f554c] sm:text-sm">
-                          <svg className="h-4 w-4 text-[#7a6d63]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-12 9h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v11a2 2 0 002 2z" />
-                          </svg>
-                          {completedAtParts
-                            ? `Generated ${completedAtParts.date} at ${completedAtParts.time} ${completedAtParts.shortLabel}`
-                            : "Generated recently"}
-                        </span>
-                        {hasOverlay && (
-                          <span className="inline-flex items-center gap-2 rounded-full border border-[#1a4a3a]/20 bg-[#1a4a3a]/8 px-3 py-1.5 text-[0.82rem] text-[#1a4a3a] sm:text-sm">
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                            Personalized with your resume
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2.5 sm:mt-5 sm:gap-3">
-                        {companyHref && (
-                          <a
-                            href={companyHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 rounded-full border border-[#d3c7b9] bg-white px-3.5 py-2.5 text-[0.82rem] font-medium text-[#1c1713] hover:border-[#bfb3a4] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/35 sm:px-4 sm:text-sm transition-colors"
-                          >
-                            Company Site
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M14 4h6m0 0v6m0-6L10 14" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 10v9a1 1 0 001 1h9" />
-                            </svg>
-                          </a>
-                        )}
-                        {report.jobDescription && (
-                          <button
-                            type="button"
-                            onClick={() => scrollToSection("job-description")}
-                            className="inline-flex items-center gap-2 rounded-full border border-[#d3c7b9] bg-[#f5f1e8] px-3.5 py-2.5 text-[0.82rem] font-medium text-[#4a3f36] hover:border-[#bfb3a4] hover:text-[#1c1713] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/35 sm:px-4 sm:text-sm transition-colors"
-                          >
-                            View Job Description
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                      <div className="rounded-[24px] border border-[#e2d8cc] bg-white/68 px-4 py-4 backdrop-blur-sm sm:rounded-[28px] sm:px-5 sm:py-5">
-                      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Reading Snapshot</p>
-                        <div className="mt-3 grid gap-3 sm:mt-4 sm:gap-5 sm:grid-cols-2 xl:grid-cols-1">
-                        <ReadingMetric
-                          label="Recommendation"
-                          value={recommendationMeta.label}
-                          detail="Current decision signal based on the evidence assembled for this role."
-                        />
-                        <ReadingMetric
-                          label="Candidate Fit"
-                          value={effectiveCandidateFitScore != null ? `${effectiveCandidateFitScore.toFixed(1)}/10` : "N/A"}
-                          detail={hasOverlay
-                            ? "Resume-personalized candidate-role match."
-                            : "How your background appears to map to the charter and interview bar."}
-                        />
-                      </div>
-                    </div>
+                    ))}
                   </div>
 
-                    <div className="mt-6 grid grid-cols-2 gap-3 border-t border-[#e7ddd2] pt-5 sm:mt-8 sm:gap-6 sm:pt-6 xl:grid-cols-4">
-                    <ReadingMetric
-                      label="Evidence Sources"
-                      value={formatNumber(report.sources.length)}
-                      detail={`${formatNumber(uniqueWebsiteCount)} distinct websites researched.`}
-                    />
-                    <ReadingMetric
-                      label="AI Queries"
-                      value={formatNumber(aiQueryCount)}
-                      detail={report.tokenUsage ? `${formatTokenCount(report.tokenUsage.total_tokens)} total tokens across all model calls.` : "No token trace stored."}
-                    />
-                    <ReadingMetric
-                      label="Company Momentum"
-                      value={`${report.scores.company_momentum.toFixed(1)}/10`}
-                      detail="Composite signal across market position, momentum, and public evidence."
-                    />
-                    <ReadingMetric
-                      label="Execution Risk"
-                      value={`${report.scores.execution_risk.toFixed(1)}/10`}
-                      detail="Higher scores mean more friction or ambiguity around successful execution."
-                    />
-                  </div>
-
-                    <div className="mt-6 rounded-[24px] border border-[#e2d8cc] bg-[#fffdfa]/76 px-4 py-4 sm:mt-8 sm:rounded-[28px] sm:px-5 sm:py-5">
-                    <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Signal Scorecard</p>
-                      <div className="mt-3 grid gap-3 sm:mt-4 sm:grid-cols-2">
+                  {/* ── Signal Scorecard ──────────────────────────────────── */}
+                  <div className="mt-5 bg-[#fffdfa] py-2 sm:mt-6">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <ScoreMeter label="Company Momentum" value={report.scores.company_momentum} />
                       <ScoreMeter label="Org Clarity" value={report.scores.org_clarity} />
                       <ScoreMeter label="Role Leverage" value={report.scores.role_leverage} />

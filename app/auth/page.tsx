@@ -74,7 +74,7 @@ export default function AuthPage() {
     <main className="min-h-screen bg-[#faf8f3] flex items-center justify-center">
       <div className="w-full max-w-sm px-4">
         <div className="mb-8 text-center">
-          <Link href="/" className="inline-flex justify-center">
+          <Link href="/" className="inline-flex justify-center" aria-label="Go to the Company Deep-Dive Engine homepage">
             <BrandMark />
           </Link>
           <p className="text-[#7a6d63] mt-2 text-sm">

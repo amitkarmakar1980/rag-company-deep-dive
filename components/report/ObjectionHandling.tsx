@@ -38,7 +38,7 @@ export function ObjectionHandlingSection({ data }: Props) {
             {isOpen && (
               <div className="px-5 pb-4 pt-2 space-y-3 border-t border-red-200 bg-white">
                 <Row label="Why they think this" value={obj.why_they_think_this} color="text-amber-700" />
-                <Row label="How to respond" value={obj.how_to_respond} color="text-emerald-700" />
+                <Row label="How to respond honestly" value={obj.how_to_respond} color="text-emerald-700" />
 
                 {obj.proof_points?.length > 0 && (
                   <div>

@@ -259,6 +259,10 @@ export async function getSourceChunks(sourceId: string): Promise<Chunk[]> {
 }
 
 // Reports
+function isMissingReportMetricsColumn(error: { message?: string } | null | undefined): boolean {
+  return /ai_query_count|source_count|source_host_count/i.test(error?.message ?? "");
+}
+
 export async function createReport(
   requestId: string,
   recommendation: string,
@@ -269,25 +273,53 @@ export async function createReport(
     execution_risk: number;
     candidate_fit: number;
   },
-  summaryJson?: Record<string, any>
+  summaryJson?: Record<string, any>,
+  metrics?: {
+    ai_query_count?: number;
+    source_count?: number;
+    source_host_count?: number;
+  }
 ): Promise<Report> {
-  const { data, error } = await supabaseAdmin
+  const payload = {
+    request_id: requestId,
+    recommendation,
+    company_momentum_score: scores.company_momentum,
+    org_clarity_score: scores.org_clarity,
+    role_leverage_score: scores.role_leverage,
+    execution_risk_score: scores.execution_risk,
+    candidate_fit_score: scores.candidate_fit,
+    ai_query_count: metrics?.ai_query_count ?? 0,
+    source_count: metrics?.source_count ?? 0,
+    source_host_count: metrics?.source_host_count ?? 0,
+    summary_json: summaryJson ?? null,
+    created_at: new Date().toISOString(),
+  };
+
+  let { data, error } = await supabaseAdmin
     .from("reports")
-    .insert([
-      {
-        request_id: requestId,
-        recommendation,
-        company_momentum_score: scores.company_momentum,
-        org_clarity_score: scores.org_clarity,
-        role_leverage_score: scores.role_leverage,
-        execution_risk_score: scores.execution_risk,
-        candidate_fit_score: scores.candidate_fit,
-        summary_json: summaryJson ?? null,
-        created_at: new Date().toISOString(),
-      },
-    ])
+    .insert([payload])
     .select()
     .single();
+
+  if (error && isMissingReportMetricsColumn(error)) {
+    ({ data, error } = await supabaseAdmin
+      .from("reports")
+      .insert([
+        {
+          request_id: requestId,
+          recommendation,
+          company_momentum_score: scores.company_momentum,
+          org_clarity_score: scores.org_clarity,
+          role_leverage_score: scores.role_leverage,
+          execution_risk_score: scores.execution_risk,
+          candidate_fit_score: scores.candidate_fit,
+          summary_json: summaryJson ?? null,
+          created_at: payload.created_at,
+        },
+      ])
+      .select()
+      .single());
+  }
 
   if (error) throw error;
   return data;
@@ -303,22 +335,49 @@ export async function updateReport(
     execution_risk: number;
     candidate_fit: number;
   },
-  summaryJson?: Record<string, any>
+  summaryJson?: Record<string, any>,
+  metrics?: {
+    ai_query_count?: number;
+    source_count?: number;
+    source_host_count?: number;
+  }
 ): Promise<Report> {
-  const { data, error } = await supabaseAdmin
+  const payload = {
+    recommendation,
+    company_momentum_score: scores.company_momentum,
+    org_clarity_score: scores.org_clarity,
+    role_leverage_score: scores.role_leverage,
+    execution_risk_score: scores.execution_risk,
+    candidate_fit_score: scores.candidate_fit,
+    ai_query_count: metrics?.ai_query_count ?? 0,
+    source_count: metrics?.source_count ?? 0,
+    source_host_count: metrics?.source_host_count ?? 0,
+    summary_json: summaryJson ?? null,
+  };
+
+  let { data, error } = await supabaseAdmin
     .from("reports")
-    .update({
-      recommendation,
-      company_momentum_score: scores.company_momentum,
-      org_clarity_score: scores.org_clarity,
-      role_leverage_score: scores.role_leverage,
-      execution_risk_score: scores.execution_risk,
-      candidate_fit_score: scores.candidate_fit,
-      summary_json: summaryJson ?? null,
-    })
+    .update(payload)
     .eq("id", reportId)
     .select()
     .single();
+
+  if (error && isMissingReportMetricsColumn(error)) {
+    ({ data, error } = await supabaseAdmin
+      .from("reports")
+      .update({
+        recommendation,
+        company_momentum_score: scores.company_momentum,
+        org_clarity_score: scores.org_clarity,
+        role_leverage_score: scores.role_leverage,
+        execution_risk_score: scores.execution_risk,
+        candidate_fit_score: scores.candidate_fit,
+        summary_json: summaryJson ?? null,
+      })
+      .eq("id", reportId)
+      .select()
+      .single());
+  }
 
   if (error) throw error;
   return data;

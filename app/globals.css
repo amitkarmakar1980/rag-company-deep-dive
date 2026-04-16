@@ -20,3 +20,31 @@ body {
   --color-secondary: 230 30% 12%;
   --color-secondary-foreground: 230 20% 85%;
 }
+
+.report-density-tight .leading-8 {
+  line-height: 1.7rem;
+}
+
+.report-density-tight .leading-7 {
+  line-height: 1.5rem;
+}
+
+.report-density-tight .leading-6 {
+  line-height: 1.275rem;
+}
+
+.report-density-tight .leading-5 {
+  line-height: 1.0625rem;
+}
+
+.report-density-tight .leading-relaxed {
+  line-height: 1.4;
+}
+
+.report-density-tight .leading-snug {
+  line-height: 1.15;
+}
+
+.report-density-tight .leading-tight {
+  line-height: 1.05;
+}

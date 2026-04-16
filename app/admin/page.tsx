@@ -214,7 +214,8 @@ export default function AdminPage() {
   if (authorized === null) return null;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
+    <main className="min-h-screen bg-[#faf8f3] text-[#1c1713]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           <span className="inline-flex h-14 w-14 items-center justify-center rounded-[1.35rem] border border-stone-200/80 bg-[radial-gradient(circle_at_30%_25%,rgba(251,191,36,0.28),transparent_38%),linear-gradient(135deg,#111827_0%,#292524_52%,#44403c_100%)] text-white shadow-[0_18px_38px_rgba(28,25,23,0.16)]">
@@ -487,7 +488,8 @@ export default function AdminPage() {
           </div>
         )}
       </section>
-    </div>
+      </div>
+    </main>
   );
 }
 

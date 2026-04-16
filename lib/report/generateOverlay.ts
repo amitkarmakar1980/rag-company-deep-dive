@@ -2,6 +2,10 @@ import { supabaseAdmin } from "@/lib/db/supabase";
 import { generateCandidateOverlay } from "@/lib/ai/openai";
 import { getCandidateOverlayPrompt } from "@/lib/ai/overlayPrompt";
 
+function getStoredAiQueryCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 /**
  * Generates the candidate overlay for a given (requestId, overlayId) pair.
  * Runs asynchronously after the resume upload API creates the overlay record.
@@ -56,7 +60,7 @@ export async function generateOverlay(overlayId: string): Promise<void> {
     // 4. Load existing base report sections for context (candidate_positioning + role_snapshot)
     const { data: reportRow } = await supabaseAdmin
       .from("reports")
-      .select("id")
+      .select("id, ai_query_count")
       .eq("request_id", overlay.request_id)
       .single();
 
@@ -89,13 +93,15 @@ export async function generateOverlay(overlayId: string): Promise<void> {
       baseRoleSnapshot
     );
 
-    const { data: overlayData } = await generateCandidateOverlay(prompt);
+    const { data: overlayData, usage: overlayUsage } = await generateCandidateOverlay(prompt);
+    const overlayAiQueryCount = 1;
 
     // 6. Persist result
     await supabaseAdmin
       .from("candidate_overlays")
       .update({
         overlay_json: overlayData,
+        ai_query_count: overlayAiQueryCount,
         status: "completed",
         updated_at: new Date().toISOString(),
       })
@@ -104,9 +110,14 @@ export async function generateOverlay(overlayId: string): Promise<void> {
     // 7. Write candidate_fit_score back to the report + update the section JSON
     const matchScore = overlayData?.candidate_role_match?.match_score;
     if (typeof matchScore === "number" && reportRow) {
+      const nextAiQueryCount = getStoredAiQueryCount(reportRow.ai_query_count) + overlayAiQueryCount;
+
       await supabaseAdmin
         .from("reports")
-        .update({ candidate_fit_score: matchScore })
+        .update({
+          candidate_fit_score: matchScore,
+          ai_query_count: nextAiQueryCount,
+        })
         .eq("id", reportRow.id);
 
       // Also patch the assessment_snapshot section so the rendered score is live
@@ -135,9 +146,14 @@ export async function generateOverlay(overlayId: string): Promise<void> {
         }
       }
 
-      console.log(`[generateOverlay] Updated candidate_fit_score=${matchScore} on report ${reportRow.id}`);
+      console.log(
+        `[generateOverlay] Updated candidate_fit_score=${matchScore}, ai_query_count=${nextAiQueryCount} on report ${reportRow.id}`
+      );
     }
 
+    console.log(
+      `[generateOverlay] Overlay usage ${overlayUsage.input_tokens}in/${overlayUsage.output_tokens}out`
+    );
     console.log(`[generateOverlay] Completed overlay ${overlayId}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -145,6 +161,7 @@ export async function generateOverlay(overlayId: string): Promise<void> {
     await supabaseAdmin
       .from("candidate_overlays")
       .update({
+        ai_query_count: 1,
         status: "failed",
         error_message: message,
         updated_at: new Date().toISOString(),

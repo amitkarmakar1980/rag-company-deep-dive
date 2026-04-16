@@ -121,7 +121,7 @@ export function recommendationFromScores(
   evidenceDensity: number
 ): "pursue" | "pursue_cautiously" | "avoid" | "need_more_signal" {
   // If evidence is too sparse, say so
-  if (evidenceDensity < 0.3) return "need_more_signal";
+  if (evidenceDensity < 0.4) return "need_more_signal";
 
   // Calculate composite score (higher is better)
   const composite =
@@ -132,15 +132,27 @@ export function recommendationFromScores(
       scores.candidate_fit) /
     5;
 
-  // Simple heuristic recommendation
-  if (composite >= 7 && scores.execution_risk <= 4) {
+  // Tighten the heuristic so only clearly strong cases get a pursue recommendation.
+  if (
+    composite >= 7.6 &&
+    scores.company_momentum >= 7 &&
+    scores.org_clarity >= 6 &&
+    scores.role_leverage >= 6 &&
+    scores.execution_risk <= 4.5 &&
+    evidenceDensity >= 0.6
+  ) {
     return "pursue";
-  } else if (composite >= 6 || scores.execution_risk <= 3) {
+  } else if (
+    composite >= 6.2 &&
+    scores.execution_risk <= 6 &&
+    scores.role_leverage >= 5 &&
+    evidenceDensity >= 0.45
+  ) {
     return "pursue_cautiously";
-  } else if (scores.execution_risk >= 8 || composite <= 3.5) {
+  } else if (scores.execution_risk >= 7 || composite <= 4.8) {
     return "avoid";
   } else {
-    return "pursue_cautiously";
+    return "need_more_signal";
   }
 }
 

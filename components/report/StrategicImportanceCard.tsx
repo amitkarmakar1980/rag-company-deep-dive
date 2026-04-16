@@ -88,7 +88,7 @@ export function StrategicImportanceCard({ data }: Props) {
       {/* Candidate implication — only rendered when present (new schema reports) */}
       {implication && (
         <div className="bg-[#1a4a3a] rounded-xl p-5 space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81]">What This Means for You</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#d8f3e7]">What This Means for You</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { label: "Scope & Impact", value: implication.scope_impact },
@@ -97,8 +97,8 @@ export function StrategicImportanceCard({ data }: Props) {
               { label: "How to Adapt Your Pitch", value: implication.interview_adaptation },
             ].map(({ label, value }) => value ? (
               <div key={label}>
-                <p className="text-xs font-semibold text-[#7a6d63] mb-0.5">{label}</p>
-                <p className="text-sm text-gray-100 leading-relaxed">{value}</p>
+                <p className="mb-0.5 text-xs font-semibold text-[#cde7dd]">{label}</p>
+                <p className="text-sm leading-relaxed text-[#f6fbf8]">{value}</p>
               </div>
             ) : null)}
           </div>
@@ -108,8 +108,8 @@ export function StrategicImportanceCard({ data }: Props) {
       {/* Fallback for old-schema reports: show interview_implication if present */}
       {!implication && raw.interview_implication && (
         <div className="bg-[#1a4a3a] rounded-xl p-5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81] mb-2">What This Means in the Interview</p>
-          <p className="text-sm text-gray-100 leading-relaxed">{raw.interview_implication}</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#d8f3e7]">What This Means in the Interview</p>
+          <p className="text-sm leading-relaxed text-[#f6fbf8]">{raw.interview_implication}</p>
         </div>
       )}
     </div>

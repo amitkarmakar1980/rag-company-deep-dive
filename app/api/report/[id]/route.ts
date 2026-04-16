@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getReportById, getReportSections, getRequestSources } from "@/lib/db/operations";
+import { getDeepDiveRequest, getReportById, getReportSections, getRequestSources } from "@/lib/db/operations";
 
 export async function GET(
   _req: NextRequest,
@@ -17,6 +17,7 @@ export async function GET(
     }
 
     const sections = await getReportSections(reportId);
+  const request = await getDeepDiveRequest(report.request_id);
 
     // Get sources for evidence
     const sources = await getRequestSources(report.request_id);
@@ -47,6 +48,10 @@ export async function GET(
       })),
       tokenUsage: report.summary_json?.token_usage ?? null,
       createdAt: report.created_at,
+      requestCreatedAt: request?.created_at ?? null,
+      completedAt: request?.status === "completed"
+        ? (request.updated_at ?? report.created_at)
+        : null,
     });
   } catch (error) {
     console.error("Report fetch error:", error);

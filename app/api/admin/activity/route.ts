@@ -43,13 +43,11 @@ export async function GET(req: NextRequest) {
         created_at,
         recommendation,
         summary_json,
+        report_sections(id),
         deep_dive_requests(
-          id,
-          role_title,
-          status,
-          created_at,
-          user_id,
-          companies(name)
+          *,
+          companies(name),
+          candidate_overlays(id, status)
         )
       `)
       .order("created_at", { ascending: false })
@@ -96,17 +94,35 @@ export async function GET(req: NextRequest) {
       const profile = req?.user_id ? authProfiles.get(req.user_id) : null;
       const usage = (r.summary_json as any)?.token_usage ?? null;
       const calls: any[] = usage?.calls ?? [];
+      const overlays: any[] = Array.isArray(req?.candidate_overlays) ? req.candidate_overlays : [];
+      const sections: any[] = Array.isArray(r.report_sections) ? r.report_sections : [];
+      const personalizationStatus = overlays.some((overlay) => overlay?.status === "completed")
+        ? "completed"
+        : overlays.some((overlay) => overlay?.status === "generating" || overlay?.status === "pending")
+          ? "in_progress"
+          : overlays.some((overlay) => overlay?.status === "failed")
+            ? "failed"
+            : "none";
+      const requestStatus = req?.status ?? null;
+      const sectionCount = sections.length;
 
       return {
         report_id: r.id,
         request_id: req?.id ?? null,
         created_at: r.created_at,
+        activity_at: requestStatus === "completed"
+          ? (req?.updated_at ?? r.created_at)
+          : r.created_at,
         company: req?.companies?.name ?? "Unknown",
         role_title: req?.role_title ?? "Unknown",
         recommendation: r.recommendation,
         user_id: req?.user_id ?? null,
         user_name: profile?.name ?? fallbackUserName(profile?.email ?? null),
         user_email: profile?.email ?? null,
+        request_status: requestStatus,
+        section_count: sectionCount,
+        job_successful: requestStatus === "completed" && sectionCount > 0,
+        personalization_status: personalizationStatus,
         total_cost_usd: usage?.total_cost_usd ?? null,
         total_tokens: usage?.total_tokens ?? null,
         calls: calls.map((c: any) => ({

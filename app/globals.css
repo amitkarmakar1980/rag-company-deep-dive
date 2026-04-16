@@ -1,22 +1,22 @@
 @import "tailwindcss";
 
 html {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
   font-family: var(--font-poppins), sans-serif;
-  background-color: #faf8f3;
-  color: #1c1713;
+  background-color: #060810;
+  color: #e2e4ef;
 }
 
 ::selection {
-  background: rgba(26, 74, 58, 0.14);
+  background: rgba(99, 102, 241, 0.3);
 }
 
 @theme {
-  --color-primary: 158 50% 20%;
+  --color-primary: 245 60% 55%;
   --color-primary-foreground: 0 0% 98%;
-  --color-secondary: 40 20% 95%;
-  --color-secondary-foreground: 20 10% 15%;
+  --color-secondary: 230 30% 12%;
+  --color-secondary-foreground: 230 20% 85%;
 }

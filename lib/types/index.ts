@@ -35,6 +35,7 @@ export interface DeepDiveRequest {
   profile_context?: string;
   status: DeepDiveStatus;
   created_at: string;
+  updated_at?: string;
 }
 
 // Source types

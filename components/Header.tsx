@@ -94,17 +94,17 @@ export function Header() {
           {user ? (
             <>
               <span className="hidden text-sm text-stone-200 sm:block">
-                <NavLabel icon={<UserBadgeIcon className="h-4 w-4 text-amber-300" />} label={user.user_metadata?.name || user.email || "User"} labelClassName="text-stone-200" />
+                <NavLabel icon={<UserBadgeIcon className="h-4 w-4 text-[#22d3ee]" />} label={user.user_metadata?.name || user.email || "User"} labelClassName="text-stone-200" />
               </span>
-              <Link href="/deep-dive/new" className="text-sm text-stone-100 hover:text-amber-200 transition-colors">
-                <NavLabel icon={<PencilSquareIcon className="h-4 w-4 text-emerald-300" />} label="New Analysis" labelClassName="text-stone-100" />
+              <Link href="/deep-dive/new" className="text-sm text-stone-100 hover:text-[#22d3ee] transition-colors">
+                <NavLabel icon={<PencilSquareIcon className="h-4 w-4 text-[#a5b4fc]" />} label="New Analysis" labelClassName="text-stone-100" />
               </Link>
-              <Link href="/history" className="text-sm text-stone-100 hover:text-amber-200 transition-colors">
-                <NavLabel icon={<ClockIcon className="h-4 w-4 text-sky-300" />} label="History" labelClassName="text-stone-100" />
+              <Link href="/history" className="text-sm text-stone-100 hover:text-[#22d3ee] transition-colors">
+                <NavLabel icon={<ClockIcon className="h-4 w-4 text-[#22d3ee]" />} label="History" labelClassName="text-stone-100" />
               </Link>
               {isAdmin(user.email) && (
-                <Link href="/admin" className="text-sm text-stone-100 hover:text-amber-200 transition-colors">
-                  <NavLabel icon={<ShieldIcon className="h-4 w-4 text-amber-300" />} label="Admin" labelClassName="text-stone-100" />
+                <Link href="/admin" className="text-sm text-stone-100 hover:text-[#22d3ee] transition-colors">
+                  <NavLabel icon={<ShieldIcon className="h-4 w-4 text-[#a5b4fc]" />} label="Admin" labelClassName="text-stone-100" />
                 </Link>
               )}
               <button

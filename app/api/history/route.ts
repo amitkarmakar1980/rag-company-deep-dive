@@ -11,14 +11,9 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from("deep_dive_requests")
       .select(`
-        id,
-        role_title,
-        status,
-        created_at,
-        company_url,
-        job_description,
+        *,
         companies(name, website_url),
-        reports(recommendation, candidate_fit_score, report_sections(section_key)),
+        reports(created_at, recommendation, candidate_fit_score, report_sections(section_key)),
         candidate_overlays(id, status)
       `)
       .eq("user_id", user.id)
@@ -34,6 +29,9 @@ export async function GET(req: NextRequest) {
         roleTitle: item.role_title,
         status: item.status,
         createdAt: item.created_at,
+        completedAt: item.status === "completed"
+          ? (item.updated_at ?? item.reports?.[0]?.created_at ?? null)
+          : null,
         companyUrl: item.company_url || item.companies?.website_url || null,
         hasJobDescription: !!item.job_description,
         hasResume: (item.candidate_overlays ?? []).some(
@@ -41,6 +39,7 @@ export async function GET(req: NextRequest) {
         ),
         report: item.reports?.[0]
           ? {
+              createdAt: item.reports[0].created_at ?? null,
               recommendation: item.reports[0].recommendation,
               candidateFitScore: item.reports[0].candidate_fit_score ?? null,
               sectionKeys: (item.reports[0].report_sections ?? []).map((s: any) => s.section_key),

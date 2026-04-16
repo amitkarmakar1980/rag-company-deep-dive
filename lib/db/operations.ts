@@ -90,10 +90,19 @@ export async function updateDeepDiveStatus(
   requestId: string,
   status: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  const timestamp = new Date().toISOString();
+
+  let { error } = await supabaseAdmin
     .from("deep_dive_requests")
-    .update({ status })
+    .update({ status, updated_at: timestamp })
     .eq("id", requestId);
+
+  if (error && /updated_at/i.test(error.message)) {
+    ({ error } = await supabaseAdmin
+      .from("deep_dive_requests")
+      .update({ status })
+      .eq("id", requestId));
+  }
 
   if (error) throw error;
 }

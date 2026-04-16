@@ -55,7 +55,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${poppins.className} ${poppins.variable} antialiased bg-[#faf8f3] text-[#1c1713]`} suppressHydrationWarning>
+      <body className={`${poppins.className} ${poppins.variable} antialiased bg-[#060810] text-[#e2e4ef]`} suppressHydrationWarning>
         <Header />
         {children}
       </body>

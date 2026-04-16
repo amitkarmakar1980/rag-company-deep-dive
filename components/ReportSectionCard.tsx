@@ -1,7 +1,7 @@
 "use client";
 
 import { StructuredReport } from "@/lib/types";
-import { SectionShell, BulletList, ProseBlock, ConfidencePill } from "./report/SectionShell";
+import { SectionShell, BulletList, ProseBlock, ConfidencePill, type ProvenanceType } from "./report/SectionShell";
 import { ExecutiveSummarySection } from "./report/ExecutiveSummary";
 import { AssessmentSnapshotSection } from "./report/AssessmentSnapshot";
 import { SWOTCard } from "./report/SWOTCard";
@@ -26,6 +26,46 @@ interface ReportSectionCardProps {
   content: string; // JSON.stringify'd section data
   citations?: Citation[];
   feedback?: React.ReactNode;
+  onProvenanceClick?: (type: ProvenanceType) => void;
+}
+
+function getSectionProvenance(
+  sectionKey: string,
+  citations?: Citation[],
+  data?: unknown
+): ProvenanceType {
+  const hasCitations = Boolean(citations?.length);
+
+  if (sectionKey === "company_overview" || sectionKey === "mission_vision_leadership") {
+    return hasCitations ? "cited" : "inferred";
+  }
+
+  if (sectionKey === "company_snapshot") {
+    const snapshot = data as StructuredReport["company_snapshot"] | undefined;
+    return snapshot?.evidence_basis === "inferred" ? "inferred" : hasCitations ? "cited" : "inferred";
+  }
+
+  if (sectionKey === "role_snapshot" || sectionKey === "role_swot" || sectionKey === "why_role_exists_now") {
+    return "inferred";
+  }
+
+  if (
+    sectionKey === "executive_summary" ||
+    sectionKey === "interview_decision_summary" ||
+    sectionKey === "five_minute_brief" ||
+    sectionKey === "assessment_snapshot" ||
+    sectionKey === "strategic_bet_analysis" ||
+    sectionKey === "likely_interview_agenda" ||
+    sectionKey === "questions_to_ask" ||
+    sectionKey === "risks_red_flags" ||
+    sectionKey === "unknowns_to_validate" ||
+    sectionKey === "company_swot" ||
+    sectionKey === "evidence_contract"
+  ) {
+    return hasCitations ? "mixed" : "inferred";
+  }
+
+  return hasCitations ? "cited" : "inferred";
 }
 
 /**
@@ -38,6 +78,7 @@ export function ReportSectionCard({
   content,
   citations,
   feedback,
+  onProvenanceClick,
 }: ReportSectionCardProps) {
   let data: any = null;
 
@@ -67,6 +108,8 @@ export function ReportSectionCard({
   }
 
   // Route to section-specific renderer
+  const provenance = getSectionProvenance(sectionKey, citations, data);
+
   switch (sectionKey) {
     case "company_overview": {
       const d = data as StructuredReport["company_overview"];
@@ -75,6 +118,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Founding, scale, products, markets, and recent milestones"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
           collapsible
         >
@@ -103,6 +148,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Mission, vision, operating principles, and leadership team"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
           collapsible
         >
@@ -145,6 +192,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Pursue recommendation, positioning angle, top questions, and key watchouts"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
         >
           <InterviewDecisionSummary data={data as StructuredReport["interview_decision_summary"]} />
@@ -157,6 +206,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Optimized for pre-interview skimming — everything you need in 5 minutes"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
         >
           <FiveMinuteBrief data={data as StructuredReport["five_minute_brief"]} />
@@ -169,6 +220,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Classification of this role's strategic significance and what it means for you"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
         >
           <StrategicImportanceCard data={data as StructuredReport["strategic_bet_analysis"]} />
@@ -181,6 +234,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="What interviewers are validating, worrying about, and need to see"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
         >
           <LikelyInterviewAgenda data={data as StructuredReport["likely_interview_agenda"]} />
@@ -193,6 +248,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Important uncertainties — what to ask live and how to interpret the answers"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
         >
           <UnknownsToValidate data={data as StructuredReport["unknowns_to_validate"]} />
@@ -204,7 +261,8 @@ export function ReportSectionCard({
         <SectionShell
           id={sectionKey}
           title={title}
-          subtitle="Overall recommendation and top-priority insights"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
         >
           <ExecutiveSummarySection data={data as StructuredReport["executive_summary"]} />
@@ -217,6 +275,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="AI-generated signal scores based on retrieved evidence. Use for decision support, not as facts."
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
         >
           <AssessmentSnapshotSection data={data as StructuredReport["assessment_snapshot"]} />
@@ -231,6 +291,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Business model, strategic priorities, and current operating context"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           evidenceBacked={evidenceBacked}
           feedback={feedback}
           collapsible
@@ -251,6 +313,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Relevant to role context and interview positioning"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
           collapsible
         >
@@ -265,6 +329,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Inferred charter, success metrics, and first-year expectations"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
           collapsible
         >
@@ -284,6 +350,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Strengths, weaknesses, opportunities, and threats specific to this role's charter"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
           collapsible
         >
@@ -298,6 +366,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="What changed in the company, market, or org that created demand for this hire"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
           evidenceBacked={d.confidence === "high" || d.confidence === "medium"}
         >
@@ -318,6 +388,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Grouped by intent — click any question to see why it matters and what to listen for"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
           collapsible
         >
@@ -331,6 +403,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="Flags ranked by severity — sorted high to low"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
         >
           <RisksSection data={data as StructuredReport["risks_red_flags"]} />
@@ -343,6 +417,8 @@ export function ReportSectionCard({
           id={sectionKey}
           title={title}
           subtitle="What we know vs. inferred vs. unknown — with your next actions"
+          provenance={provenance}
+          onProvenanceClick={onProvenanceClick}
           feedback={feedback}
           collapsible
         >

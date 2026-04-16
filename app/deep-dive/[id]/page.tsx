@@ -18,7 +18,7 @@ import {
   SectionSkeleton,
 } from "@/components/report/CandidateOverlaySections";
 import { ObjectionHandlingSection } from "@/components/report/ObjectionHandling";
-import { SectionShell } from "@/components/report/SectionShell";
+import { SectionShell, ProvenancePill, ConfidencePill, type ProvenanceType } from "@/components/report/SectionShell";
 import { RecommendationType, ReportScore, CandidateOverlayData, ReportTokenUsage, StructuredReport } from "@/lib/types";
 import { useResumeStore } from "@/lib/hooks/useResumeStore";
 import { normalizeHttpUrl } from "@/lib/report/sourceLinks";
@@ -70,6 +70,25 @@ interface OverlayState {
 }
 
 type ViewMode = "full" | "brief";
+
+const PROVENANCE_EXPLAINERS: Record<ProvenanceType, { title: string; description: string }> = {
+  cited: {
+    title: "Cited",
+    description: "This section leans on claims that can be traced back to explicit source material or direct citations.",
+  },
+  mixed: {
+    title: "Mixed",
+    description: "This section combines cited evidence with synthesized interpretation or judgment layered on top of the facts.",
+  },
+  inferred: {
+    title: "Inferred",
+    description: "This section is built mainly from inference, pattern matching, or incomplete evidence rather than direct verification.",
+  },
+  resume: {
+    title: "Resume-based",
+    description: "This section is personalized using your uploaded resume and the system's interpretation of your background.",
+  },
+};
 
 const PROCESSING_STATUSES = new Set([
   "pending",
@@ -136,7 +155,7 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
 const RECOMMENDATION_META: Record<RecommendationType, { label: string; icon: string; tone: string }> = {
   pursue: {
     label: "Pursue",
-    icon: "↑",
+    icon: "^",
     tone: "border-[#cfe1d8] bg-[#edf6f0] text-[#1a4a3a]",
   },
   pursue_cautiously: {
@@ -482,9 +501,9 @@ function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: V
   );
 }
 
-function LockedOverlaySection({ sectionId, title, subtitle }: { sectionId: string; title: string; subtitle?: string }) {
+function LockedOverlaySection({ sectionId, title, subtitle, onProvenanceClick }: { sectionId: string; title: string; subtitle?: string; onProvenanceClick?: (type: ProvenanceType) => void }) {
   return (
-    <SectionShell id={sectionId} title={title} subtitle={subtitle}>
+    <SectionShell id={sectionId} title={title} subtitle={subtitle} provenance="resume" onProvenanceClick={onProvenanceClick}>
       <div className="rounded-2xl border border-[#e5dbcf] bg-[#faf6ef] px-4 py-4 text-sm leading-6 text-[#7a6d63]">
         Upload a resume to unlock this personalized section.
       </div>
@@ -492,13 +511,72 @@ function LockedOverlaySection({ sectionId, title, subtitle }: { sectionId: strin
   );
 }
 
-function LockedPersonalisedSection({ sectionId, title, subtitle, generating = false }: { sectionId: string; title: string; subtitle?: string; generating?: boolean }) {
+function LockedPersonalisedSection({ sectionId, title, subtitle, generating = false, onProvenanceClick }: { sectionId: string; title: string; subtitle?: string; generating?: boolean; onProvenanceClick?: (type: ProvenanceType) => void }) {
   return (
-    <SectionShell id={sectionId} title={title} subtitle={subtitle}>
+    <SectionShell id={sectionId} title={title} subtitle={subtitle} provenance="resume" onProvenanceClick={onProvenanceClick}>
       <div className="rounded-2xl border border-[#e5dbcf] bg-[#faf6ef] px-4 py-4 text-sm leading-6 text-[#7a6d63]">
         {generating ? "Generating a personalized version of this section now..." : "Upload a resume to unlock this personalized section."}
       </div>
     </SectionShell>
+  );
+}
+
+function ProvenanceModal({
+  openType,
+  onClose,
+  children,
+}: {
+  openType: ProvenanceType | null;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    if (!openType) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openType, onClose]);
+
+  if (!openType) return null;
+
+  const explainer = PROVENANCE_EXPLAINERS[openType];
+
+  return (
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby="provenance-modal-title">
+      <button type="button" onClick={onClose} className="absolute inset-0 bg-[#1c1713]/40 backdrop-blur-[3px]" aria-label="Close provenance details" />
+      <div className="absolute inset-x-4 top-1/2 mx-auto max-h-[86vh] max-w-5xl -translate-y-1/2 overflow-hidden rounded-[32px] border border-[#ddd4c8] bg-[#fffaf3] shadow-[0_32px_80px_rgba(28,23,19,0.22)] sm:inset-x-8">
+        <div className="flex items-start justify-between gap-4 border-b border-[#eee4d8] px-5 py-5 sm:px-7">
+          <div>
+            <p className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Section provenance</p>
+            <h2 id="provenance-modal-title" className="mt-1 text-[1.55rem] font-semibold tracking-[-0.04em] text-[#1c1713]">
+              How this brief was built
+            </h2>
+            <div className="mt-3 flex items-center gap-2.5">
+              <ProvenancePill type={openType} />
+              <p className="text-sm leading-6 text-[#6b5e52]">{explainer.description}</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#ddd4c8] bg-white text-[#4a3f36] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30" aria-label="Close provenance details">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="max-h-[calc(86vh-7.5rem)] overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          {children}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -616,6 +694,7 @@ export default function ReportPage() {
   const [overallFeedback, setOverallFeedback] = useState<"useful" | "not_useful" | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
+  const [activeProvenance, setActiveProvenance] = useState<ProvenanceType | null>(null);
   const { timeZone } = useRequestTimeZone();
 
   const { stored: storedResume } = useResumeStore();
@@ -629,6 +708,12 @@ export default function ReportPage() {
   const overlayPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [activeSectionId, setActiveSectionId] = useState("brief-overview");
   const [desktopTocFloating, setDesktopTocFloating] = useState(false);
+  const openProvenanceModal = useCallback((type: ProvenanceType) => {
+    setActiveProvenance(type);
+  }, []);
+  const closeProvenanceModal = useCallback(() => {
+    setActiveProvenance(null);
+  }, []);
 
   // ─── Overlay polling ──────────────────────────────────────────────────────
 
@@ -921,6 +1006,9 @@ export default function ReportPage() {
   const unknownsToValidateData = parseSectionContent<StructuredReport["unknowns_to_validate"]>(
     sectionByKey.unknowns_to_validate?.content
   );
+  const evidenceContractData = parseSectionContent<StructuredReport["evidence_contract"]>(
+    sectionByKey.evidence_contract?.content
+  );
   const hasOverlay = overlay.status === "completed" && overlay.data !== null;
   const overlayGenerating = overlay.status === "generating" || overlay.status === "uploading";
   const effectiveCandidateFitScore = hasOverlay
@@ -1051,21 +1139,19 @@ export default function ReportPage() {
   // Sections that are visible in 5-min brief mode
   const visibleSections = (key: string) =>
     viewMode === "full" || BRIEF_SECTION_KEYS.has(key);
+  const hasCredibilityFlow = viewMode === "full" && Boolean(evidenceContractData || report.sources.length > 0);
 
   const tocItems = [
-    { id: "brief-overview", label: "Overview", group: "Start" },
-    report.jobDescription ? { id: "job-description", label: "Job Description", group: "Start" } : null,
+    { id: "brief-overview", label: "Overview", group: "Overview" },
+    report.jobDescription ? { id: "job-description", label: "Job Description", group: "Overview" } : null,
     sectionByKey.executive_summary && visibleSections("executive_summary")
-      ? { id: "executive_summary", label: sectionByKey.executive_summary.title, group: "Decision Layer" }
-      : null,
-    sectionByKey.interview_decision_summary && visibleSections("interview_decision_summary")
-      ? { id: "interview_decision_summary", label: sectionByKey.interview_decision_summary.title, group: "Decision Layer" }
+      ? { id: "executive_summary", label: sectionByKey.executive_summary.title, group: "Decision" }
       : null,
     sectionByKey.five_minute_brief && visibleSections("five_minute_brief")
-      ? { id: "five_minute_brief", label: sectionByKey.five_minute_brief.title, group: "Decision Layer" }
+      ? { id: "five_minute_brief", label: sectionByKey.five_minute_brief.title, group: "Decision" }
       : null,
     sectionByKey.assessment_snapshot && visibleSections("assessment_snapshot")
-      ? { id: "assessment_snapshot", label: sectionByKey.assessment_snapshot.title, group: "Decision Layer" }
+      ? { id: "assessment_snapshot", label: sectionByKey.assessment_snapshot.title, group: "Decision" }
       : null,
     viewMode === "full" ? { id: OVERLAY_SECTIONS[0].key, label: OVERLAY_SECTIONS[0].title, group: "Candidate Positioning" } : null,
     sectionByKey.strategic_bet_analysis && visibleSections("strategic_bet_analysis")
@@ -1075,16 +1161,16 @@ export default function ReportPage() {
       ? OVERLAY_SECTIONS.slice(1).map((section) => ({ id: section.key, label: section.title, group: "Candidate Positioning" }))
       : null,
     sectionByKey.likely_interview_agenda && visibleSections("likely_interview_agenda")
-      ? { id: "likely_interview_agenda", label: sectionByKey.likely_interview_agenda.title, group: "Interview Preparation" }
+      ? { id: "likely_interview_agenda", label: sectionByKey.likely_interview_agenda.title, group: "Interview Prep" }
       : null,
     sectionByKey.questions_to_ask && visibleSections("questions_to_ask")
-      ? { id: "questions_to_ask", label: sectionByKey.questions_to_ask.title, group: "Interview Preparation" }
+      ? { id: "questions_to_ask", label: sectionByKey.questions_to_ask.title, group: "Interview Prep" }
       : null,
     sectionByKey.risks_red_flags && visibleSections("risks_red_flags")
-      ? { id: "risks_red_flags", label: sectionByKey.risks_red_flags.title, group: "Interview Preparation" }
+      ? { id: "risks_red_flags", label: sectionByKey.risks_red_flags.title, group: "Interview Prep" }
       : null,
     sectionByKey.unknowns_to_validate && visibleSections("unknowns_to_validate")
-      ? { id: "unknowns_to_validate", label: sectionByKey.unknowns_to_validate.title, group: "Interview Preparation" }
+      ? { id: "unknowns_to_validate", label: sectionByKey.unknowns_to_validate.title, group: "Interview Prep" }
       : null,
     sectionByKey.company_snapshot && visibleSections("company_snapshot")
       ? { id: "company_snapshot", label: sectionByKey.company_snapshot.title, group: "Strategic Context" }
@@ -1101,10 +1187,10 @@ export default function ReportPage() {
     sectionByKey.why_role_exists_now && visibleSections("why_role_exists_now")
       ? { id: "why_role_exists_now", label: sectionByKey.why_role_exists_now.title, group: "Strategic Context" }
       : null,
-    viewMode === "full" && hasValidCitations ? { id: "citations", label: "Citations", group: "Evidence" } : null,
-    viewMode === "full" ? { id: "research-footprint", label: "Research Footprint", group: "Evidence" } : null,
-    viewMode === "full" ? { id: "ai-activity", label: "AI Activity", group: "Evidence" } : null,
-    viewMode === "full" && report.sources.length > 0 ? { id: "sources", label: "Evidence Sources", group: "Evidence" } : null,
+    hasCredibilityFlow ? { id: "how-this-was-built", label: "How This Brief Was Built", group: "Credibility" } : null,
+    hasCredibilityFlow && hasValidCitations ? { id: "citations", label: "Citations", group: "Credibility" } : null,
+    hasCredibilityFlow ? { id: "ai-activity", label: "AI Activity", group: "Credibility" } : null,
+    hasCredibilityFlow && report.sources.length > 0 ? { id: "sources", label: "Evidence Sources", group: "Credibility" } : null,
   ]
     .flat()
     .filter((item): item is { id: string; label: string; group: string } => Boolean(item));
@@ -1150,6 +1236,7 @@ export default function ReportPage() {
             title={section.title}
             subtitle="Personalised pursue recommendation — generating now…"
             generating
+            onProvenanceClick={openProvenanceModal}
           />
         );
       }
@@ -1160,6 +1247,7 @@ export default function ReportPage() {
             sectionId={key}
             title={section.title}
             subtitle="Pursue recommendation, positioning angle, top questions, and key watchouts"
+            onProvenanceClick={openProvenanceModal}
           />
         );
       }
@@ -1173,6 +1261,21 @@ export default function ReportPage() {
             ...executiveSummaryData,
             recommendation: canonicalRecommendation.reportRecommendation,
             pursuit_stance: canonicalRecommendation.pursuitStance,
+            interview_decision_summary: interviewDecisionData
+              ? {
+                  ...interviewDecisionData,
+                  pursue_recommendation: canonicalRecommendation.interviewRecommendation,
+                  biggest_interviewer_concern:
+                    overlay.data?.candidate_role_match?.overall_fit === "mismatch"
+                      ? "Domain mismatch with the core requirements of the role."
+                      : interviewDecisionData.biggest_interviewer_concern,
+                  best_positioning_angle:
+                    overlay.data?.positioning_strategy?.headline &&
+                    interviewDecisionData.best_positioning_angle?.startsWith("REQUIRES_RESUME")
+                      ? overlay.data.positioning_strategy.headline
+                      : interviewDecisionData.best_positioning_angle,
+                }
+              : undefined,
           })
         : key === "interview_decision_summary" && interviewDecisionData
         ? JSON.stringify({
@@ -1191,7 +1294,225 @@ export default function ReportPage() {
         feedback={
           <FeedbackButtons reportId={report.id} sectionKey={section.key} compact />
         }
+        onProvenanceClick={openProvenanceModal}
       />
+    );
+  };
+
+  const renderCredibilitySection = ({ inModal = false }: { inModal?: boolean } = {}) => {
+    if (!(evidenceContractData || report.sources.length > 0)) return null;
+
+    const selectedExplainer = activeProvenance ? PROVENANCE_EXPLAINERS[activeProvenance] : null;
+    const wrapperClassName = inModal
+      ? "rounded-[24px] border border-[#ddd4c8] bg-white/90 px-4 py-5 shadow-[0_14px_30px_rgba(28,23,19,0.05)] sm:px-6 sm:py-6"
+      : "mt-6 rounded-[24px] border border-[#ddd4c8] bg-white/90 px-4 py-5 shadow-[0_14px_30px_rgba(28,23,19,0.05)] sm:mt-7 sm:px-6 sm:py-6";
+
+    return (
+      <section id={inModal ? undefined : "how-this-was-built"} className={wrapperClassName}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Credibility Layer</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">How this brief was built</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#6b5e52]">
+              The brief combines directly cited source material, system inference, and optional resume-based personalization. The pill on each section tells you which mode dominates that section.
+            </p>
+          </div>
+          {!inModal && <BackToTopButton onClick={scrollReportToTop} />}
+        </div>
+
+        {selectedExplainer && (
+          <div className="mt-4 rounded-[20px] border border-[#e8ded2] bg-[#fffdfa] px-4 py-4">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Selected indicator</p>
+              <ProvenancePill type={activeProvenance!} />
+            </div>
+            <p className="mt-2 text-sm leading-6 text-[#6b5e52]">{selectedExplainer.description}</p>
+          </div>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-2.5">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#e4ddd4] bg-[#faf6ef] px-3 py-1.5 text-xs text-[#6b5e52]">
+            <ProvenancePill type="cited" onClick={() => openProvenanceModal("cited")} />
+            Direct facts tied to sources or explicit citations
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#e4ddd4] bg-[#faf6ef] px-3 py-1.5 text-xs text-[#6b5e52]">
+            <ProvenancePill type="mixed" onClick={() => openProvenanceModal("mixed")} />
+            Cited evidence plus synthesized interpretation
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#e4ddd4] bg-[#faf6ef] px-3 py-1.5 text-xs text-[#6b5e52]">
+            <ProvenancePill type="inferred" onClick={() => openProvenanceModal("inferred")} />
+            Built mainly from inference or incomplete evidence
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#e4ddd4] bg-[#faf6ef] px-3 py-1.5 text-xs text-[#6b5e52]">
+            <ProvenancePill type="resume" onClick={() => openProvenanceModal("resume")} />
+            Personalized from your uploaded resume
+          </span>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-[20px] border border-[#e8ded2] bg-[#fffdfa] px-4 py-4">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Verified Facts</p>
+            <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{evidenceContractData?.verified_facts?.length ?? 0}</p>
+            <p className="mt-2 text-xs leading-5 text-[#7a6d63]">Claims that can be traced back to explicit source material.</p>
+          </div>
+          <div className="rounded-[20px] border border-[#e8ded2] bg-[#fffdfa] px-4 py-4">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Key Inferences</p>
+            <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{evidenceContractData?.key_inferences?.length ?? 0}</p>
+            <p className="mt-2 text-xs leading-5 text-[#7a6d63]">Judgment calls created by combining signals across sources.</p>
+          </div>
+          <div className="rounded-[20px] border border-[#e8ded2] bg-[#fffdfa] px-4 py-4">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Evidence Gaps</p>
+            <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{evidenceContractData?.evidence_gaps?.length ?? 0}</p>
+            <p className="mt-2 text-xs leading-5 text-[#7a6d63]">Unknowns the system could not verify from the evidence set.</p>
+          </div>
+          <div className="rounded-[20px] border border-[#e8ded2] bg-[#fffdfa] px-4 py-4">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Source Coverage</p>
+            <p className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatNumber(uniqueWebsiteCount)}</p>
+            <p className="mt-2 text-xs leading-5 text-[#7a6d63]">Distinct external websites represented in the retrieved evidence.</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="rounded-[22px] border border-[#e8ded2] bg-[#fffdfa] px-4 py-4">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">What fed this brief</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {report.jobDescription ? <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700">Job description included</span> : <span className="rounded-full bg-[#f5f1e8] px-3 py-1 text-xs font-medium text-[#7a6d63]">No job description</span>}
+              {hasOverlay ? <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">Resume personalization included</span> : <span className="rounded-full bg-[#f5f1e8] px-3 py-1 text-xs font-medium text-[#7a6d63]">No resume personalization</span>}
+              <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">{formatNumber(report.sources.length)} total sources</span>
+              <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">{formatNumber(uniqueWebsiteCount)} distinct websites</span>
+            </div>
+            {sourceBreakdown.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {sourceBreakdown.slice(0, 4).map(([label, count]) => (
+                  <div key={label} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-[#4a3f36]">{label}</span>
+                    <span className="font-medium text-[#1c1713]">{formatNumber(count)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-3">
+            <div className="rounded-[22px] border border-[#e8ded2] bg-[#fffdfa] px-4 py-4">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Verified Facts</p>
+              <div className="mt-3 space-y-3">
+                {(evidenceContractData?.verified_facts ?? []).slice(0, 2).map((item, index) => (
+                  <div key={index} className="space-y-1">
+                    <p className="text-sm leading-5 text-[#1c1713]">{item.claim}</p>
+                    <p className="text-xs text-[#9c8d81]">{item.source_ref}</p>
+                  </div>
+                ))}
+                {(evidenceContractData?.verified_facts?.length ?? 0) === 0 && <p className="text-sm text-[#9c8d81]">No verified facts were stored for this report.</p>}
+              </div>
+            </div>
+            <div className="rounded-[22px] border border-[#e8ded2] bg-[#fffdfa] px-4 py-4">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Key Inferences</p>
+              <div className="mt-3 space-y-3">
+                {(evidenceContractData?.key_inferences ?? []).slice(0, 2).map((item, index) => (
+                  <div key={index} className="space-y-1.5">
+                    <p className="text-sm leading-5 text-[#1c1713]">{item.inference}</p>
+                    <ConfidencePill level={item.confidence} />
+                  </div>
+                ))}
+                {(evidenceContractData?.key_inferences?.length ?? 0) === 0 && <p className="text-sm text-[#9c8d81]">No explicit inferences were stored for this report.</p>}
+              </div>
+            </div>
+            <div className="rounded-[22px] border border-[#e8ded2] bg-[#fffdfa] px-4 py-4">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Evidence Gaps</p>
+              <div className="mt-3 space-y-3">
+                {(evidenceContractData?.evidence_gaps ?? []).slice(0, 2).map((item, index) => (
+                  <div key={index} className="space-y-1">
+                    <p className="text-sm leading-5 text-[#1c1713]">{item.what_is_missing}</p>
+                    <p className="text-xs text-[#9c8d81]">{item.why_it_matters}</p>
+                  </div>
+                ))}
+                {(evidenceContractData?.evidence_gaps?.length ?? 0) === 0 && <p className="text-sm text-[#9c8d81]">No major evidence gaps were stored for this report.</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  };
+
+  const renderCredibilityAppendix = () => {
+    if (viewMode !== "full") return null;
+
+    return (
+      <>
+        <div className="mt-9 sm:mt-10">
+          <CitationResourcesPanel sections={report.sections} sources={report.sources} onBackToTop={scrollReportToTop} />
+        </div>
+
+        <div className="mt-9 sm:mt-10">
+          <section id="ai-activity" className="rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:rounded-[30px] sm:px-6 sm:py-6">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">AI Activity</p>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">Model workflow behind the brief</h2>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <BackToTopButton onClick={scrollReportToTop} />
+                {report.tokenUsage && (
+                  <div className="rounded-2xl bg-white px-4 py-3 text-right ring-1 ring-[#e9dfd3]">
+                    <p className="text-xs text-[#9c8d81]">Estimated cost</p>
+                    <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatUsd(report.tokenUsage.total_cost_usd)}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            {report.tokenUsage ? (
+              <div className="mt-4 overflow-hidden rounded-[20px] bg-white ring-1 ring-[#e8ded2] sm:mt-5 sm:rounded-[24px]">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#f5f1e8] text-[#7a6d63]">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Model</th>
+                      <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Purpose</th>
+                      <th className="px-4 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.tokenUsage.calls.map((call, index) => (
+                      <tr key={`${call.model}-${index}`} className="border-t border-[#f0ece4] align-top">
+                        <td className="px-4 py-3 font-medium text-[#1c1713]">{call.model}</td>
+                        <td className="px-4 py-3 text-[#4a3f36]">{call.purpose}</td>
+                        <td className="px-4 py-3 text-right font-medium text-[#1c1713]">{formatTokenCount(call.input_tokens + call.output_tokens + (call.reasoning_tokens ?? 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="mt-5 text-sm text-[#9c8d81]">Token usage details were not persisted for this report.</p>
+            )}
+          </section>
+        </div>
+
+        {report.sources.length > 0 && (
+          <section
+            id="sources"
+            aria-labelledby="sources-heading"
+            className="mt-9 rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:mt-10 sm:rounded-[30px] sm:px-6 sm:py-6"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="sources-heading" className="text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">
+                  Evidence Sources
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[#7a6d63]">
+                  Every source fetched or provided for this brief, in the order stored with the report.
+                </p>
+              </div>
+              <BackToTopButton onClick={scrollReportToTop} />
+            </div>
+
+            <div className="mt-5">
+              <SourcesPanel sources={report.sources} />
+            </div>
+          </section>
+        )}
+      </>
     );
   };
 
@@ -1201,7 +1522,7 @@ export default function ReportPage() {
 
     if (hasOverlay && overlay.data![key]) {
       return (
-        <SectionShell key={key} id={key} title={title} subtitle={subtitle}>
+        <SectionShell key={key} id={key} title={title} subtitle={subtitle} provenance="resume" onProvenanceClick={openProvenanceModal}>
           {key === "candidate_role_match" && (
             <CandidateRoleMatchSection data={overlay.data!.candidate_role_match} />
           )}
@@ -1229,13 +1550,13 @@ export default function ReportPage() {
 
     if (overlayGenerating) {
       return (
-        <SectionShell key={key} id={key} title={title} subtitle={subtitle}>
+        <SectionShell key={key} id={key} title={title} subtitle={subtitle} provenance="resume" onProvenanceClick={openProvenanceModal}>
           <SectionSkeleton />
         </SectionShell>
       );
     }
 
-    return <LockedOverlaySection key={key} sectionId={key} title={title} subtitle={subtitle} />;
+    return <LockedOverlaySection key={key} sectionId={key} title={title} subtitle={subtitle} onProvenanceClick={openProvenanceModal} />;
   };
 
   return (
@@ -1389,14 +1710,13 @@ export default function ReportPage() {
                   </div>
 
                   {/* ── Signal Scorecard ──────────────────────────────────── */}
-                  <div className="mt-5 bg-[#fffdfa] py-2 sm:mt-6">
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <ScoreMeter label="Company Momentum" value={report.scores.company_momentum} />
-                      <ScoreMeter label="Org Clarity" value={report.scores.org_clarity} />
-                      <ScoreMeter label="Role Leverage" value={report.scores.role_leverage} />
-                      <ScoreMeter label="Execution Risk" value={report.scores.execution_risk} />
-                    </div>
+                  <div className="mt-5 grid gap-3 sm:mt-6 sm:grid-cols-2 xl:grid-cols-4">
+                    <ScoreMeter label="Company Momentum" value={report.scores.company_momentum} />
+                    <ScoreMeter label="Org Clarity" value={report.scores.org_clarity} />
+                    <ScoreMeter label="Role Leverage" value={report.scores.role_leverage} />
+                    <ScoreMeter label="Execution Risk" value={report.scores.execution_risk} />
                   </div>
+
                 </div>
               </section>
 
@@ -1488,11 +1808,10 @@ export default function ReportPage() {
 
               <div className="mt-9 space-y-1.5 sm:mt-10">
                 <SectionGroupLabel
-                  title="Decision Layer"
+                  title="Decision"
                   description="Start with the core recommendation, top-line judgment, and the fastest version of the story."
                 />
                 {renderBaseSection("executive_summary")}
-                {renderBaseSection("interview_decision_summary")}
                 {renderBaseSection("five_minute_brief")}
                 {renderBaseSection("assessment_snapshot")}
 
@@ -1505,7 +1824,7 @@ export default function ReportPage() {
                 {OVERLAY_SECTIONS.slice(1).map(renderOverlaySection)}
 
                 <SectionGroupLabel
-                  title="Interview Preparation"
+                  title="Interview Prep"
                   description="Use this layer to rehearse the likely agenda, shape your questions, and pressure-test risk areas."
                 />
                 {renderBaseSection("likely_interview_agenda")}
@@ -1522,140 +1841,36 @@ export default function ReportPage() {
                 {renderBaseSection("role_snapshot")}
                 {renderBaseSection("role_swot")}
                 {renderBaseSection("why_role_exists_now")}
+
+                {hasCredibilityFlow && (
+                  <>
+                    <SectionGroupLabel
+                      title="Credibility"
+                      description="Review the evidence model, citations, and model workflow after reading the report body."
+                    />
+                    {renderCredibilitySection()}
+                    {renderCredibilityAppendix()}
+                  </>
+                )}
               </div>
-
-              {viewMode === "full" && (
-                <div className="mt-9 sm:mt-10">
-                  <CitationResourcesPanel sections={report.sections} sources={report.sources} onBackToTop={scrollReportToTop} />
-                </div>
-              )}
-
-              {viewMode === "full" && (
-                <div className="mt-9 grid gap-6 sm:mt-10 sm:gap-7 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
-                  <section id="research-footprint" className="rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:rounded-[30px] sm:px-6 sm:py-6">
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                      <div>
-                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">Research Footprint</p>
-                        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">Where the brief pulled evidence from</h2>
-                      </div>
-                      <div className="flex items-start gap-2.5">
-                        <BackToTopButton onClick={scrollReportToTop} />
-                        <div className="rounded-2xl bg-white px-4 py-3 text-right ring-1 ring-[#e9dfd3]">
-                          <p className="text-xs text-[#9c8d81]">Distinct websites</p>
-                          <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatNumber(uniqueWebsiteCount)}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 overflow-hidden rounded-[20px] bg-white ring-1 ring-[#e8ded2] sm:mt-5 sm:rounded-[24px]">
-                      <table className="w-full text-sm">
-                        <thead className="bg-[#f5f1e8] text-[#7a6d63]">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Source Type</th>
-                            <th className="px-4 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Count</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sourceBreakdown.length > 0 ? (
-                            sourceBreakdown.map(([label, count]) => (
-                              <tr key={label} className="border-t border-[#f0ece4]">
-                                <td className="px-4 py-3 text-[#4a3f36]">{label}</td>
-                                <td className="px-4 py-3 text-right font-medium text-[#1c1713]">{formatNumber(count)}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={2} className="px-4 py-4 text-[#9c8d81]">No source trace was stored for this report.</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
-
-                  <section id="ai-activity" className="rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:rounded-[30px] sm:px-6 sm:py-6">
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                      <div>
-                        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">AI Activity</p>
-                        <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">Model workflow behind the brief</h2>
-                      </div>
-                      <div className="flex items-start gap-2.5">
-                        <BackToTopButton onClick={scrollReportToTop} />
-                        {report.tokenUsage && (
-                          <div className="rounded-2xl bg-white px-4 py-3 text-right ring-1 ring-[#e9dfd3]">
-                            <p className="text-xs text-[#9c8d81]">Estimated cost</p>
-                            <p className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">{formatUsd(report.tokenUsage.total_cost_usd)}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {report.tokenUsage ? (
-                      <div className="mt-4 overflow-hidden rounded-[20px] bg-white ring-1 ring-[#e8ded2] sm:mt-5 sm:rounded-[24px]">
-                        <table className="w-full text-sm">
-                          <thead className="bg-[#f5f1e8] text-[#7a6d63]">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Model</th>
-                              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Purpose</th>
-                              <th className="px-4 py-3 text-right text-[0.68rem] font-semibold uppercase tracking-[0.2em]">Tokens</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {report.tokenUsage.calls.map((call, index) => (
-                              <tr key={`${call.model}-${index}`} className="border-t border-[#f0ece4] align-top">
-                                <td className="px-4 py-3 font-medium text-[#1c1713]">{call.model}</td>
-                                <td className="px-4 py-3 text-[#4a3f36]">{call.purpose}</td>
-                                <td className="px-4 py-3 text-right font-medium text-[#1c1713]">{formatTokenCount(call.input_tokens + call.output_tokens + (call.reasoning_tokens ?? 0))}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <p className="mt-5 text-sm text-[#9c8d81]">Token usage details were not persisted for this report.</p>
-                    )}
-                  </section>
-                </div>
-              )}
-
-              {viewMode === "full" && (
-                <section
-                  id="sources"
-                  aria-labelledby="sources-heading"
-                  className="mt-9 rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:mt-10 sm:rounded-[30px] sm:px-6 sm:py-6"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 id="sources-heading" className="text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">
-                        Evidence Sources
-                      </h2>
-                      <p className="mt-2 text-sm leading-5 text-[#7a6d63]">
-                        Full source trace for the report, including company-owned sources and additional external inputs that supported retrieval.
-                      </p>
-                    </div>
-                    <BackToTopButton onClick={scrollReportToTop} />
-                  </div>
-                  <div className="mt-4 rounded-[20px] bg-white px-4 py-4 ring-1 ring-[#e8ded2] sm:mt-5 sm:rounded-[24px] sm:px-5 sm:py-5">
-                    <SourcesPanel sources={report.sources} />
-                  </div>
-                </section>
-              )}
 
               <section className="mt-10 rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:mt-12 sm:rounded-[30px] sm:px-6 sm:py-6">
                 <h2 className="text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">Was this brief useful overall?</h2>
                 {overallFeedback ? (
                   <p className="mt-3 text-sm text-[#9c8d81]" role="status" aria-live="polite">
-                    {overallFeedback === "useful" ? "Thanks — glad it helped." : "Thanks for the feedback."}
+                    {overallFeedback === "useful" ? "Thanks - glad it helped." : "Thanks for the feedback."}
                   </p>
                 ) : (
                   <div className="mt-4 flex gap-3" role="group" aria-label="Overall report feedback">
                     <button
                       onClick={() => handleOverallFeedback("useful")}
-                      className="px-4 py-2 rounded-full bg-white text-[#4a3f36] text-sm border border-[#d4cdc4] hover:bg-[#1a4a3a]/6 hover:text-[#1a4a3a] hover:border-[#1a4a3a]/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
+                      className="rounded-full border border-[#d4cdc4] bg-white px-4 py-2 text-sm text-[#4a3f36] hover:border-[#1a4a3a]/30 hover:bg-[#1a4a3a]/6 hover:text-[#1a4a3a] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
                     >
                       Yes, useful
                     </button>
                     <button
                       onClick={() => handleOverallFeedback("not_useful")}
-                      className="px-4 py-2 rounded-full bg-white text-[#4a3f36] text-sm border border-[#d4cdc4] hover:bg-red-50 hover:text-red-700 hover:border-red-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
+                      className="rounded-full border border-[#d4cdc4] bg-white px-4 py-2 text-sm text-[#4a3f36] hover:border-red-300 hover:bg-red-50 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 transition-colors"
                     >
                       Not useful
                     </button>
@@ -1676,6 +1891,9 @@ export default function ReportPage() {
           </div>
         </div>
       </div>
+      <ProvenanceModal openType={activeProvenance} onClose={closeProvenanceModal}>
+        {renderCredibilitySection({ inModal: true })}
+      </ProvenanceModal>
     </main>
   );
 }

@@ -55,7 +55,7 @@
 ### Report Page UX
 - **Full Report / 5-Minute Brief view toggle** — brief mode shows only the 3 decision-critical sections
 - **Section collapsing** — deep-context sections (Company/Role SWOT, snapshots) collapsed by default
-- **Section ordering** — decision layer first, overlay interleaved after strategic context, deep context at bottom
+- **Section ordering** — overview first, then Decision → Credibility → Candidate Positioning → Interview Prep → Strategic Context
 - **Per-section feedback** — useful / not useful on every section
 - **Overall report feedback**
 - **Evidence sources panel** — all fetched URLs with citations

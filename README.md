@@ -6,6 +6,10 @@ Rather than producing a generic research report, the engine answers one question
 
 ## Current Highlights
 
+- **Canonical recommendation engine** — unified `getCanonicalRecommendation()` resolves conflicting signals from report, executive summary, pursuit stance, and interview recommendation into a single authoritative level (0–4), with candidate fit score as a floor veto
+- **Prompt injection hardening** — all user-supplied text (company URL, JD, profile context, resume) is sanitized through `sanitizeSingleLineText` / `sanitizeMultiLineText` / `sanitizeHttpUrl` before reaching any LLM prompt; suspicious instruction-injection patterns are stripped and injected content is wrapped in `<<<BEGIN_*>>>` / `<<<END_*>>>` delimiters
+- **Overhauled report page** — new layout, richer section rendering, and tighter component contracts across all 14 report sections + overlay
+- **Overhauled history view** — enriched history cards with recommendation label, scores, and company metadata
 - Admin dashboard with tracked OpenAI spend/tokens, Firecrawl remaining credits, and Supabase row-count visibility
 - Admin user and activity views enriched with resolved auth names and emails for clearer attribution
 - Branded app icon and social preview metadata for link unfurls and browser surfaces
@@ -134,6 +138,7 @@ lib/
     prompts.ts                     # getDeepAnalysisPrompt + getInterviewLayerPrompt
     overlayPrompt.ts               # getCandidateOverlayPrompt (7 sections)
     embeddings.ts                  # generateEmbedding / generateEmbeddings
+    untrustedInput.ts              # sanitizeSingleLineText / sanitizeMultiLineText / sanitizeHttpUrl / formatUntrustedTextBlock
   db/
     supabase.ts                    # Admin client
     operations.ts                  # ~40 CRUD functions for all entities
@@ -147,6 +152,7 @@ lib/
   report/
     assembleReport.ts              # Parallel LLM calls → merge → store
     generateOverlay.ts             # Candidate overlay generation
+    recommendation.ts              # getCanonicalRecommendation - unified recommendation resolver (levels 0-4)
   hooks/
     useResumeStore.ts              # localStorage resume persistence
 

@@ -58,11 +58,25 @@ export async function generateOverlay(overlayId: string): Promise<void> {
     const companyName = company?.name ?? "the company";
 
     // 4. Load existing base report sections for context (candidate_positioning + role_snapshot)
-    const { data: reportRow } = await supabaseAdmin
+    let { data: reportRow, error: reportRowError } = await supabaseAdmin
       .from("reports")
-      .select("id, ai_query_count")
+      .select("id, ai_query_count, report_format")
       .eq("request_id", overlay.request_id)
-      .single();
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (reportRowError && /report_format/i.test(reportRowError.message ?? "")) {
+      ({ data: reportRow, error: reportRowError } = await supabaseAdmin
+        .from("reports")
+        .select("id, ai_query_count")
+        .eq("request_id", overlay.request_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle());
+    }
+
+    if (reportRowError) throw reportRowError;
 
     let baseCandidatePositioning: string | undefined;
     let baseRoleSnapshot: string | undefined;

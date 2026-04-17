@@ -112,7 +112,11 @@ export async function GET(req: NextRequest) {
         if (!result.success) {
           await supabaseAdmin
             .from("deep_dive_requests")
-            .update({ status: "failed", updated_at: new Date().toISOString() })
+            .update({
+              status: "failed",
+              error_message: result.error ?? "Source ingestion failed during retry.",
+              updated_at: new Date().toISOString(),
+            })
             .eq("id", request.id);
           results.push({ requestId: request.id, action: "ingest_failed" });
           continue;
@@ -140,7 +144,11 @@ export async function GET(req: NextRequest) {
       console.error(`[CronRetry] Failed requestId=${request.id}:`, err);
       await supabaseAdmin
         .from("deep_dive_requests")
-        .update({ status: "failed", updated_at: new Date().toISOString() })
+        .update({
+          status: "failed",
+          error_message: err instanceof Error ? err.message : String(err),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", request.id);
       results.push({ requestId: request.id, action: "retry_failed" });
     }

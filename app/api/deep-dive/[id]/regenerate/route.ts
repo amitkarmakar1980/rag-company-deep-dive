@@ -5,7 +5,6 @@ import {
   getDeepDiveRequest,
   getReport,
   updateDeepDiveStatus,
-  deleteReportForRequest,
   deleteSourcesForRequest,
   getSourceCount,
 } from "@/lib/db/operations";
@@ -41,13 +40,8 @@ export async function POST(
     // Check what's already done so we can skip completed stages
     const sourceCount = await getSourceCount(requestId);
     const existingReport = await getReport(requestId);
-    const checkpoint = existingReport?.summary_json?.checkpoint ?? null;
-
-    const hasDeepAnalysis = !!checkpoint?.deep_analysis;
-    const hasInterviewLayer = !!checkpoint?.interview_layer;
     console.log(
-      `[Regenerate] requestId=${requestId} sources=${sourceCount} ` +
-      `deepDone=${hasDeepAnalysis} interviewDone=${hasInterviewLayer}`
+      `[Regenerate] requestId=${requestId} sources=${sourceCount} latestReport=${existingReport?.id ?? "none"}`
     );
 
     // Get company details
@@ -57,19 +51,10 @@ export async function POST(
       .eq("id", request.company_id)
       .single();
 
-    // Decide what to wipe:
-    // - If no sources exist: wipe everything and restart fully
-    // - If sources exist but no checkpoint: sources are good, wipe report and regenerate LLM stages
-    // - If checkpoint exists: keep report record (checkpoint intact), only redo missing LLM stages
+    // Keep prior reports intact. Reuse sources when possible and create a fresh premium report row.
     if (sourceCount === 0) {
-      // Full restart
-      await deleteReportForRequest(requestId);
       await deleteSourcesForRequest(requestId);
-    } else if (!hasDeepAnalysis) {
-      // Sources OK, but no LLM results — wipe report, keep sources
-      await deleteReportForRequest(requestId);
     }
-    // If hasDeepAnalysis: keep existing report record (checkpoint will be reused in assembleReport)
 
     await updateDeepDiveStatus(requestId, "pending");
 
@@ -94,22 +79,26 @@ export async function POST(
             );
             if (!result.success) {
               console.error(`[Regenerate] ingestSources failed: ${result.error}`);
-              await updateDeepDiveStatus(requestId, "failed");
+              await updateDeepDiveStatus(requestId, "failed", result.error ?? "Source ingestion failed during regeneration.");
               return;
             }
 
             plannerQueries = result.researchPlan.retrievalQueries;
           }
 
-          // Stage 2: LLM report generation (assembleReport handles checkpoint internally)
+          // Stage 2: premium report generation
           await updateDeepDiveStatus(requestId, "generating_report");
-          const { assembleReport } = await import("@/lib/report/assembleReport");
-          await assembleReport(requestId, plannerQueries);
+          const { assemblePremiumReportV2 } = await import("@/lib/report/assemblePremiumReportV2");
+          await assemblePremiumReportV2(requestId, plannerQueries);
           await updateDeepDiveStatus(requestId, "completed");
           console.log(`[Regenerate] Complete for requestId=${requestId}`);
         } catch (err) {
           console.error("[Regenerate] Pipeline error:", err);
-          await updateDeepDiveStatus(requestId, "failed");
+          await updateDeepDiveStatus(
+            requestId,
+            "failed",
+            err instanceof Error ? err.message : String(err)
+          );
         }
       })();
     });

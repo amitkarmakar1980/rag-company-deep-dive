@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import { getCanonicalRecommendation } from "@/lib/report/recommendation";
+import { getEffectiveReportFamily, getEffectiveReportFormat } from "@/lib/db/operations";
 
 type HistoryMetricReport = {
   created_at?: string | null;
@@ -10,6 +11,8 @@ type HistoryMetricReport = {
   ai_query_count?: number | null;
   source_count?: number | null;
   source_host_count?: number | null;
+  report_format?: string;
+  report_family?: string;
   summary_json?: any;
   report_sections?: Array<{
     section_key?: string | null;
@@ -44,7 +47,19 @@ function asArray<T>(value: T | T[] | null | undefined): T[] {
 }
 
 function getPrimaryReport(value: HistoryMetricReport | HistoryMetricReport[] | null | undefined): HistoryMetricReport | null {
-  return asArray(value)[0] ?? null;
+  const reports = asArray(value);
+  if (!reports.length) {
+    return null;
+  }
+
+  const sorted = [...reports].sort(
+    (left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime()
+  );
+
+  return sorted.find((report) => {
+    const format = getEffectiveReportFormat(report);
+    return format === "premium_v2" || format === "premium_v1";
+  }) ?? sorted[0] ?? null;
 }
 
 function getSectionContent(report: HistoryMetricReport | null, sectionKey: string): any | null {
@@ -92,7 +107,7 @@ function getOverlayAiQueries(overlays: HistoryOverlay[]): number {
 }
 
 function isMissingReportMetricsColumn(error: { message?: string } | null | undefined): boolean {
-  return /ai_query_count|source_count|source_host_count/i.test(error?.message ?? "");
+  return /ai_query_count|source_count|source_host_count|report_format|report_family/i.test(error?.message ?? "");
 }
 
 export async function GET(req: NextRequest) {
@@ -202,6 +217,8 @@ export async function GET(req: NextRequest) {
         report: report
           ? {
               createdAt: report.created_at ?? null,
+              reportFormat: getEffectiveReportFormat(report),
+              reportFamily: getEffectiveReportFamily(report),
               recommendation: getDetailedRecommendation(report) ?? report.recommendation ?? "need_more_signal",
               candidateFitScore: report.candidate_fit_score ?? null,
               aiQueryCount: reportAiQueries + overlayAiQueries,

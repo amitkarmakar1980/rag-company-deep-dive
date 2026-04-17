@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { ReportSectionCard } from "@/components/ReportSectionCard";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
 import { SourcesPanel } from "@/components/report/SourcesPanel";
 import { CitationResourcesPanel } from "@/components/report/CitationResourcesPanel";
 import { ResumeUploadPanel } from "@/components/report/ResumeUploadPanel";
+import { PremiumReportView } from "@/components/report/PremiumReportView";
 import { getCanonicalRecommendation } from "@/lib/report/recommendation";
 import {
   CandidateRoleMatchSection,
@@ -26,6 +27,8 @@ import { formatDateTimeParts, useRequestTimeZone } from "@/lib/timezone";
 
 interface Report {
   id: string;
+  reportFormat?: string;
+  reportFamily?: string;
   recommendation: RecommendationType;
   scores: ReportScore;
   sections: Array<{
@@ -58,8 +61,23 @@ interface Report {
 interface RequestStatus {
   requestId: string;
   status: string;
+  errorMessage?: string | null;
+  progress?: {
+    stage: "synthesizing" | "writing_sections" | "finalizing";
+    completedSections: number;
+    totalSections: number;
+    headline: string;
+    detail: string;
+  } | null;
   report?: { id: string };
 }
+
+type ProcessingStep = {
+  key: string;
+  label: string;
+  detail?: string;
+  state?: "pending" | "current" | "complete";
+};
 
 type OverlayStatus = "none" | "uploading" | "generating" | "completed" | "failed";
 
@@ -174,6 +192,113 @@ const RECOMMENDATION_META: Record<RecommendationType, { label: string; icon: str
     tone: "border-[#ead7d2] bg-[#fbefeb] text-[#8a3d2f]",
   },
 };
+
+const PROCESSING_COLOR_BY_STAGE: Record<string, { accent: string; soft: string; border: string }> = {
+  pending: {
+    accent: "#7a6d63",
+    soft: "bg-[#f5f1e8]",
+    border: "border-[#ddd4c8]",
+  },
+  fetching_sources: {
+    accent: "#2d5c6a",
+    soft: "bg-[#eef5f8]",
+    border: "border-[#d8e5ea]",
+  },
+  indexing: {
+    accent: "#8a5a14",
+    soft: "bg-[#fff6e7]",
+    border: "border-[#eadfbf]",
+  },
+  generating_report: {
+    accent: "#1a4a3a",
+    soft: "bg-[#edf6f0]",
+    border: "border-[#cfe1d8]",
+  },
+  generating_deep_analysis: {
+    accent: "#7f4c9a",
+    soft: "bg-[#f3ecfa]",
+    border: "border-[#e3d6f3]",
+  },
+  generating_interview_layer: {
+    accent: "#9b6a16",
+    soft: "bg-[#fff6e7]",
+    border: "border-[#eadfbf]",
+  },
+};
+
+const PROCESSING_SIDE_NOTES: Record<string, string[]> = {
+  pending: [
+    "Spinning up the premium pipeline and reserving the report slot.",
+    "Preparing the retrieval plan before any strategy synthesis starts.",
+    "Making sure the run starts from a clean premium state.",
+  ],
+  fetching_sources: [
+    "The crawler is looking for first-party evidence before it trusts outside commentary.",
+    "This is where strong runs separate signal from noisy web summaries.",
+    "Longer collection windows usually mean broader source coverage, not a frozen job.",
+  ],
+  indexing: [
+    "Chunks are being cleaned, deduplicated, and prepared for retrieval.",
+    "The system is narrowing the evidence set before the expensive reasoning passes.",
+    "This step is mostly about making later strategy calls less generic.",
+  ],
+  generating_deep_analysis: [
+    "The model is pressure-testing company strategy, role leverage, and why-now logic.",
+    "This pass is where shallow summaries get rejected in favor of actual strategic synthesis.",
+    "If this takes longer, it usually means the system is reconciling multiple strategic signals.",
+  ],
+  generating_interview_layer: [
+    "The interview layer is being tailored around likely agendas, objections, and story angles.",
+    "This is where the report converts strategy into usable interview positioning.",
+    "Longer runs here usually mean deeper interviewer-specific scaffolding, not filler.",
+  ],
+  generating_report: [
+    "The premium report is stitching strategy, candidate-fit, and interview prep into one brief.",
+    "Sections are written only after the synthesis pass is complete enough to persist.",
+    "If the section count stalls briefly, the model is usually still working upstream on reasoning.",
+  ],
+};
+
+const LONG_WAIT_NOTES = [
+  "This is taking longer than a lightweight summary because the premium run is doing multi-layer synthesis before it writes sections.",
+  "Long waits often mean the system is reconciling broad evidence coverage or a deeper reasoning pass, not simply hanging.",
+  "The premium path favors grounded strategy and interviewer-specific prep over cheap, fast filler.",
+];
+
+function formatElapsed(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (minutes <= 0) {
+    return `${remainingSeconds}s`;
+  }
+
+  return `${minutes}m ${remainingSeconds.toString().padStart(2, "0")}s`;
+}
+
+function getProgressValue(statusKey: string, progress?: RequestStatus["progress"]): number {
+  if (statusKey === "pending") return 6;
+  if (statusKey === "fetching_sources") return 22;
+  if (statusKey === "indexing") return 38;
+  if (statusKey === "generating_deep_analysis") return 56;
+  if (statusKey === "generating_interview_layer") return 72;
+
+  if (statusKey === "generating_report") {
+    const stage = progress?.stage ?? "synthesizing";
+    const completedSections = progress?.completedSections ?? 0;
+    const totalSections = Math.max(progress?.totalSections ?? 9, 1);
+
+    if (stage === "synthesizing") return 82;
+    if (stage === "writing_sections") return 84 + Math.round((completedSections / totalSections) * 12);
+    return 98;
+  }
+
+  return 12;
+}
+
+function getCurrentStepLabel(steps: ProcessingStep[]): string {
+  return steps.find((step) => step.state === "current")?.label ?? steps[0]?.label ?? "Preparing analysis";
+}
 
 function parseSectionContent<T>(content: string | null | undefined): T | null {
   if (!content) return null;
@@ -580,29 +705,213 @@ function ProvenanceModal({
   );
 }
 
-function ProcessingScreen({ statusKey }: { statusKey: string }) {
-  const label = STATUS_LABELS[statusKey] ?? "Generating report...";
-  const steps = STATUS_SUBSTEPS[statusKey] ?? [];
+function getProcessingSteps(statusKey: string, progress?: RequestStatus["progress"]): ProcessingStep[] {
+  if (statusKey === "generating_report") {
+    const completedSections = progress?.completedSections ?? 0;
+    const totalSections = progress?.totalSections ?? 9;
+    const stage = progress?.stage ?? "synthesizing";
+
+    return [
+      {
+        key: "synthesizing",
+        label: "Run premium synthesis from the retrieved evidence",
+        detail: "Strategy, candidate-fit, and interview-prep reasoning are generated before report persistence starts.",
+        state: stage === "synthesizing" ? "current" : "complete",
+      },
+      {
+        key: "writing_sections",
+        label: "Write report sections and attach citations",
+        detail: stage === "writing_sections" || stage === "finalizing"
+          ? `${completedSections} of ${totalSections} premium sections persisted.`
+          : `0 of ${totalSections} premium sections persisted.`,
+        state: stage === "writing_sections" ? "current" : stage === "finalizing" ? "complete" : "pending",
+      },
+      {
+        key: "finalizing",
+        label: "Finalize telemetry, operations layer, and publish",
+        detail: "The report only flips to completed after the final operations metadata is stored.",
+        state: stage === "finalizing" ? "current" : "pending",
+      },
+    ];
+  }
+
+  return (STATUS_SUBSTEPS[statusKey] ?? []).map((step, index) => ({
+    key: `${statusKey}-${index}`,
+    label: step,
+  }));
+}
+
+function ProcessingScreen({ statusKey, progress }: { statusKey: string; progress?: RequestStatus["progress"] }) {
+  const label = progress?.headline ?? STATUS_LABELS[statusKey] ?? "Generating report...";
+  const detail = progress?.detail;
+  const steps = getProcessingSteps(statusKey, progress);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    setElapsedSeconds(0);
+
+    const interval = window.setInterval(() => {
+      setElapsedSeconds((current) => current + 1);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [statusKey, progress?.stage]);
+
+  const progressValue = useMemo(() => getProgressValue(statusKey, progress), [statusKey, progress]);
+  const palette = PROCESSING_COLOR_BY_STAGE[statusKey] ?? PROCESSING_COLOR_BY_STAGE.pending;
+  const currentStepLabel = useMemo(() => getCurrentStepLabel(steps), [steps]);
+  const stageNotes = PROCESSING_SIDE_NOTES[statusKey] ?? PROCESSING_SIDE_NOTES.pending;
+  const rotatingNote = stageNotes[Math.floor(elapsedSeconds / 6) % stageNotes.length];
+  const patienceNote = elapsedSeconds >= 90
+    ? LONG_WAIT_NOTES[Math.floor((elapsedSeconds - 90) / 10) % LONG_WAIT_NOTES.length]
+    : null;
+
   return (
-    <div className="mx-auto flex w-full max-w-3xl items-start px-4 py-10 sm:py-14">
-      <div className="w-full rounded-[28px] border border-[#ddd4c8] bg-white/90 px-6 py-8 shadow-[0_24px_50px_rgba(28,23,19,0.08)]">
-        <div className="flex items-center gap-4">
-          <span className="h-10 w-10 animate-spin rounded-full border-2 border-[#e4ddd4] border-t-[#1a4a3a]" role="status" aria-label="Generating" />
+    <div className="mx-auto flex w-full max-w-5xl items-start px-4 py-10 sm:py-14">
+      <div className="relative w-full overflow-hidden rounded-[32px] border border-[#ddd4c8] bg-[linear-gradient(180deg,rgba(255,250,243,0.98)_0%,rgba(250,246,239,0.98)_100%)] px-6 py-8 shadow-[0_28px_70px_rgba(28,23,19,0.10)] sm:px-8">
+        <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top_left,rgba(26,74,58,0.10),transparent_52%),radial-gradient(circle_at_top_right,rgba(45,92,106,0.12),transparent_45%)]" aria-hidden />
+        <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
           <div>
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">In progress</p>
-            <h1 className="mt-1 text-xl font-semibold tracking-[-0.04em] text-[#1c1713]">{label}</h1>
+            <div className="flex items-center gap-4">
+              <span className="relative flex h-12 w-12 items-center justify-center rounded-full border border-[#ddd4c8] bg-white/90 shadow-[0_10px_24px_rgba(28,23,19,0.08)]" role="status" aria-label="Generating">
+                <span className="absolute inset-1.5 animate-spin rounded-full border-2 border-[#e4ddd4] border-t-[#1a4a3a]" />
+                <span className="relative h-2.5 w-2.5 rounded-full" style={{ backgroundColor: palette.accent }} />
+              </span>
+              <div>
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-[#9c8d81]">In progress</p>
+                <h1 className="mt-1 text-xl font-semibold tracking-[-0.04em] text-[#1c1713] sm:text-[1.6rem]">{label}</h1>
+                {detail ? <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6b5e52]">{detail}</p> : null}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-[24px] border border-[#e7ddd2] bg-white/80 px-4 py-4 shadow-[0_14px_30px_rgba(28,23,19,0.04)] sm:px-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#9c8d81]">Current pass</p>
+                  <p className="mt-1 text-sm font-medium text-[#4a3f36]">{currentStepLabel}</p>
+                </div>
+                <div className="flex flex-wrap gap-2.5 text-xs">
+                  <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-medium ${palette.border} ${palette.soft}`} style={{ color: palette.accent }}>
+                    Elapsed {formatElapsed(elapsedSeconds)}
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#ddd4c8] bg-[#faf6ef] px-3 py-1.5 font-medium text-[#6b5e52]">
+                    Progress {progressValue}%
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#efe7dc]">
+                <div
+                  className="h-full rounded-full transition-[width] duration-700 ease-out"
+                  style={{
+                    width: `${progressValue}%`,
+                    background: `linear-gradient(90deg, ${palette.accent} 0%, rgba(26,74,58,0.78) 100%)`,
+                  }}
+                />
+              </div>
+
+              <p className="mt-3 text-sm leading-6 text-[#6b5e52]">{rotatingNote}</p>
+              {patienceNote ? <p className="mt-2 text-xs leading-5 text-[#8a7050]">{patienceNote}</p> : null}
+            </div>
+
+            {steps.length > 0 && (
+              <ul className="mt-6 space-y-3 text-sm text-[#6b5e52]">
+                {steps.map((step) => (
+                  <li key={step.key} className="flex gap-3 rounded-[18px] border border-transparent px-1 py-1">
+                    <span
+                      className={`mt-1.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border text-[0.65rem] font-semibold ${step.state === "complete" ? "border-[#cfe1d8] bg-[#edf6f0] text-[#1a4a3a]" : step.state === "current" ? "border-[#1a4a3a] bg-[#1a4a3a] text-white" : "border-[#ddd4c8] bg-[#faf6ef] text-[#9c8d81]"}`}
+                      aria-hidden
+                    >
+                      {step.state === "complete" ? "\u2713" : step.state === "current" ? "~" : ""}
+                    </span>
+                    <div>
+                      <p className="font-medium text-[#4a3f36]">{step.label}</p>
+                      {step.detail ? <p className="mt-1 text-xs leading-5 text-[#7a6d63]">{step.detail}</p> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <aside className="space-y-4">
+            <div className="rounded-[24px] border border-[#e7ddd2] bg-white/82 px-5 py-5 shadow-[0_14px_30px_rgba(28,23,19,0.04)]">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Analyst desk</p>
+              <h2 className="mt-2 text-[1.15rem] font-semibold tracking-[-0.03em] text-[#1c1713]">What the system is doing</h2>
+              <p className="mt-3 text-sm leading-6 text-[#6b5e52]">
+                This premium run does not stream partial filler. It waits until the strategy and interview-prep passes are coherent enough to persist.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+              <div className="rounded-[22px] border border-[#e7ddd2] bg-[#fffdfa] px-4 py-4">
+                <p className="text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Stage</p>
+                <p className="mt-2 text-lg font-semibold tracking-[-0.03em] text-[#1c1713]">{titleCaseWord((progress?.stage ?? statusKey).replace(/_/g, " "))}</p>
+                <p className="mt-2 text-xs leading-5 text-[#7a6d63]">The card on the left will update as the run moves from synthesis to section writing and finalization.</p>
+              </div>
+              <div className="rounded-[22px] border border-[#e7ddd2] bg-[#fffdfa] px-4 py-4">
+                <p className="text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Why it can take time</p>
+                <p className="mt-2 text-sm leading-6 text-[#4a3f36]">Longer runs usually mean broader evidence retrieval, deeper reasoning, or both. The premium path spends that time on strategy quality, not decorative prose.</p>
+              </div>
+              <div className="rounded-[22px] border border-[#e7ddd2] bg-[#fffdfa] px-4 py-4">
+                <p className="text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Good sign</p>
+                <p className="mt-2 text-sm leading-6 text-[#4a3f36]">If progress moves from synthesis to writing sections, the report row already exists and the system is past the most fragile step.</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompletionTransitionScreen({
+  companyName,
+  roleTitle,
+}: {
+  companyName?: string | null;
+  roleTitle?: string | null;
+}) {
+  return (
+    <div className="mx-auto flex w-full max-w-4xl items-start px-4 py-10 sm:py-14">
+      <div className="relative w-full overflow-hidden rounded-[32px] border border-[#d7e5dc] bg-[linear-gradient(180deg,rgba(255,252,246,0.98)_0%,rgba(240,248,243,0.98)_100%)] px-6 py-10 shadow-[0_28px_70px_rgba(26,74,58,0.10)] sm:px-8">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(26,74,58,0.12),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(141,181,158,0.18),transparent_42%)]" aria-hidden />
+        <div className="relative flex flex-col items-center text-center">
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-[#cfe1d8] bg-white shadow-[0_18px_40px_rgba(26,74,58,0.10)]">
+            <span className="absolute inset-0 rounded-full bg-[#1a4a3a]/8 animate-ping" aria-hidden />
+            <span className="relative inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#1a4a3a] text-white">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </span>
+          </div>
+          <p className="mt-6 text-[0.72rem] font-semibold uppercase tracking-[0.24em] text-[#6f8e80]">Report ready</p>
+          <h1 className="mt-3 text-[1.9rem] font-semibold tracking-[-0.05em] text-[#18382d] sm:text-[2.35rem]">
+            Your brief is prepared.
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-7 text-[#4d6358] sm:text-[0.98rem]">
+            Handing off from premium synthesis to the finished report for {roleTitle ?? "your target role"}
+            {companyName ? ` at ${companyName}` : ""}.
+          </p>
+
+          <div className="mt-8 grid w-full gap-3 sm:grid-cols-3">
+            <div className="rounded-[22px] border border-[#dbe8df] bg-white/80 px-4 py-4 text-left">
+              <p className="text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-[#89a095]">Completed</p>
+              <p className="mt-2 text-sm font-medium text-[#18382d]">Synthesis locked</p>
+              <p className="mt-2 text-xs leading-5 text-[#62776d]">Strategy, fit, and interview-prep layers are now consistent enough to publish.</p>
+            </div>
+            <div className="rounded-[22px] border border-[#dbe8df] bg-white/80 px-4 py-4 text-left">
+              <p className="text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-[#89a095]">Now loading</p>
+              <p className="mt-2 text-sm font-medium text-[#18382d]">Final report shell</p>
+              <p className="mt-2 text-xs leading-5 text-[#62776d]">Sections, navigation, and evidence panels are being attached for reading mode.</p>
+            </div>
+            <div className="rounded-[22px] border border-[#dbe8df] bg-white/80 px-4 py-4 text-left">
+              <p className="text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-[#89a095]">Next</p>
+              <p className="mt-2 text-sm font-medium text-[#18382d]">Reading handoff</p>
+              <p className="mt-2 text-xs leading-5 text-[#62776d]">You’ll land directly in the finished report rather than a jarring page swap.</p>
+            </div>
           </div>
         </div>
-        {steps.length > 0 && (
-          <ul className="mt-6 space-y-3 text-sm text-[#6b5e52]">
-            {steps.map((step) => (
-              <li key={step} className="flex gap-3">
-                <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#c8bfb4]" aria-hidden />
-                <span>{step}</span>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </div>
   );
@@ -695,6 +1004,11 @@ export default function ReportPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
   const [activeProvenance, setActiveProvenance] = useState<ProvenanceType | null>(null);
+  const [completionHandoff, setCompletionHandoff] = useState<{ visible: boolean; companyName?: string | null; roleTitle?: string | null }>({
+    visible: false,
+    companyName: null,
+    roleTitle: null,
+  });
   const { timeZone } = useRequestTimeZone();
 
   const { stored: storedResume } = useResumeStore();
@@ -706,6 +1020,8 @@ export default function ReportPage() {
     error: null,
   });
   const overlayPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousStatusRef = useRef<string | null>(null);
   const [activeSectionId, setActiveSectionId] = useState("brief-overview");
   const [desktopTocFloating, setDesktopTocFloating] = useState(false);
   const openProvenanceModal = useCallback((type: ProvenanceType) => {
@@ -805,6 +1121,7 @@ export default function ReportPage() {
   useEffect(() => {
     return () => {
       if (overlayPollRef.current) clearInterval(overlayPollRef.current);
+      if (completionTimeoutRef.current) clearTimeout(completionTimeoutRef.current);
     };
   }, []);
 
@@ -816,15 +1133,38 @@ export default function ReportPage() {
       if (!res.ok) throw new Error("Failed to fetch status");
 
       const data: RequestStatus = await res.json();
+      const shouldShowCompletionHandoff =
+        data.status === "completed" &&
+        Boolean(data.report) &&
+        previousStatusRef.current !== null &&
+        PROCESSING_STATUSES.has(previousStatusRef.current);
+
       setStatus(data);
 
       if (data.report) {
         const reportRes = await fetch(`/api/report/${data.report.id}`);
         if (!reportRes.ok) throw new Error("Failed to fetch report");
         const reportData = await reportRes.json();
-        setReport(reportData);
-        checkExistingOverlay(storedResume?.text);
+
+        if (shouldShowCompletionHandoff) {
+          if (completionTimeoutRef.current) clearTimeout(completionTimeoutRef.current);
+          setCompletionHandoff({
+            visible: true,
+            companyName: reportData.company?.name ?? null,
+            roleTitle: reportData.roleTitle ?? null,
+          });
+          completionTimeoutRef.current = setTimeout(() => {
+            setReport(reportData);
+            setCompletionHandoff({ visible: false, companyName: null, roleTitle: null });
+            checkExistingOverlay(storedResume?.text);
+          }, 1600);
+        } else {
+          setReport(reportData);
+          checkExistingOverlay(storedResume?.text);
+        }
       }
+
+      previousStatusRef.current = data.status;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -847,6 +1187,9 @@ export default function ReportPage() {
     setRegenerating(true);
     setReport(null);
     setError(null);
+    if (completionTimeoutRef.current) clearTimeout(completionTimeoutRef.current);
+    setCompletionHandoff({ visible: false, companyName: null, roleTitle: null });
+    previousStatusRef.current = null;
     try {
       const res = await fetch(`/api/deep-dive/${requestId}/regenerate`, {
         method: "POST",
@@ -943,12 +1286,14 @@ export default function ReportPage() {
   // ─── Error / failed ───────────────────────────────────────────────────────
 
   if (error || status?.status === "failed") {
+    const failureMessage = error ?? status?.errorMessage ?? "An error occurred while generating this report.";
+
     return (
       <main className="min-h-screen bg-[#faf8f3]">
         <div className="max-w-3xl mx-auto px-4 py-16">
           <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center" role="alert">
             <h1 className="text-base font-semibold text-red-800 mb-2">Report Generation Failed</h1>
-            <p className="text-sm text-[#6b5e52] mb-6">{error ?? "An error occurred while generating this report."}</p>
+            <p className="text-sm text-[#6b5e52] mb-6">{failureMessage}</p>
             <button
               onClick={handleRegenerate}
               disabled={regenerating}
@@ -967,7 +1312,15 @@ export default function ReportPage() {
   if (status && PROCESSING_STATUSES.has(status.status)) {
     return (
       <main className="min-h-[calc(100vh-5rem)] bg-[#faf8f3]">
-        <ProcessingScreen statusKey={status.status} />
+        <ProcessingScreen statusKey={status.status} progress={status.progress} />
+      </main>
+    );
+  }
+
+  if (completionHandoff.visible) {
+    return (
+      <main className="min-h-[calc(100vh-5rem)] bg-[#faf8f3]">
+        <CompletionTransitionScreen companyName={completionHandoff.companyName} roleTitle={completionHandoff.roleTitle} />
       </main>
     );
   }
@@ -980,6 +1333,10 @@ export default function ReportPage() {
         </div>
       </main>
     );
+  }
+
+  if (report.reportFamily === "premium" || report.reportFormat === "premium_v1" || report.reportFormat === "premium_v2") {
+    return <PremiumReportView report={report} timeZone={timeZone} />;
   }
 
   // ─── Report ready ─────────────────────────────────────────────────────────

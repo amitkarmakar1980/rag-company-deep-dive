@@ -72,6 +72,15 @@ For each dimension, mark: evidenced / partial / missing:
 - Unit economics signals: any indicators of margin direction, CAC/LTV dynamics, or monetization pressure?
 - Market structure: is this a winner-takes-most market, or will multiple players survive?
 
+LAYER 2A — PRODUCT / PLATFORM AND COMPETITOR DEPTH
+Go materially deeper than generic competitor bullets:
+- Name the product surfaces most relevant to this role.
+- Explain where the strategic control points are.
+- Identify direct competitors, adjacent competitors, substitutes, and hyperscaler or platform threats when relevant.
+- Distinguish real moat from overstated moat.
+- State where competitors are ahead and what strategic tradeoffs those competitors reveal.
+- Explain why those competitive dynamics matter specifically for this role.
+
 LAYER 3 — ORGANIZATIONAL HEALTH SIGNALS
 Look for concrete evidence of:
 - Leadership stability: recent C-suite / VP departures, tenure of key executives
@@ -89,6 +98,21 @@ Force a hypothesis on one of:
 - Leadership gap: a prior leader left or failed, and a capable operator is needed to fill the vacuum
 - Regulatory or macro change: external pressure is creating internal urgency
 If no clear inflection point is evidenced, be explicit and honest about the uncertainty.
+
+LAYER 4A — STRATEGIC TENSIONS AND ROLE CONSEQUENCES
+Identify the real tensions leadership is likely balancing, such as:
+- growth vs trust
+- monetization vs UX
+- automation vs control
+- personalization vs privacy
+- speed vs reliability
+- platform openness vs quality
+- centralized AI strategy vs domain autonomy
+
+For each major tension, explain:
+- what evidence supports it
+- what tradeoff leadership is likely making
+- what this means for the role charter and interview bar
 
 LAYER 5 — FACT / INFERENCE / HYPOTHESIS TRACING
 For every major conclusion, trace the chain:
@@ -114,6 +138,8 @@ QUALITY STANDARDS (non-negotiable):
 5. ESCAPE HATCH: Any string field can be set to "INSUFFICIENT_EVIDENCE". Any confidence field can be "low". Never guess to fill a schema.
 6. SWOT QUALITY BAR: Would this point appear in a Goldman Sachs equity research note or a McKinsey client deck? If not, it is filler.
 7. ROLE_SWOT PREFIX RULES: Each evidence field must begin with exactly one of: "FACT: <source>" | "INFERRED: <reasoning>" | "INSUFFICIENT_EVIDENCE"
+8. COMPANY STRATEGY BAR: If the strategy logic does not explain business model, control points, competition, tradeoffs, and why-now pressure, it is too shallow.
+9. ROLE STRATEGY BAR: If the role logic reads like an expanded JD, it has failed.
 
 RETURN A SINGLE VALID JSON OBJECT with exactly these 5 keys. No other text.
 
@@ -280,6 +306,16 @@ For each hiring dimension above, map the specific concern a sharp interviewer at
 - What "too good to be true" narrative would make them skeptical?
 - What questions would they ask a strong candidate to stress-test them?
 
+LAYER 2A — INTERVIEWER-SPECIFIC AGENDA MAP
+Do not stop at generic interviewer types. For the likely hiring manager, peer PM, engineering leader, design / UX partner, data science / ML partner, and executive stakeholders where relevant, determine:
+- what they are likely validating
+- what they worry about
+- what proof they need
+- what weak answers look like
+- what strong answers look like
+
+If a given interviewer type is not relevant, omit it rather than pad.
+
 LAYER 3 — CANDIDATE POSITIONING (only if profile provided)
 If CANDIDATE PROFILE PROVIDED is YES:
 - Which of the 5 hiring dimensions is this candidate strongest in — and what specific evidence proves it?
@@ -295,6 +331,22 @@ Executive-caliber questions to ask the interviewer have 4 properties:
 3. HARD TO DEFLECT: A weak organization cannot give a strong answer — a strong organization can and will
 4. FORWARD-LOOKING: They probe decisions that haven't been made yet, not history that's already public
 Generic questions ("What does success look like?", "How would you describe the culture?") are unacceptable. Every question must be specific to this company, this role, and this moment.
+
+LAYER 4A — STORY MAPPING AND ANSWER SCAFFOLDING
+For each likely interview theme:
+- identify the best story to use
+- explain why that story works
+- explain what it proves
+- explain what to emphasize
+- explain what to leave out
+- anticipate likely follow-up questions
+
+For each major mock question or objection:
+- explain why they might ask it
+- explain what a strong answer must include
+- explain what a weak answer misses
+
+Interview prep that lacks story mapping and answer scaffolding is not premium quality.
 
 LAYER 5 — STRESS TEST (before writing)
 Would a McKinsey partner-turned-VP find this brief useful on the morning of their interview?
@@ -326,6 +378,9 @@ RULES:
 12. FIVE_MINUTE_BRIEF — must be genuinely scannable in under 5 minutes. No sentence over 20 words. No jargon. Write it as if the candidate will read it standing in the lobby.
 13. EVIDENCE CONTRACT — is the system's transparency and credibility layer. Hold it to the highest standard: verified_facts are facts that would survive a journalist's fact-check. Key inferences are honest about the synthesis. Evidence gaps name what is genuinely unknown. next_best_actions are ordered by impact and executable today.
 14. Evidence quality warnings must propagate: if EVIDENCE QUALITY is WEAK or INSUFFICIENT, lower confidence across all scored fields, flag gaps explicitly, and do not produce high-confidence assessments.
+15. INTERVIEW PREP BAR — if the output could apply to any senior PM interview, rewrite it. It must be interviewer-specific, role-specific, and company-specific.
+16. STORY MAP BAR — if no story-to-theme mapping or likely follow-up traps appear, the output is too shallow.
+17. HOW-TO-WIN BAR — this must explain how to think like the hiring manager and how to prove director-level judgment, not just summarize advice.
 
 RETURN A SINGLE VALID JSON OBJECT with exactly these 12 keys. No other text.
 

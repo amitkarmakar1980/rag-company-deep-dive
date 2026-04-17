@@ -370,6 +370,7 @@ export async function assembleReport(requestId: string, retrievalQueries?: strin
           sectionKey,
           SECTION_TITLES[sectionKey],
           JSON.stringify(sectionData),
+          SECTION_ORDER.indexOf(sectionKey),
           CITATION_SECTIONS.has(sectionKey) ? citationsForSection : undefined
         );
       } catch (err) {

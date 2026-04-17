@@ -88,14 +88,38 @@ export async function getDeepDiveRequest(
 
 export async function updateDeepDiveStatus(
   requestId: string,
-  status: string
+  status: string,
+  errorMessage?: string | null
 ): Promise<void> {
   const timestamp = new Date().toISOString();
+  const payload = {
+    status,
+    updated_at: timestamp,
+    error_message: status === "failed" ? (errorMessage ?? null) : null,
+  };
 
   let { error } = await supabaseAdmin
     .from("deep_dive_requests")
-    .update({ status, updated_at: timestamp })
+    .update(payload)
     .eq("id", requestId);
+
+  if (error && /updated_at|error_message/i.test(error.message)) {
+    const fallbackPayload = status === "failed"
+      ? { status, error_message: errorMessage ?? null }
+      : { status };
+
+    ({ error } = await supabaseAdmin
+      .from("deep_dive_requests")
+      .update(fallbackPayload)
+      .eq("id", requestId));
+  }
+
+  if (error && /error_message/i.test(error.message)) {
+    ({ error } = await supabaseAdmin
+      .from("deep_dive_requests")
+      .update({ status, updated_at: timestamp })
+      .eq("id", requestId));
+  }
 
   if (error && /updated_at/i.test(error.message)) {
     ({ error } = await supabaseAdmin
@@ -135,7 +159,7 @@ export async function getRequestHistory(
   return (requests || []).map((req: any) => ({
     request: req,
     company: req.companies,
-    report: req.reports?.[0] || null,
+    report: pickLatestReport(req.reports ?? [], "premium_v2"),
   }));
 }
 
@@ -260,7 +284,69 @@ export async function getSourceChunks(sourceId: string): Promise<Chunk[]> {
 
 // Reports
 function isMissingReportMetricsColumn(error: { message?: string } | null | undefined): boolean {
-  return /ai_query_count|source_count|source_host_count/i.test(error?.message ?? "");
+  return /ai_query_count|source_count|source_host_count|report_format|report_family|display_order/i.test(error?.message ?? "");
+}
+
+function isMissingReportSectionOrderingColumn(error: { message?: string } | null | undefined): boolean {
+  return /display_order/i.test(error?.message ?? "");
+}
+
+export function getEffectiveReportFormat(report: Pick<Report, "report_format" | "summary_json">): string {
+  if (report.report_format) {
+    return report.report_format;
+  }
+
+  const summaryFormat = report.summary_json?.report_format;
+  if (typeof summaryFormat === "string" && summaryFormat.length > 0) {
+    return summaryFormat;
+  }
+
+  if (report.summary_json?.generator_version === "premium_v2_default") {
+    return "premium_v2";
+  }
+
+  return "legacy_v1";
+}
+
+export function getEffectiveReportFamily(report: Pick<Report, "report_family" | "summary_json">): string {
+  if (report.report_family) {
+    return report.report_family;
+  }
+
+  const summaryFamily = report.summary_json?.report_family;
+  if (typeof summaryFamily === "string" && summaryFamily.length > 0) {
+    return summaryFamily;
+  }
+
+  const format = getEffectiveReportFormat(report);
+  if (format.startsWith("premium_")) {
+    return "premium";
+  }
+
+  return "legacy";
+}
+
+function pickLatestReport(
+  reports: Report[],
+  preferredFormat?: string
+): Report | null {
+  if (!reports.length) {
+    return null;
+  }
+
+  const sorted = [...reports].sort(
+    (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+  );
+
+  if (!preferredFormat) {
+    return sorted[0] ?? null;
+  }
+
+  const preferredFormats = preferredFormat === "premium_v2"
+    ? ["premium_v2", "premium_v1"]
+    : [preferredFormat];
+
+  return sorted.find((report) => preferredFormats.includes(getEffectiveReportFormat(report))) ?? sorted[0] ?? null;
 }
 
 export async function createReport(
@@ -278,10 +364,16 @@ export async function createReport(
     ai_query_count?: number;
     source_count?: number;
     source_host_count?: number;
+  },
+  options?: {
+    report_format?: string;
+    report_family?: string;
   }
 ): Promise<Report> {
   const payload = {
     request_id: requestId,
+    report_format: options?.report_format ?? "legacy_v1",
+    report_family: options?.report_family ?? "legacy",
     recommendation,
     company_momentum_score: scores.company_momentum,
     org_clarity_score: scores.org_clarity,
@@ -340,9 +432,15 @@ export async function updateReport(
     ai_query_count?: number;
     source_count?: number;
     source_host_count?: number;
+  },
+  options?: {
+    report_format?: string;
+    report_family?: string;
   }
 ): Promise<Report> {
   const payload = {
+    report_format: options?.report_format,
+    report_family: options?.report_family,
     recommendation,
     company_momentum_score: scores.company_momentum,
     org_clarity_score: scores.org_clarity,
@@ -355,9 +453,13 @@ export async function updateReport(
     summary_json: summaryJson ?? null,
   };
 
+  const filteredPayload = Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined)
+  );
+
   let { data, error } = await supabaseAdmin
     .from("reports")
-    .update(payload)
+    .update(filteredPayload)
     .eq("id", reportId)
     .select()
     .single();
@@ -395,6 +497,20 @@ export async function updateReportSummaryJson(
   if (error) throw error;
 }
 
+export async function getReportSectionCount(reportId: string): Promise<number> {
+  const { count, error } = await supabaseAdmin
+    .from("report_sections")
+    .select("id", { count: "exact", head: true })
+    .eq("report_id", reportId);
+
+  if (error && isMissingReportSectionOrderingColumn(error)) {
+    return 0;
+  }
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function clearReportSections(reportId: string): Promise<void> {
   const { error } = await supabaseAdmin
     .from("report_sections")
@@ -419,10 +535,25 @@ export async function getReport(requestId: string): Promise<Report | null> {
     .from("reports")
     .select("*")
     .eq("request_id", requestId)
-    .single();
+    .order("created_at", { ascending: false });
 
   if (error && error.code !== "PGRST116") throw error;
-  return data || null;
+  return pickLatestReport((data || []) as Report[], "premium_v2");
+}
+
+export async function getReportByRequestAndFormat(
+  requestId: string,
+  reportFormat: string
+): Promise<Report | null> {
+  const { data, error } = await supabaseAdmin
+    .from("reports")
+    .select("*")
+    .eq("request_id", requestId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error && error.code !== "PGRST116") throw error;
+  return ((data || []) as Report[]).find((report) => getEffectiveReportFormat(report) === reportFormat) || null;
 }
 
 export async function getReportById(reportId: string): Promise<Report | null> {
@@ -442,17 +573,19 @@ export async function createReportSection(
   sectionKey: string,
   sectionTitle: string,
   contentMarkdown: string,
+  displayOrder = 0,
   citations?: Array<{
     source_id: string;
     url?: string;
     title: string;
   }>
 ): Promise<ReportSection> {
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from("report_sections")
     .insert([
       {
         report_id: reportId,
+        display_order: displayOrder,
         section_key: sectionKey,
         section_title: sectionTitle,
         content_markdown: contentMarkdown,
@@ -462,6 +595,22 @@ export async function createReportSection(
     .select()
     .single();
 
+  if (error && isMissingReportSectionOrderingColumn(error)) {
+    ({ data, error } = await supabaseAdmin
+      .from("report_sections")
+      .insert([
+        {
+          report_id: reportId,
+          section_key: sectionKey,
+          section_title: sectionTitle,
+          content_markdown: contentMarkdown,
+          citations_json: citations,
+        },
+      ])
+      .select()
+      .single());
+  }
+
   if (error) throw error;
   return data;
 }
@@ -469,11 +618,20 @@ export async function createReportSection(
 export async function getReportSections(
   reportId: string
 ): Promise<ReportSection[]> {
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from("report_sections")
     .select("*")
     .eq("report_id", reportId)
+    .order("display_order", { ascending: true })
     .order("section_key", { ascending: true });
+
+  if (error && isMissingReportSectionOrderingColumn(error)) {
+    ({ data, error } = await supabaseAdmin
+      .from("report_sections")
+      .select("*")
+      .eq("report_id", reportId)
+      .order("section_key", { ascending: true }));
+  }
 
   if (error) throw error;
   return data || [];

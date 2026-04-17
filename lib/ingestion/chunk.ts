@@ -2,6 +2,8 @@
 
 const CHUNK_SIZE = 500; // Target tokens per chunk
 const CHUNK_OVERLAP = 50; // Overlap tokens between chunks
+const HARD_MAX_CHUNK_TOKENS = 6000;
+const HARD_MAX_CHUNK_CHARS = 12000;
 
 // Rough token count (1 word ≈ 1.3 tokens)
 function estimateTokens(text: string): number {
@@ -12,6 +14,79 @@ export interface ContentChunk {
   text: string;
   tokenCount: number;
   index: number;
+}
+
+function splitByCharacterBudget(text: string, maxChars = HARD_MAX_CHUNK_CHARS): string[] {
+  const normalized = text.trim();
+  if (!normalized) return [];
+
+  const parts: string[] = [];
+  let remaining = normalized;
+
+  while (remaining.length > maxChars) {
+    const candidate = remaining.slice(0, maxChars);
+    const splitAt = Math.max(
+      candidate.lastIndexOf("\n\n"),
+      candidate.lastIndexOf("\n"),
+      candidate.lastIndexOf(" ")
+    );
+    const boundary = splitAt >= Math.floor(maxChars * 0.6) ? splitAt : maxChars;
+    const segment = remaining.slice(0, boundary).trim();
+
+    if (!segment) {
+      break;
+    }
+
+    parts.push(segment);
+    remaining = remaining.slice(boundary).trim();
+  }
+
+  if (remaining) {
+    parts.push(remaining);
+  }
+
+  return parts;
+}
+
+function enforceHardChunkLimits(chunks: ContentChunk[]): ContentChunk[] {
+  const bounded: ContentChunk[] = [];
+  let chunkIndex = 0;
+
+  for (const chunk of chunks) {
+    if (
+      chunk.tokenCount <= HARD_MAX_CHUNK_TOKENS &&
+      chunk.text.length <= HARD_MAX_CHUNK_CHARS
+    ) {
+      bounded.push({
+        ...chunk,
+        index: chunkIndex++,
+      });
+      continue;
+    }
+
+    const forcedChunks = splitByCharacterBudget(chunk.text);
+    for (const forcedChunk of forcedChunks) {
+      const tokenCount = estimateTokens(forcedChunk);
+      if (tokenCount <= CHUNK_SIZE * 1.5) {
+        bounded.push({
+          text: forcedChunk,
+          tokenCount,
+          index: chunkIndex++,
+        });
+        continue;
+      }
+
+      const tokenChunks = chunkByTokens(forcedChunk);
+      for (const tokenChunk of tokenChunks) {
+        bounded.push({
+          ...tokenChunk,
+          index: chunkIndex++,
+        });
+      }
+    }
+  }
+
+  return bounded;
 }
 
 export function chunkBySections(text: string): ContentChunk[] {
@@ -150,5 +225,5 @@ export function chunkContent(text: string): ContentChunk[] {
     }
   }
 
-  return result;
+  return enforceHardChunkLimits(result);
 }

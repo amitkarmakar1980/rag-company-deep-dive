@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import { isAdmin } from "@/lib/admin";
+import { getEffectiveReportFamily, getEffectiveReportFormat } from "@/lib/db/operations";
 
 function fallbackUserName(email: string | null | undefined) {
   if (!email) return "Unknown User";
@@ -108,6 +109,8 @@ export async function GET(req: NextRequest) {
 
       return {
         report_id: r.id,
+        report_format: getEffectiveReportFormat(r),
+        report_family: getEffectiveReportFamily(r),
         request_id: req?.id ?? null,
         created_at: r.created_at,
         activity_at: requestStatus === "completed"

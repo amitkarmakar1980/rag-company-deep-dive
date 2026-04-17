@@ -134,10 +134,10 @@ async function runPipeline(
       await updateDeepDiveStatus(requestId, "generating_report");
       console.log("[Pipeline] Status → generating_report");
 
-      const { assembleReport } = await import("@/lib/report/assembleReport");
-      console.log("[Pipeline] Calling assembleReport...");
-      await assembleReport(requestId, result.researchPlan.retrievalQueries);
-      console.log("[Pipeline] assembleReport complete");
+      const { assemblePremiumReportV2 } = await import("@/lib/report/assemblePremiumReportV2");
+      console.log("[Pipeline] Calling assemblePremiumReportV2...");
+      await assemblePremiumReportV2(requestId, result.researchPlan.retrievalQueries);
+      console.log("[Pipeline] assemblePremiumReportV2 complete");
 
       // If resume was provided, create the overlay record BEFORE marking completed.
       // This prevents a race: the page polls, sees "completed", checks for overlay —
@@ -181,12 +181,12 @@ async function runPipeline(
       }
     } else {
       console.error(`[Pipeline] ingestSources failed: ${result.error}`);
-      await updateDeepDiveStatus(requestId, "failed");
+      await updateDeepDiveStatus(requestId, "failed", result.error ?? "Source ingestion failed before report generation started.");
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[Pipeline] EXCEPTION:", msg);
     console.error(error);
-    await updateDeepDiveStatus(requestId, "failed");
+    await updateDeepDiveStatus(requestId, "failed", msg);
   }
 }

@@ -27,8 +27,13 @@ CREATE TABLE IF NOT EXISTS deep_dive_requests (
   company_url VARCHAR(512),
   profile_context TEXT,
   status VARCHAR(50) DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE deep_dive_requests ADD COLUMN IF NOT EXISTS error_message TEXT;
+ALTER TABLE deep_dive_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- Sources
 CREATE TABLE IF NOT EXISTS sources (
@@ -65,7 +70,9 @@ CREATE TABLE IF NOT EXISTS embeddings (
 -- Reports
 CREATE TABLE IF NOT EXISTS reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  request_id UUID NOT NULL UNIQUE REFERENCES deep_dive_requests(id),
+  request_id UUID NOT NULL REFERENCES deep_dive_requests(id),
+  report_format VARCHAR(50) NOT NULL DEFAULT 'legacy_v1',
+  report_family VARCHAR(50) NOT NULL DEFAULT 'legacy',
   recommendation VARCHAR(50),
   company_momentum_score FLOAT,
   org_clarity_score FLOAT,
@@ -79,19 +86,27 @@ CREATE TABLE IF NOT EXISTS reports (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_request_id_key;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS report_format VARCHAR(50) NOT NULL DEFAULT 'legacy_v1';
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS report_family VARCHAR(50) NOT NULL DEFAULT 'legacy';
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS ai_query_count INTEGER DEFAULT 0;
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS source_count INTEGER DEFAULT 0;
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS source_host_count INTEGER DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_reports_request_id_created_at ON reports(request_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_request_id_format_created_at ON reports(request_id, report_format, created_at DESC);
 
 -- Report sections
 CREATE TABLE IF NOT EXISTS report_sections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   report_id UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+  display_order INTEGER NOT NULL DEFAULT 0,
   section_key VARCHAR(100),
   section_title VARCHAR(255),
   content_markdown TEXT,
   citations_json JSONB
 );
+
+ALTER TABLE report_sections ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
 
 -- Feedback events
 CREATE TABLE IF NOT EXISTS feedback_events (
@@ -115,7 +130,9 @@ ALTER TABLE companies
 
 ALTER TABLE deep_dive_requests
   ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC',
-  ALTER COLUMN created_at SET DEFAULT NOW();
+  ALTER COLUMN created_at SET DEFAULT NOW(),
+  ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING CASE WHEN updated_at IS NULL THEN NULL ELSE updated_at AT TIME ZONE 'UTC' END,
+  ALTER COLUMN updated_at SET DEFAULT NOW();
 
 ALTER TABLE sources
   ALTER COLUMN published_at TYPE TIMESTAMPTZ USING CASE WHEN published_at IS NULL THEN NULL ELSE published_at AT TIME ZONE 'UTC' END,

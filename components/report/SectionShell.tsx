@@ -200,7 +200,7 @@ export function ProvenancePill({
       <button
         type="button"
         onClick={onClick}
-        className={`${className} transition-colors hover:brightness-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30`}
+        className={`${className} cursor-pointer transition-colors hover:brightness-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30`}
         aria-label={`Open provenance details for ${PROVENANCE_LABELS[type]}`}
       >
         {PROVENANCE_LABELS[type]}
@@ -329,7 +329,7 @@ export function BulletList({
   items,
   className = "",
 }: {
-  items: string[];
+  items: React.ReactNode[];
   className?: string;
 }) {
   if (!items || items.length === 0) return null;
@@ -346,7 +346,7 @@ export function BulletList({
 }
 
 /** Label + prose block */
-export function ProseBlock({ label, value }: { label?: string; value: string }) {
+export function ProseBlock({ label, value }: { label?: string; value: React.ReactNode }) {
   return (
     <div>
       {label && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { StructuredReport } from "@/lib/types";
+import { normalizeHttpUrl } from "@/lib/report/sourceLinks";
 import { SectionShell, BulletList, ProseBlock, ConfidencePill, type ProvenanceType } from "./report/SectionShell";
 import { ExecutiveSummarySection } from "./report/ExecutiveSummary";
 import { AssessmentSnapshotSection } from "./report/AssessmentSnapshot";
@@ -463,7 +464,7 @@ function MetaField({ label, value }: { label: string; value: string }) {
 function CitationList({ citations }: { citations: Citation[] }) {
   const unique = Array.from(
     new Map(citations.map((c) => [c.source_id, c])).values()
-  ).filter((c) => c.title);
+  ).filter((c) => c.title && normalizeHttpUrl(c.url));
 
   if (unique.length === 0) return null;
 
@@ -475,9 +476,9 @@ function CitationList({ citations }: { citations: Citation[] }) {
       <ul className="space-y-1" role="list">
         {unique.map((c, i) => (
           <li key={i} className="text-xs">
-            {c.url ? (
+            {normalizeHttpUrl(c.url) ? (
               <a
-                href={c.url}
+                href={normalizeHttpUrl(c.url)!}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-gray-500 hover:text-gray-800 underline underline-offset-2 decoration-gray-300 hover:decoration-gray-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-900 rounded transition-colors"

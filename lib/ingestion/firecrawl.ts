@@ -182,11 +182,20 @@ function buildFallbackRetrievalQueries(
   return [
     `${companyName} strategy business model revenue growth market position competitive advantage core products${jdHint}`,
     `${companyName} ${roleTitle} responsibilities success metrics charter stakeholder scope hiring needs${jdHint}`,
+    `${companyName} investor relations earnings shareholder letter investor day monetization priorities`,
     `${companyName} leadership team executives org structure culture values decision making`,
     `${companyName} recent launches partnerships acquisitions growth milestones quarterly results news`,
-    `${companyName} risks challenges competition layoffs restructuring pressure points execution risk`,
+    `${companyName} related roles leadership bios team pages stakeholder org structure ${roleTitle}`,
     `${companyName} ${roleTitle} why now strategic inflection priority shift hiring urgency catalyst`,
   ];
+}
+
+function roleSlug(roleTitle: string): string {
+  return roleTitle
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 }
 
 function buildPlannerCandidatePool(
@@ -200,6 +209,7 @@ function buildPlannerCandidatePool(
   const encodedCompany = encodeURIComponent(companyName);
   const encodedRole = encodeURIComponent(`${companyName} ${roleTitle}`.trim());
   const companySlug = slugifyCompanyName(companyName);
+  const roleTitleSlug = roleSlug(roleTitle);
 
   const pushCandidate = (candidate: PlannerCandidate) => {
     const normalizedUrl = normalizeUrl(candidate.url);
@@ -224,6 +234,38 @@ function buildPlannerCandidatePool(
 
       if (companyHost) {
         pushCandidate({
+          url: `https://${companyHost}/careers`,
+          type: "custom_url",
+          priority: 10,
+          label: "Company careers",
+          domain: companyHost,
+          signal: "Exact job description and role-context source discovery.",
+        });
+        pushCandidate({
+          url: `https://${companyHost}/careers/${roleTitleSlug}`,
+          type: "custom_url",
+          priority: 9,
+          label: "Role-specific careers path",
+          domain: companyHost,
+          signal: "Potential exact JD landing page for the target role.",
+        });
+        pushCandidate({
+          url: `https://${companyHost}/investors`,
+          type: "custom_url",
+          priority: 10,
+          label: "Investor relations",
+          domain: companyHost,
+          signal: "Primary source for earnings, shareholder letters, and strategic priorities.",
+        });
+        pushCandidate({
+          url: `https://${companyHost}/investor-relations`,
+          type: "custom_url",
+          priority: 10,
+          label: "Investor relations alternate path",
+          domain: companyHost,
+          signal: "Alternate primary source for filings, earnings, and investor day material.",
+        });
+        pushCandidate({
           url: `https://${companyHost}/newsroom`,
           type: "newsroom",
           priority: 9,
@@ -232,12 +274,52 @@ function buildPlannerCandidatePool(
           signal: "Official launches, partnerships, and strategic updates.",
         });
         pushCandidate({
+          url: `https://${companyHost}/press`,
+          type: "newsroom",
+          priority: 8,
+          label: "Company press",
+          domain: companyHost,
+          signal: "Official press releases and launch announcements.",
+        });
+        pushCandidate({
           url: `https://${companyHost}/blog`,
           type: "blog",
           priority: 8,
           label: "Company blog",
           domain: companyHost,
           signal: "Long-form product, engineering, and leadership content.",
+        });
+        pushCandidate({
+          url: `https://${companyHost}/engineering`,
+          type: "blog",
+          priority: 8,
+          label: "Engineering blog or engineering landing page",
+          domain: companyHost,
+          signal: "Official product and technical context tied to execution realities.",
+        });
+        pushCandidate({
+          url: `https://${companyHost}/leadership`,
+          type: "custom_url",
+          priority: 8,
+          label: "Leadership page",
+          domain: companyHost,
+          signal: "Leadership bios and executive context for stakeholder mapping.",
+        });
+        pushCandidate({
+          url: `https://${companyHost}/team`,
+          type: "custom_url",
+          priority: 7,
+          label: "Team page",
+          domain: companyHost,
+          signal: "Role-context and team topology evidence.",
+        });
+        pushCandidate({
+          url: `https://${companyHost}/about`,
+          type: "custom_url",
+          priority: 6,
+          label: "About page",
+          domain: companyHost,
+          signal: "Company narrative, leadership framing, and operating context.",
         });
       }
     }
@@ -258,12 +340,36 @@ function buildPlannerCandidatePool(
 
   const externalCandidates: PlannerCandidate[] = [
     {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} investor relations earnings shareholder letter investor day`)}`,
+      type: "custom_url",
+      priority: 9,
+      label: "Investor relations search",
+      domain: "google.com",
+      signal: "Primary-source discovery for filings, earnings, and investor day materials.",
+    },
+    {
       url: `https://news.google.com/search?q=${encodedRole}`,
       type: "custom_url",
       priority: 8,
       label: "Google News search",
       domain: "news.google.com",
       signal: "Recent press and independent reporting.",
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} leadership interview podcast keynote`)}`,
+      type: "custom_url",
+      priority: 8,
+      label: "Leadership interview search",
+      domain: "google.com",
+      signal: "Leadership talks, podcasts, and interviews for executive intent and operating style.",
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} ${roleTitle} related roles team page leadership bios`)}`,
+      type: "custom_url",
+      priority: 7,
+      label: "Role-context search",
+      domain: "google.com",
+      signal: "Related roles, team pages, and bios that clarify scope and stakeholder context.",
     },
     {
       url: `https://www.bing.com/news/search?q=${encodedRole}`,
@@ -380,9 +486,10 @@ async function planResearchTargets(
   const candidatePool = buildPlannerCandidatePool(companyName, roleTitle, companyUrl, customUrls);
   const companyDomain = companyUrl ? getHostname(companyUrl) : null;
   const fallbackQueries = buildFallbackRetrievalQueries(companyName, roleTitle, jobDescription);
-  const fallbackSources = candidatePool
-    .filter((candidate) => candidate.type !== "custom_url")
-    .concat(candidatePool.filter((candidate) => candidate.type === "custom_url" && candidate.domain !== companyDomain).slice(0, MIN_EXTERNAL_SITES))
+  const fallbackSources = [...candidatePool]
+    .sort((left, right) => right.priority - left.priority)
+    .filter((candidate, index, list) => index === list.findIndex((entry) => entry.url === candidate.url))
+    .filter((candidate) => candidate.domain === companyDomain || candidate.domain !== companyDomain)
     .slice(0, MAX_RESEARCH_SOURCES)
     .map(({ label: _label, domain: _domain, signal: _signal, ...source }) => source);
 
@@ -391,6 +498,14 @@ async function planResearchTargets(
 
 Objectives:
 - Select the best pages/sites to scrape for grounded evidence.
+- Follow this source order unless the source class is clearly unavailable:
+  1. exact JD / careers page
+  2. investor relations / filings / earnings / shareholder letters / investor day
+  3. official product launches / blogs / engineering blogs / product docs
+  4. leadership interviews / talks / podcasts / videos
+  5. role-context sources such as related roles, leadership bios, team pages
+  6. reputable external validation
+  7. low-confidence enrichment
 - Use at least ${MIN_EXTERNAL_SITES} websites on domains other than the company website when possible.
 - Keep total selected web sources to ${MAX_RESEARCH_SOURCES} or fewer.
 - Produce exactly 6 focused retrieval queries for the downstream RAG stage.
@@ -405,10 +520,12 @@ ${candidatePool.map((candidate, index) => `${index + 1}. ${candidate.label}\n   
 
 Rules:
 - Include company_homepage if present.
-- Favor independent domains that add complementary evidence: recent news, investor/market context, org structure, product/customer sentiment, and role-specific context.
+- If the company appears public or investor material is discoverable, include at least one investor-relations-oriented source before external validation.
+- Favor independent domains that add complementary evidence in the required order: investor context, official launches, leadership signal, role-context pages, then external validation.
+- Prefer official company sources before third-party summaries for strategy or why-now sections.
 - Use custom URLs if they are relevant.
 - Selected source type must be one of: company_homepage, newsroom, blog, custom_url.
-- Retrieval queries must be optimized for vector retrieval and cover strategy, role charter, leadership, momentum, risks, and why-now.
+- Retrieval queries must be optimized for vector retrieval and cover: strategy/business model, role charter, investor or monetization context, leadership/operating style, role-context/stakeholders, and why-now.
 
 Return only valid JSON in this shape:
 {

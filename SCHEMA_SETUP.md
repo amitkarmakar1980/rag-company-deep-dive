@@ -18,7 +18,7 @@ Open [database/schema.sql](../database/schema.sql) and copy ALL the content
 2. Click the blue **"Run"** button
 3. Wait for the success message
 
-If your schema was already created earlier, run it again. The `ALTER TABLE` statements are idempotent and will add newly required analytics fields such as `reports.ai_query_count`, `reports.source_count`, `reports.source_host_count`, and `candidate_overlays.ai_query_count`, while also converting legacy `TIMESTAMP` columns to `TIMESTAMPTZ` with UTC-preserving casts.
+If your schema was already created earlier, run it again. The `ALTER TABLE` statements are idempotent and will add newly required analytics and premium-report fields such as `reports.report_format`, `reports.report_family`, `reports.ai_query_count`, `reports.source_count`, `reports.source_host_count`, `report_sections.display_order`, `deep_dive_requests.error_message`, `deep_dive_requests.updated_at`, and `candidate_overlays.ai_query_count`, while also converting legacy `TIMESTAMP` columns to `TIMESTAMPTZ` with UTC-preserving casts.
 
 ### Step 5: Verify
 After execution completes, run:

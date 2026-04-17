@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDeepDiveRequest, getReportById, getReportSections, getRequestSources } from "@/lib/db/operations";
+import {
+  getDeepDiveRequest,
+  getEffectiveReportFamily,
+  getEffectiveReportFormat,
+  getReportById,
+  getReportSections,
+  getRequestSources,
+} from "@/lib/db/operations";
 import { supabaseAdmin } from "@/lib/db/supabase";
 
 export async function GET(
@@ -36,6 +43,8 @@ export async function GET(
 
     return NextResponse.json({
       id: report.id,
+      reportFormat: getEffectiveReportFormat(report),
+      reportFamily: getEffectiveReportFamily(report),
       recommendation: report.recommendation,
       scores: {
         company_momentum: report.company_momentum_score,

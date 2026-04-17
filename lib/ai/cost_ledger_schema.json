@@ -1,0 +1,143 @@
+{
+  "report_id": "uuid",
+  "run_id": "uuid",
+  "mode": "premium",
+  "user_id": "string",
+  "company": "string",
+  "role_title": "string",
+  "resume_overlay_enabled": true,
+  "started_at": "ISO-8601",
+  "ended_at": "ISO-8601",
+  "currency": "USD",
+  "status": "success",
+  "summary": {
+    "total_cost_usd": 0.0,
+    "total_duration_ms": 0,
+    "cached_cost_avoided_usd": 0.0,
+    "llm_cost_usd": 0.0,
+    "retrieval_cost_usd": 0.0,
+    "embedding_cost_usd": 0.0,
+    "rerank_cost_usd": 0.0,
+    "storage_cost_usd": 0.0,
+    "verification_cost_usd": 0.0,
+    "personalization_cost_usd": 0.0,
+    "rendering_cost_usd": 0.0
+  },
+  "cost_events": [],
+  "stages": {
+    "source_acquisition": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "requests": 0,
+      "pages_fetched": 0,
+      "pages_retained": 0,
+      "cache_hit_rate": 0.0
+    },
+    "parsing_and_cleanup": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "documents_parsed": 0,
+      "tokens_processed": 0
+    },
+    "embedding": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "chunks_embedded": 0,
+      "tokens_embedded": 0,
+      "new_vectors": 0
+    },
+    "retrieval_and_rerank": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "queries": 0,
+      "candidates_scored": 0,
+      "top_k_selected": 0
+    },
+    "evidence_normalization": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "claims_extracted": 0,
+      "claims_retained": 0,
+      "conflicts_found": 0
+    },
+    "strategy_synthesis": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "model": "string",
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "candidate_fit_synthesis": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "model": "string",
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "interview_prep_synthesis": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "model": "string",
+      "input_tokens": 0,
+      "output_tokens": 0
+    },
+    "verification_and_qa": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "checks_run": [
+        "unsupported_claims",
+        "contradictions",
+        "redundancy",
+        "confidence_evidence_alignment"
+      ]
+    },
+    "resume_overlay": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "enabled": true,
+      "incremental_cost_usd": 0.0
+    },
+    "rendering": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "report_format": "html|pdf|json"
+    },
+    "storage_and_cache": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "objects_written": 0,
+      "bytes_stored": 0,
+      "monthly_amortized_cost_usd": 0.0
+    }
+  },
+  "derived_metrics": {
+    "cost_per_successful_report_usd": 0.0,
+    "cost_per_abandoned_report_usd": 0.0,
+    "cost_per_refresh_usd": 0.0,
+    "marginal_cost_resume_overlay_usd": 0.0,
+    "marginal_cost_verification_pass_usd": 0.0,
+    "premium_quality_multiplier_vs_standard": 0.0
+  },
+  "budget_controls": {
+    "soft_budget_usd": 0.0,
+    "hard_budget_usd": 0.0,
+    "alert_triggered": false,
+    "degradation_policy": {
+      "allowed": false,
+      "rules": [
+        "never skip contradiction pass in premium mode",
+        "never skip primary-source retrieval for strategy sections",
+        "may cap low-confidence enrichment depth",
+        "may increase cache reuse before reducing reasoning quality"
+      ]
+    }
+  },
+  "user_visible_summary": {
+    "compute_intensity": "standard|high|premium",
+    "report_cost_band": "low|medium|high",
+    "sources_used": 0,
+    "primary_sources_used": 0,
+    "verification_pass_ran": true,
+    "resume_overlay_applied": true
+  }
+}

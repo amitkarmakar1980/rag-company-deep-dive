@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { StructuredReport, CandidateOverlayData, LLMCallUsage } from "@/lib/types";
+import { PremiumReportModelOutput } from "@/lib/report/premiumTypes";
 
 // Lazy-initialized to avoid "Missing credentials" error during Vercel build
 // (OPENAI_API_KEY is only available at runtime, not at build/page-data-collection time)
@@ -32,6 +33,7 @@ export const STANDARD_MODEL = "gpt-4o-mini";
  * judgment. Stays on gpt-4o (not mini) for quality on gap/objection analysis.
  */
 export const OVERLAY_MODEL = "gpt-4o";
+export const PREMIUM_MODEL = "o3";
 
 // ─── Pricing (USD per 1M tokens, approximate) ────────────────────────────────
 // Update if OpenAI changes pricing.
@@ -209,6 +211,53 @@ export async function generateCandidateOverlay(
     data: extractJSON<CandidateOverlayData>(content, "candidate overlay"),
     usage: buildUsage(OVERLAY_MODEL, "Candidate Overlay (personalization)", response.usage),
   };
+}
+
+export async function generatePremiumReport(
+  prompt: string
+): Promise<{ data: PremiumReportModelOutput; usage: LLMCallUsage }> {
+  const modelsToTry = [PREMIUM_MODEL, DEEP_MODEL, "gpt-4o"] as const;
+
+  for (const model of modelsToTry) {
+    try {
+      const isReasoningModel = model.startsWith("o");
+      const response = await getOpenAI().chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a premium interview-intelligence engine. Return only valid JSON that matches the requested schema. Never include markdown fences or extra prose.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        ...(isReasoningModel
+          ? { max_completion_tokens: 10000 }
+          : { max_tokens: 8000, temperature: 0.35 }),
+      });
+
+      const content = response.choices[0].message.content;
+      if (!content) {
+        throw new Error("Empty response from premium report model");
+      }
+
+      return {
+        data: extractJSON<PremiumReportModelOutput>(content, "premium report"),
+        usage: buildUsage(model, "Premium Report Synthesis", response.usage),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[generatePremiumReport] Model ${model} failed: ${message}`);
+      if (model === modelsToTry[modelsToTry.length - 1]) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("All premium report models failed");
 }
 
 // ─── Legacy (kept for any remaining callers) ──────────────────────────────────

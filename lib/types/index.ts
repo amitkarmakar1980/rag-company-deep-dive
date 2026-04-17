@@ -34,6 +34,7 @@ export interface DeepDiveRequest {
   company_url?: string;
   profile_context?: string;
   status: DeepDiveStatus;
+  error_message?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -97,6 +98,8 @@ export interface ReportScore {
 export interface Report {
   id: string;
   request_id: string;
+  report_format?: string;
+  report_family?: string;
   recommendation: RecommendationType;
   company_momentum_score: number;
   org_clarity_score: number;
@@ -113,6 +116,7 @@ export interface Report {
 export interface ReportSection {
   id: string;
   report_id: string;
+  display_order?: number;
   section_key: string;
   section_title: string;
   content_markdown: string;

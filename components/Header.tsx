@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/auth-helpers-nextjs";
 import type { User } from "@supabase/supabase-js";
 import { isAdmin } from "@/lib/admin";
@@ -60,13 +60,31 @@ function UserBadgeIcon({ className }: { className?: string }) {
   );
 }
 
+function Bars3Icon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className ?? "h-5 w-5"}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 7.5h15M4.5 12h15M4.5 16.5h15" />
+    </svg>
+  );
+}
+
+function XMarkIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className ?? "h-5 w-5"}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
 function NavLabel({ icon, label, labelClassName }: { icon: ReactNode; label: string; labelClassName?: string }) {
   return <span className="inline-flex items-center gap-1.5">{icon}<span className={labelClassName}>{label}</span></span>;
 }
 
 export function Header() {
   const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
 
   useEffect(() => {
@@ -78,19 +96,35 @@ export function Header() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    setMobileMenuOpen(false);
     router.push("/auth");
     router.refresh();
   };
 
   return (
     <header className="border-b border-stone-800/80 bg-stone-950/95 text-stone-100 shadow-[0_18px_40px_rgba(0,0,0,0.22)] backdrop-blur supports-[backdrop-filter]:bg-stone-950/85">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-6">
+      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-6">
         <Link href="/" className="min-w-0" aria-label="Go to the Company Deep-Dive Engine homepage">
           <BrandMark compact tone="dark" />
         </Link>
-        <nav className="flex items-center gap-6">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((open) => !open)}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-stone-100 transition-colors hover:bg-white/14 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22d3ee]/50 sm:hidden"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-site-menu"
+            aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+          >
+            {mobileMenuOpen ? <XMarkIcon /> : <Bars3Icon />}
+          </button>
+          <nav className="hidden items-center gap-6 sm:flex">
           {user ? (
             <>
               <span className="hidden text-sm text-stone-200 sm:block">
@@ -142,7 +176,79 @@ export function Header() {
               Sign in
             </Link>
           )}
-        </nav>
+          </nav>
+        </div>
+
+        {mobileMenuOpen && (
+          <div
+            id="mobile-site-menu"
+            className="mt-4 rounded-2xl border border-white/10 bg-stone-900/95 p-3 shadow-[0_18px_32px_rgba(0,0,0,0.28)] sm:hidden"
+          >
+            <nav className="flex flex-col gap-2">
+              {user ? (
+                <>
+                  <div className="rounded-xl border border-white/8 bg-white/[0.04] px-3 py-3 text-sm text-stone-200">
+                    <NavLabel
+                      icon={<UserBadgeIcon className="h-4 w-4 text-[#22d3ee]" />}
+                      label={user.user_metadata?.name || user.email || "User"}
+                      labelClassName="text-stone-200"
+                    />
+                  </div>
+                  <Link
+                    href="/deep-dive/new"
+                    className="rounded-xl px-3 py-3 text-sm text-stone-100 transition-colors hover:bg-white/[0.06] hover:text-[#22d3ee]"
+                  >
+                    <NavLabel
+                      icon={<PencilSquareIcon className="h-4 w-4 text-[#a5b4fc]" />}
+                      label="New Analysis"
+                      labelClassName="text-stone-100"
+                    />
+                  </Link>
+                  <Link
+                    href="/history"
+                    className="rounded-xl px-3 py-3 text-sm text-stone-100 transition-colors hover:bg-white/[0.06] hover:text-[#22d3ee]"
+                  >
+                    <NavLabel
+                      icon={<ClockIcon className="h-4 w-4 text-[#22d3ee]" />}
+                      label="History"
+                      labelClassName="text-stone-100"
+                    />
+                  </Link>
+                  {isAdmin(user.email) && (
+                    <Link
+                      href="/admin"
+                      className="rounded-xl px-3 py-3 text-sm text-stone-100 transition-colors hover:bg-white/[0.06] hover:text-[#22d3ee]"
+                    >
+                      <NavLabel
+                        icon={<ShieldIcon className="h-4 w-4 text-[#a5b4fc]" />}
+                        label="Admin"
+                        labelClassName="text-stone-100"
+                      />
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleSignOut}
+                    className="rounded-xl px-3 py-3 text-left text-sm text-stone-100 transition-colors hover:bg-white/[0.06] hover:text-rose-200"
+                  >
+                    <NavLabel
+                      icon={<ArrowRightOnRectangleIcon className="h-4 w-4 text-rose-300" />}
+                      label="Sign out"
+                      labelClassName="text-stone-100"
+                    />
+                  </button>
+                </>
+              ) : (
+                <Link
+                  href="/auth"
+                  className="rounded-xl border border-white/12 bg-white/8 px-4 py-3 text-sm font-medium text-stone-100 transition-colors hover:bg-white/14"
+                >
+                  Sign in
+                </Link>
+              )}
+            </nav>
+          </div>
+        )}
       </div>
     </header>
   );

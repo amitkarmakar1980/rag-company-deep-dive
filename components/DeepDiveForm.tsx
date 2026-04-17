@@ -251,9 +251,10 @@ function ResumePanel({ stored, onSave, onClear }: ResumePanelProps) {
 export function DeepDiveForm() {
   const router = useRouter();
   const { stored, save: saveResume, clear: clearResume } = useResumeStore();
-  const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<"url" | "details">("url");
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
+  const [autofillSource, setAutofillSource] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     jdUrl: "",
     companyName: "",
@@ -263,14 +264,13 @@ export function DeepDiveForm() {
   });
   const [progress, setProgress] = useState<string | null>(null);
 
-  const handleUrlSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  const handleUrlPopulate = async () => {
+    setIsExtracting(true);
     setProgress("Fetching job description from the provided URL…");
     setUrlError(null);
-    if (!formData.jdUrl || formData.jdUrl.includes("linkedin.com")) {
-      setUrlError("Please provide a direct job description URL (not LinkedIn).");
-      setLoading(false);
+    if (!formData.jdUrl) {
+      setUrlError("Please provide a direct job description URL.");
+      setIsExtracting(false);
       setProgress(null);
       return;
     }
@@ -286,21 +286,21 @@ export function DeepDiveForm() {
         data = await res.json();
       }
       setFormData((prev) => ({ ...prev, ...data, jdUrl: prev.jdUrl }));
-      setStep("details");
+      setAutofillSource(res.ok ? formData.jdUrl : null);
       setUrlError(res.ok ? null : "Could not extract job details. You can enter them manually.");
       setProgress(null);
     } catch {
       setUrlError("Could not extract job details. You can enter them manually.");
-      setStep("details");
+      setAutofillSource(null);
       setProgress(null);
     } finally {
-      setLoading(false);
+      setIsExtracting(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsSubmitting(true);
     try {
       const res = await fetch("/api/deep-dive/create", {
         method: "POST",
@@ -322,61 +322,70 @@ export function DeepDiveForm() {
       console.error("Error:", error);
       alert(error instanceof Error ? error.message : "Failed to create deep dive");
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <>
-      {step === "url" && (
-        <form onSubmit={handleUrlSubmit} className="space-y-5">
-          <div>
+    <div className="space-y-5">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+        <section className="rounded-2xl border border-[#e4ddd4] bg-[#faf6ef] px-4 py-4 shadow-[0_10px_24px_rgba(28,23,19,0.05)] sm:px-5 sm:py-5">
+          <div className="rounded-xl border border-[#e7ddcf] bg-white px-4 py-3 text-sm text-[#6b5e52]">
+            <p className="font-semibold uppercase tracking-[0.08em] text-[#9c8d81]">Option 1</p>
+            <p className="mt-1 font-medium text-[#1c1713]">Paste a job posting URL to auto-fill the form.</p>
+            <p className="mt-1 text-sm leading-6 text-[#7a6d63]">The extracted company, role, website, and job description will appear in the form on the right for review before you generate the report.</p>
+          </div>
+
+          <div className="mt-4">
             <label className={LABEL_CLASS}>
-              Job Description URL <span className="text-gray-400 font-normal">(not LinkedIn)</span>
+              Job Description URL <span className="text-gray-400 font-normal">(LinkedIn supported)</span>
             </label>
             <input
               type="url"
-              required
               value={formData.jdUrl}
-              onChange={(e) => setFormData({ ...formData, jdUrl: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, jdUrl: e.target.value });
+                setAutofillSource(null);
+                setUrlError(null);
+              }}
               className={INPUT_CLASS}
-              placeholder="Paste the direct JD URL here…"
+              placeholder="Paste a job posting URL here, including LinkedIn…"
             />
-            {urlError && <p className="text-red-600 text-sm mt-2">{urlError}</p>}
+            {urlError && <p className="mt-2 text-sm text-red-600">{urlError}</p>}
           </div>
 
-          <ResumePanel stored={stored} onSave={saveResume} onClear={clearResume} />
-
           {progress && (
-            <div className="flex items-center gap-2 text-[#7a6d63] text-sm">
-              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <div className="mt-4 flex items-center gap-2 text-sm text-[#7a6d63]">
+              <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
               </svg>
               <span>{progress}</span>
             </div>
           )}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#1a4a3a] text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-[#153d30] disabled:opacity-50 transition shadow-[0_2px_8px_rgba(26,74,58,0.2)]"
-          >
-            {loading ? "Fetching…" : "Next →"}
-          </button>
-        </form>
-      )}
 
-      {step === "details" && (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            <p className="font-semibold uppercase tracking-[0.08em]">Important</p>
-            <p className="mt-1 font-medium">Verify the extracted details before generating the brief. If anything looks off, edit it manually here.</p>
-          </div>
-          {urlError && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-sm">
-              {urlError}
+          {autofillSource && !progress && !urlError && (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              Job details were loaded from the URL. Review the populated fields on the right, then generate the report.
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={handleUrlPopulate}
+            disabled={isExtracting || isSubmitting}
+            className="mt-4 w-full rounded-lg bg-[#1a4a3a] px-6 py-2.5 text-sm font-medium text-white shadow-[0_2px_8px_rgba(26,74,58,0.2)] transition hover:bg-[#153d30] disabled:opacity-50"
+          >
+            {isExtracting ? "Fetching Job Details…" : "Populate From URL"}
+          </button>
+        </section>
+
+        <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-[#e4ddd4] bg-white px-4 py-4 shadow-[0_10px_24px_rgba(28,23,19,0.05)] sm:px-5 sm:py-5">
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <p className="font-semibold uppercase tracking-[0.08em]">Option 2</p>
+            <p className="mt-1 font-medium">Enter the job details manually, or verify and edit anything auto-filled from the URL.</p>
+          </div>
+
           <div>
             <label className={LABEL_CLASS}>Company Name *</label>
             <input
@@ -415,22 +424,22 @@ export function DeepDiveForm() {
               value={formData.jobDescription}
               onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })}
               className={INPUT_CLASS}
-              rows={8}
+              rows={10}
               placeholder="Paste the full job description here…"
             />
           </div>
 
-          <ResumePanel stored={stored} onSave={saveResume} onClear={clearResume} />
-
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-[#1a4a3a] text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-[#153d30] disabled:opacity-50 transition shadow-[0_2px_8px_rgba(26,74,58,0.2)]"
+            disabled={isSubmitting || isExtracting}
+            className="w-full rounded-lg bg-[#1a4a3a] px-6 py-2.5 text-sm font-medium text-white shadow-[0_2px_8px_rgba(26,74,58,0.2)] transition hover:bg-[#153d30] disabled:opacity-50"
           >
-            {loading ? "Generating Deep Dive…" : "Generate Deep Dive"}
+            {isSubmitting ? "Generating Deep Dive…" : "Generate Deep Dive"}
           </button>
         </form>
-      )}
-    </>
+      </div>
+
+      <ResumePanel stored={stored} onSave={saveResume} onClear={clearResume} />
+    </div>
   );
 }

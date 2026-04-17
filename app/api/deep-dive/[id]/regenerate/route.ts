@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createRouteClient } from "@/lib/db/supabase-server";
 import { supabaseAdmin } from "@/lib/db/supabase";
 import {
@@ -58,7 +58,7 @@ export async function POST(
 
     await updateDeepDiveStatus(requestId, "pending");
 
-    setImmediate(() => {
+    after(
       (async () => {
         try {
           let plannerQueries: string[] | undefined;
@@ -100,8 +100,8 @@ export async function POST(
             err instanceof Error ? err.message : String(err)
           );
         }
-      })();
-    });
+      })()
+    );
 
     return NextResponse.json({ requestId, status: "pending" });
   } catch (error) {

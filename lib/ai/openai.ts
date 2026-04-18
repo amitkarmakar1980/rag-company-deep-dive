@@ -1,16 +1,8 @@
 import OpenAI from "openai";
 import { StructuredReport, CandidateOverlayData, LLMCallUsage } from "@/lib/types";
 import { PremiumReportModelOutput } from "@/lib/report/premiumTypes";
-
-// Lazy-initialized to avoid "Missing credentials" error during Vercel build
-// (OPENAI_API_KEY is only available at runtime, not at build/page-data-collection time)
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  }
-  return _openai;
-}
+import type { PremiumEvaluationModelOutput } from "@/lib/report/premiumQualityGate";
+import { executeWithOpenAIProviders, resolveModelForProvider, type OpenAIProviderKind } from "@/lib/ai/openaiClient";
 
 // ─── Model constants ──────────────────────────────────────────────────────────
 
@@ -19,21 +11,21 @@ function getOpenAI(): OpenAI {
  * and why-role-exists. These sections require multi-step reasoning and evidence
  * synthesis; the quality difference between o3 and a standard model is material.
  */
-export const DEEP_MODEL = "o4-mini";
+export const DEEP_MODEL = process.env.OPENAI_DEEP_MODEL?.trim() || "o4-mini";
 
 /**
  * Standard synthesis tier — used for interview prep sections, summaries, and
  * structured formatting. Fast and cost-efficient; complexity is synthesis, not
  * strategic reasoning.
  */
-export const STANDARD_MODEL = "gpt-4o-mini";
+export const STANDARD_MODEL = process.env.OPENAI_STANDARD_MODEL?.trim() || "gpt-4o-mini";
 
 /**
  * Overlay model — candidate personalization. Requires nuanced career coaching
  * judgment. Stays on gpt-4o (not mini) for quality on gap/objection analysis.
  */
-export const OVERLAY_MODEL = "gpt-4o";
-export const PREMIUM_MODEL = "o3";
+export const OVERLAY_MODEL = process.env.OPENAI_OVERLAY_MODEL?.trim() || "gpt-4o";
+export const PREMIUM_MODEL = process.env.OPENAI_PREMIUM_MODEL?.trim() || "o3";
 
 // ─── Pricing (USD per 1M tokens, approximate) ────────────────────────────────
 // Update if OpenAI changes pricing.
@@ -73,6 +65,32 @@ function buildUsage(
   };
 }
 
+function uniqueModels(models: string[]): string[] {
+  return Array.from(new Set(models.filter(Boolean)));
+}
+
+function deepAnalysisModels(providerKind: OpenAIProviderKind): string[] {
+  return uniqueModels([
+    resolveModelForProvider("deep", providerKind),
+    resolveModelForProvider("overlay", providerKind),
+  ]);
+}
+
+function premiumSynthesisModels(providerKind: OpenAIProviderKind): string[] {
+  return uniqueModels([
+    resolveModelForProvider("premium", providerKind),
+    resolveModelForProvider("deep", providerKind),
+    resolveModelForProvider("overlay", providerKind),
+  ]);
+}
+
+function premiumEvaluationModels(providerKind: OpenAIProviderKind): string[] {
+  return uniqueModels([
+    resolveModelForProvider("standard", providerKind),
+    resolveModelForProvider("overlay", providerKind),
+  ]);
+}
+
 // ─── JSON extraction helper ───────────────────────────────────────────────────
 
 function extractJSON<T>(raw: string, context: string): T {
@@ -101,13 +119,12 @@ export type DeepAnalysisResult = Pick<
 export async function generateDeepAnalysis(
   prompt: string
 ): Promise<{ data: DeepAnalysisResult; usage: LLMCallUsage }> {
-  // Try o4-mini first; fall back to gpt-4o if the model is unavailable or fails
-  const modelsToTry = [DEEP_MODEL, "gpt-4o"] as const;
-
-  for (const model of modelsToTry) {
-    try {
+  return executeWithOpenAIProviders({
+    operationName: "generateDeepAnalysis",
+    getModels: deepAnalysisModels,
+    execute: async ({ client, model }) => {
       const isReasoningModel = model.startsWith("o");
-      const response = await getOpenAI().chat.completions.create({
+      const response = await client.chat.completions.create({
         model,
         messages: [{ role: "user", content: prompt }],
         // Reasoning models use max_completion_tokens; standard models use max_tokens
@@ -119,20 +136,12 @@ export async function generateDeepAnalysis(
       const content = response.choices[0].message.content;
       if (!content) throw new Error("Empty response from deep analysis model");
 
-      if (model !== DEEP_MODEL) {
-        console.warn(`[generateDeepAnalysis] Used fallback model ${model}`);
-      }
       return {
         data: extractJSON<DeepAnalysisResult>(content, "deep analysis"),
         usage: buildUsage(model, "Deep Analysis (SWOT + Strategy)", response.usage),
       };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[generateDeepAnalysis] Model ${model} failed: ${msg}`);
-      if (model === modelsToTry[modelsToTry.length - 1]) throw err; // rethrow on last attempt
-    }
-  }
-  throw new Error("All deep analysis models failed");
+    },
+  });
 }
 
 // ─── Interview layer (gpt-4o-mini) ───────────────────────────────────────────
@@ -156,30 +165,36 @@ export type InterviewLayerResult = Pick<
 export async function generateInterviewLayer(
   prompt: string
 ): Promise<{ data: InterviewLayerResult; usage: LLMCallUsage }> {
-  const response = await getOpenAI().chat.completions.create({
-    model: STANDARD_MODEL,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a structured intelligence engine. Return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-    temperature: 0.4,
-    max_tokens: 7000,
+  return executeWithOpenAIProviders({
+    operationName: "generateInterviewLayer",
+    getModels: (providerKind) => [resolveModelForProvider("standard", providerKind)],
+    execute: async ({ client, model }) => {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a structured intelligence engine. Return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.4,
+        max_tokens: 7000,
+      });
+
+      const content = response.choices[0].message.content;
+      if (!content) throw new Error("Empty response from interview layer model");
+
+      return {
+        data: extractJSON<InterviewLayerResult>(content, "interview layer"),
+        usage: buildUsage(model, "Interview Layer (prep sections)", response.usage),
+      };
+    },
   });
-
-  const content = response.choices[0].message.content;
-  if (!content) throw new Error("Empty response from interview layer model");
-
-  return {
-    data: extractJSON<InterviewLayerResult>(content, "interview layer"),
-    usage: buildUsage(STANDARD_MODEL, "Interview Layer (prep sections)", response.usage),
-  };
 }
 
 // ─── Candidate overlay (gpt-4o) ───────────────────────────────────────────────
@@ -187,41 +202,47 @@ export async function generateInterviewLayer(
 export async function generateCandidateOverlay(
   prompt: string
 ): Promise<{ data: CandidateOverlayData; usage: LLMCallUsage }> {
-  const response = await getOpenAI().chat.completions.create({
-    model: OVERLAY_MODEL,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are an executive career coach and interview strategist. Return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-    temperature: 0.4,
-    max_tokens: 4000,
+  return executeWithOpenAIProviders({
+    operationName: "generateCandidateOverlay",
+    getModels: (providerKind) => [resolveModelForProvider("overlay", providerKind)],
+    execute: async ({ client, model }) => {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an executive career coach and interview strategist. Return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.4,
+        max_tokens: 4000,
+      });
+
+      const content = response.choices[0].message.content;
+      if (!content) throw new Error("Empty response from overlay model");
+
+      return {
+        data: extractJSON<CandidateOverlayData>(content, "candidate overlay"),
+        usage: buildUsage(model, "Candidate Overlay (personalization)", response.usage),
+      };
+    },
   });
-
-  const content = response.choices[0].message.content;
-  if (!content) throw new Error("Empty response from overlay model");
-
-  return {
-    data: extractJSON<CandidateOverlayData>(content, "candidate overlay"),
-    usage: buildUsage(OVERLAY_MODEL, "Candidate Overlay (personalization)", response.usage),
-  };
 }
 
 export async function generatePremiumReport(
   prompt: string
 ): Promise<{ data: PremiumReportModelOutput; usage: LLMCallUsage }> {
-  const modelsToTry = [PREMIUM_MODEL, DEEP_MODEL, "gpt-4o"] as const;
-
-  for (const model of modelsToTry) {
-    try {
+  return executeWithOpenAIProviders({
+    operationName: "generatePremiumReport",
+    getModels: premiumSynthesisModels,
+    execute: async ({ client, model }) => {
       const isReasoningModel = model.startsWith("o");
-      const response = await getOpenAI().chat.completions.create({
+      const response = await client.chat.completions.create({
         model,
         messages: [
           {
@@ -235,7 +256,7 @@ export async function generatePremiumReport(
           },
         ],
         ...(isReasoningModel
-          ? { max_completion_tokens: 10000 }
+          ? { max_completion_tokens: 14000 }
           : { max_tokens: 8000, temperature: 0.35 }),
       });
 
@@ -248,76 +269,123 @@ export async function generatePremiumReport(
         data: extractJSON<PremiumReportModelOutput>(content, "premium report"),
         usage: buildUsage(model, "Premium Report Synthesis", response.usage),
       };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[generatePremiumReport] Model ${model} failed: ${message}`);
-      if (model === modelsToTry[modelsToTry.length - 1]) {
-        throw error;
-      }
-    }
-  }
+    },
+  });
+}
 
-  throw new Error("All premium report models failed");
+export async function generatePremiumEvaluation(
+  prompt: string
+): Promise<{ data: PremiumEvaluationModelOutput; usage: LLMCallUsage }> {
+  return executeWithOpenAIProviders({
+    operationName: "generatePremiumEvaluation",
+    getModels: premiumEvaluationModels,
+    execute: async ({ client, model }) => {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are the strict internal reviewer for a premium interview-intelligence product. Return only valid JSON matching the requested schema. Never include markdown fences or extra prose.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 4500,
+      });
+
+      const content = response.choices[0].message.content;
+      if (!content) {
+        throw new Error("Empty response from premium evaluation model");
+      }
+
+      return {
+        data: extractJSON<PremiumEvaluationModelOutput>(content, "premium evaluation"),
+        usage: buildUsage(model, "Premium Quality Evaluation", response.usage),
+      };
+    },
+  });
 }
 
 // ─── Legacy (kept for any remaining callers) ──────────────────────────────────
 
 /** @deprecated Use generateDeepAnalysis + generateInterviewLayer instead */
 export async function generateFullReport(prompt: string): Promise<StructuredReport> {
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a structured intelligence engine. You return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
-      },
-      { role: "user", content: prompt },
-    ],
-    temperature: 0.4,
-    max_tokens: 6000,
-  });
+  return executeWithOpenAIProviders({
+    operationName: "generateFullReport",
+    getModels: (providerKind) => [resolveModelForProvider("legacyStructured", providerKind)],
+    execute: async ({ client, model }) => {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a structured intelligence engine. You return only valid JSON matching the requested schema. Never include markdown fences or any text outside the JSON object.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.4,
+        max_tokens: 6000,
+      });
 
-  const content = response.choices[0].message.content;
-  if (!content) throw new Error("Empty response from LLM");
-  return extractJSON<StructuredReport>(content, "full report");
+      const content = response.choices[0].message.content;
+      if (!content) throw new Error("Empty response from LLM");
+      return extractJSON<StructuredReport>(content, "full report");
+    },
+  });
 }
 
 export async function generateStructuredCompletion(
   prompt: string,
   _jsonSchema?: Record<string, any>
 ): Promise<any> {
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4-turbo",
-    messages: [
-      {
-        role: "system",
-        content: "You are a business analysis engine. Respond with valid JSON only. Do not fabricate details.",
-      },
-      { role: "user", content: prompt },
-    ],
-    temperature: 0.5,
-    max_tokens: 2000,
-  });
+  return executeWithOpenAIProviders({
+    operationName: "generateStructuredCompletion",
+    getModels: (providerKind) => [resolveModelForProvider("legacyStructured", providerKind)],
+    execute: async ({ client, model }) => {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "system",
+            content: "You are a business analysis engine. Respond with valid JSON only. Do not fabricate details.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.5,
+        max_tokens: 2000,
+      });
 
-  const content = response.choices[0].message.content;
-  if (!content) throw new Error("No content in response");
-  return extractJSON(content, "structured completion");
+      const content = response.choices[0].message.content;
+      if (!content) throw new Error("No content in response");
+      return extractJSON(content, "structured completion");
+    },
+  });
 }
 
 export async function generateText(prompt: string): Promise<string> {
-  const response = await getOpenAI().chat.completions.create({
-    model: "gpt-4-turbo",
-    messages: [
-      {
-        role: "system",
-        content: "You are a business analysis engine. Be concise, grounded, and honest.",
-      },
-      { role: "user", content: prompt },
-    ],
-    temperature: 0.5,
-    max_tokens: 1500,
-  });
+  return executeWithOpenAIProviders({
+    operationName: "generateText",
+    getModels: (providerKind) => [resolveModelForProvider("legacyText", providerKind)],
+    execute: async ({ client, model }) => {
+      const response = await client.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "system",
+            content: "You are a business analysis engine. Be concise, grounded, and honest.",
+          },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.5,
+        max_tokens: 1500,
+      });
 
-  return response.choices[0].message.content || "";
+      return response.choices[0].message.content || "";
+    },
+  });
 }

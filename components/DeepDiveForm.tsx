@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { ResumeProfileIcon } from "@/components/ResumeProfileIcon";
 import { useResumeStore } from "@/lib/hooks/useResumeStore";
 
 const INPUT_CLASS =
@@ -79,7 +80,6 @@ function ResumePanel({ stored, onSave, onClear }: ResumePanelProps) {
     (mode === "file" && fileContent !== null && fileContent.trim().length > 50);
 
   // ── Stored state (resume on file) ─────────────────────────────────────────
-
   if (stored && !expanded) {
     const savedDate = new Date(stored.savedAt).toLocaleDateString("en-US", {
       month: "short",
@@ -89,11 +89,15 @@ function ResumePanel({ stored, onSave, onClear }: ResumePanelProps) {
       <div className="bg-[#1a4a3a]/6 border border-[#1a4a3a]/20 rounded-xl px-4 py-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-[#1a4a3a]/12 flex items-center justify-center flex-shrink-0">
-              <svg className="w-3.5 h-3.5 text-[#1a4a3a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
+            <ResumeProfileIcon
+              containerClassName="w-7 h-7 rounded-lg bg-[#1a4a3a]/12 flex items-center justify-center flex-shrink-0"
+              cardClassName="relative h-4 w-[13px] rounded-[4px] border border-[#1a4a3a]/25 bg-white shadow-[0_1px_2px_rgba(26,74,58,0.12)]"
+              lineClassName="bg-[#1a4a3a]/20"
+              photoFrameClassName="absolute left-[2px] top-[2px] h-[6px] w-[6px] overflow-hidden rounded-[2px] border border-[#1a4a3a]/15"
+              photoBackgroundClassName="absolute inset-0 bg-[linear-gradient(180deg,#d5e3dd_0%,#f4faf7_100%)]"
+              photoHeadClassName="absolute left-1/2 top-[1px] h-[2px] w-[2px] -translate-x-1/2 rounded-full bg-[#3b6458]"
+              photoBodyClassName="absolute bottom-0 left-1/2 h-[3px] w-[4px] -translate-x-1/2 rounded-t-full bg-[#5b8478]"
+            />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-[#1a4a3a]">
                 Resume on file

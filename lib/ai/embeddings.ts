@@ -1,17 +1,9 @@
-import OpenAI from "openai";
+import { executeWithOpenAIProviders, resolveModelForProvider } from "@/lib/ai/openaiClient";
 
 const EMBEDDING_BATCH_SIZE = 64;
 const EMBEDDING_SAFE_MAX_CHARS = 6000;
 const EMBEDDING_SAFE_MAX_TOKENS = 3500;
 const EMBEDDING_RETRY_MAX_CHARS = 3000;
-
-let _openai: OpenAI | null = null;
-function getOpenAI(): OpenAI {
-  if (!_openai) {
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  }
-  return _openai;
-}
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.split(/\s+/).filter(Boolean).length * 1.3);
@@ -54,18 +46,30 @@ function isEmbeddingLengthError(error: unknown): boolean {
 }
 
 async function createEmbeddingBatch(texts: string[]): Promise<number[][]> {
-  const response = await getOpenAI().embeddings.create({
-    model: "text-embedding-3-small",
-    input: texts,
+  const response = await executeWithOpenAIProviders({
+    operationName: "createEmbeddingBatch",
+    getModels: (providerKind) => [resolveModelForProvider("embedding", providerKind)],
+    execute: async ({ client, model }) => {
+      return client.embeddings.create({
+        model,
+        input: texts,
+      });
+    },
   });
 
   return response.data.map((item) => item.embedding);
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await getOpenAI().embeddings.create({
-    model: "text-embedding-3-small",
-    input: normalizeEmbeddingInput(text),
+  const response = await executeWithOpenAIProviders({
+    operationName: "generateEmbedding",
+    getModels: (providerKind) => [resolveModelForProvider("embedding", providerKind)],
+    execute: async ({ client, model }) => {
+      return client.embeddings.create({
+        model,
+        input: normalizeEmbeddingInput(text),
+      });
+    },
   });
 
   return response.data[0].embedding;

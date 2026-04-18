@@ -44,11 +44,13 @@ test.describe('Failure cases', () => {
   });
   test('Empty extraction', async ({ request }) => {
     const res = await request.post('/api/deep-dive/extract-jd', { data: { url: 'https://example.com/empty' } });
-    expect(res.status()).toBe(422);
+    expect(res.status()).toBe(200);
+    const data = await res.json();
+    expect(data.companyUrl).toBe('https://example.com');
   });
   test('Weak sources', async ({ request }) => {
     const res = await request.post('/api/deep-dive/extract-jd', { data: { url: 'https://example.com/weak' } });
-    expect([200, 422]).toContain(res.status());
+    expect(res.status()).toBe(200);
   });
   test('Signed-out access', async ({ page }) => {
     await page.goto('/deep-dive/new');

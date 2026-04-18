@@ -3,6 +3,7 @@ import { RecommendationType } from "@/lib/types";
 export type PremiumSectionKey =
   | "decision_memo"
   | "five_minute_brief"
+  | "company_context"
   | "why_role_exists_now"
   | "how_to_win_this_process"
   | "company_role_strategy"
@@ -102,6 +103,13 @@ export const PREMIUM_SECTION_DEFINITIONS: Array<{
     group: "Decision",
     surface: "both",
     question: "What do I need to know in the next five minutes?",
+  },
+  {
+    key: "company_context",
+    title: "Company Context",
+    group: "Strategy",
+    surface: "full",
+    question: "What company context should shape how I prepare for this process?",
   },
   {
     key: "why_role_exists_now",

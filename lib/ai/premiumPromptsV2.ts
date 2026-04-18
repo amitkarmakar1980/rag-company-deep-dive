@@ -1,33 +1,51 @@
 import { readFile } from "fs/promises";
-import path from "path";
+import { fileURLToPath } from "url";
 import { RetrievalContext } from "@/lib/types";
 import { formatUntrustedTextBlock } from "@/lib/ai/untrustedInput";
 import { PremiumEvidenceQuality, PremiumSourceCoverageSummary } from "@/lib/report/premiumTelemetry";
+import { formatPersonaForPrompt, PremiumPersonaProfile } from "@/lib/report/premiumPersona";
 
-const artifactCache = new Map<string, Promise<string>>();
+const ARTIFACT_PATHS = {
+  spec: fileURLToPath(new URL("./report_generation_spec.md", import.meta.url)),
+  architecture: fileURLToPath(new URL("./pipeline_architecture.md", import.meta.url)),
+  costSchema: fileURLToPath(new URL("./cost_ledger_schema.json", import.meta.url)),
+  masterPrompt: fileURLToPath(new URL("./premium_vscode_copilot_prompt.md", import.meta.url)),
+} as const;
 
-async function loadArtifact(relativePathParts: string[]): Promise<string> {
-  const cacheKey = relativePathParts.join("/");
+const artifactCache = new Map<keyof typeof ARTIFACT_PATHS, Promise<string>>();
+const MAX_ARTIFACT_CHARS = 3500;
+const MAX_EVIDENCE_CHUNKS = 12;
+const MAX_CHARS_PER_CHUNK = 1800;
 
-  if (!artifactCache.has(cacheKey)) {
-    const artifactPath = path.join(process.cwd(), ...relativePathParts);
-    artifactCache.set(cacheKey, readFile(artifactPath, "utf8").catch(() => ""));
+async function loadArtifact(key: keyof typeof ARTIFACT_PATHS): Promise<string> {
+  if (!artifactCache.has(key)) {
+    artifactCache.set(key, readFile(ARTIFACT_PATHS[key], "utf8").catch(() => ""));
   }
 
-  return artifactCache.get(cacheKey)!;
+  return artifactCache.get(key)!;
+}
+
+function truncateForPrompt(content: string, maxChars: number, label: string): string {
+  const trimmed = content.trim();
+  if (trimmed.length <= maxChars) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, maxChars).trim()}\n\n[${label.toUpperCase()} TRUNCATED FOR PROMPT BUDGET]`;
 }
 
 function formatArtifactSection(title: string, content: string, fallbackMessage: string): string {
   return content.trim()
-    ? `\n${title}\n${content.trim()}\n`
+    ? `\n${title}\n${truncateForPrompt(content, MAX_ARTIFACT_CHARS, title)}\n`
     : `\n${title}\n${fallbackMessage}\n`;
 }
 
 function formatChunks(context: RetrievalContext): string {
   return context.chunks
+    .slice(0, MAX_EVIDENCE_CHUNKS)
     .map(
       (chunk, index) =>
-        `[SOURCE ${index + 1} - UNTRUSTED EVIDENCE] ${chunk.source_title} (${chunk.source_type})\n${chunk.text}`
+        `[SOURCE ${index + 1} - UNTRUSTED EVIDENCE] ${chunk.source_title} (${chunk.source_type})\n${truncateForPrompt(chunk.text, MAX_CHARS_PER_CHUNK, `source ${index + 1}`)}`
     )
     .join("\n\n---\n\n");
 }
@@ -52,15 +70,17 @@ export async function getPremiumReportPromptV2(
   jobDescription: string | undefined,
   profileContext: string | undefined,
   evidenceQuality: PremiumEvidenceQuality,
-  coverage: PremiumSourceCoverageSummary
+  coverage: PremiumSourceCoverageSummary,
+  persona: PremiumPersonaProfile,
+  repairInstructions?: string[]
 ): Promise<string> {
   const jdSection = formatUntrustedTextBlock("JOB DESCRIPTION", jobDescription);
   const profileSection = formatUntrustedTextBlock("CANDIDATE PROFILE / CONTEXT", profileContext);
   const [specArtifact, architectureArtifact, costSchemaArtifact, masterPromptArtifact] = await Promise.all([
-    loadArtifact(["lib", "ai", "report_generation_spec.md"]),
-    loadArtifact(["lib", "ai", "pipeline_architecture.md"]),
-    loadArtifact(["lib", "ai", "cost_ledger_schema.json"]),
-    loadArtifact(["lib", "ai", "premium_vscode_copilot_prompt.md"]),
+    loadArtifact("spec"),
+    loadArtifact("architecture"),
+    loadArtifact("costSchema"),
+    loadArtifact("masterPrompt"),
   ]);
   const artifactBundle = [
     formatArtifactSection(
@@ -84,6 +104,9 @@ export async function getPremiumReportPromptV2(
       "UNAVAILABLE AT RUNTIME - continue using the embedded premium constraints below."
     ),
   ].join("\n");
+  const repairSection = repairInstructions?.length
+    ? `\nREPAIR PRIORITIES\n${repairInstructions.map((instruction, index) => `${index + 1}. ${instruction}`).join("\n")}\nTreat these as mandatory repair targets for this regeneration pass. Preserve any strong content that already exists, but fully rewrite the weak sections instead of making cosmetic edits. On a repair pass, company_context, company_role_strategy, and interview_prep must be expanded until they satisfy the structural and depth rules below or explicitly state what evidence is missing.\n`
+    : "";
 
   return `You are generating the default premium interview report.
 
@@ -106,20 +129,40 @@ Non-negotiable rules:
 - Company strategy and role strategy are core differentiators of the premium product.
 - Interview prep must be interviewer-specific, theme-specific, and proof-oriented.
 - Generic PM coaching is a failure.
+- Generic Product-centric framing for clearly non-Product roles is a failure.
 - Generic competitor bullets are a failure.
 - Restating the JD as role strategy is a failure.
+- Use the inferred persona as the default retrieval, analysis, interview-prep, and reading-experience lens unless the evidence materially contradicts it.
+- Do not classify lead, senior, group, or principal product-manager titles as executive unless the JD explicitly shows business-unit, portfolio, org-design, or P&L authority.
+- Treat safety, trust, privacy, compliance, and risk language as domain modifiers, not automatic persona switches.
+- Candidate-fit scoring must evaluate transferability dimension by dimension; direct domain-specialist experience cannot dominate the score on its own.
+- Do not turn senior technical PM interview prep into engineering architecture theater unless the JD explicitly centers engineering-system interviews.
+- Keep section categories clean: company_context is company context, candidate_fit is candidate transferability, and interview_prep is interview proof strategy.
+- When making a claim grounded in retrieved evidence, append bracketed citations using the available source order, for example [1] or [2, 3].
+- Prefer bracketed citation style over prose like "Source 1".
+- Do not cite claims that are explicitly marked as insufficient evidence or unknown.
+- company_context must usually deliver at least 150 words of net-new interpretation when evidence quality is at least partial; if it cannot, say what evidence is missing.
+- company_role_strategy must usually deliver at least 300 words of net-new strategic analysis when evidence quality is at least partial; if it cannot, say what evidence is missing.
+- highlight vision, mission, and culture explicitly when evidence supports them; do not bury them in generic background copy.
+- treat culture as operating behavior, leadership signals, collaboration norms, or execution habits, not employer-brand fluff.
+- include a clearly labeled current-strategy read and a SWOT with 3 to 5 substantive bullets each for strengths, weaknesses, opportunities, and threats when evidence supports that specificity.
+- On a repair pass, treat company-facing depth misses as hard failures. Do not return a compact rewrite for company_context or company_role_strategy.
+- When evidence quality is at least partial, the company sections must satisfy the block structure expected by the quality gate, not just mention the topics in passing.
 
 Company: ${companyName}
 Role: ${roleTitle}
 ${jdSection}
 ${profileSection}
 
+${formatPersonaForPrompt(persona)}
+
 ${formatEvidenceSummary(evidenceQuality)}
 
 ${formatCoverageSummary(coverage)}
 ${artifactBundle}
+${repairSection}
 
-Available evidence (${context.chunks.length} chunks):
+Available evidence (${context.chunks.length} chunks total, showing up to ${Math.min(context.chunks.length, MAX_EVIDENCE_CHUNKS)} highest-ranked chunks within prompt budget):
 ${formatChunks(context)}
 
 Return exactly one valid JSON object with this schema and no extra text:
@@ -142,6 +185,12 @@ Return exactly one valid JSON object with this schema and no extra text:
     "five_minute_brief": {
       "summary": string,
       "bullets": [string],
+      "evidence": { "threshold": string, "status": "met" | "partial" | "insufficient", "confidence": "high" | "medium" | "low" | "suppressed", "note": string }
+    },
+    "company_context": {
+      "summary": string,
+      "blocks": [{ "title": string, "body": string, "bullets": [string] }],
+      "facts": [{ "label": string, "value": string }],
       "evidence": { "threshold": string, "status": "met" | "partial" | "insufficient", "confidence": "high" | "medium" | "low" | "suppressed", "note": string }
     },
     "why_role_exists_now": {
@@ -183,13 +232,24 @@ Return exactly one valid JSON object with this schema and no extra text:
 
 Section requirements:
 - decision_memo: be decisive; include strongest upside, strongest downside, what must be true, and what would change the recommendation.
-- five_minute_brief: 5 to 8 bullets max; every bullet should be usable immediately before an interview.
+- five_minute_brief: 5 to 8 bullets max; every bullet should be usable immediately before an interview and should reflect the inferred role family and seniority.
+- company_context: include only the company-context subsections that can be supported. Prioritize key company insights, brief history or evolution, mission or vision interpretation, values or leadership principles, work culture, and cautious employee-review synthesis. Suppress weak subsections instead of writing filler. When evidence quality is at least partial, this section should usually exceed 150 words total and should use explicit blocks titled Company Snapshot, Vision And Mission, and Culture Signals unless a block must be suppressed for evidence reasons.
 - why_role_exists_now: explain why now, not why ever. If the evidence threshold is not met, say so directly.
-- how_to_win_this_process: include what to lead with, what to prove, what not to overclaim, and which questions will create leverage.
-- company_role_strategy: this must be deep and multi-block, not compressed into a summary. Include distinct blocks for business model deep dive, company strategic priorities, product / platform strategy context, market / industry context, competitor analysis, strategic tensions / tradeoffs, role mandate reconstruction, role leverage, scope and power, stakeholder / org map, metric tree logic, first-90-days / year-1 thesis, role risks / hidden constraints, and what would impress the hiring team. If evidence is weak, suppress the weak block instead of writing filler.
+- how_to_win_this_process: include what to lead with, what to prove, what not to overclaim, and which questions will create leverage. This must be persona-specific, not generic.
+- company_role_strategy: this must be deep and multi-block, not compressed into a summary. Include distinct blocks for business model deep dive, company strategic priorities, product / platform strategy context, market / industry context, competitor analysis, strategic tensions / tradeoffs, role mandate reconstruction, role leverage, scope and power, stakeholder / org map, metric tree logic, first-90-days / year-1 thesis, role risks / hidden constraints, and what would impress the hiring team. This section should usually exceed 300 words total when evidence quality is at least partial. It must include an explicit Current Strategy block and explicit SWOT - Strengths, SWOT - Weaknesses, SWOT - Opportunities, and SWOT - Threats blocks, each with 3 to 5 substantive bullets when evidence supports that specificity. If evidence is weak, suppress the weak block instead of writing filler.
 - candidate_fit: if no candidate profile exists, say that explicitly. If one exists, cover strengths to emphasize, likely objections, story-to-requirement mapping, and what would impress this hiring team.
-- interview_prep: this must read like a premium interview-preparation suite. Include the likely interview loop, interviewer agenda map by interviewer type, strategic themes to master, story-to-interview mapping, objection handling by interviewer type, role-specific mock questions, questions to ask grouped by purpose, what not to say, and concrete answer-quality scaffolding. Reject any output that could apply to any PM interview.
+- interview_prep: this must read like a premium interview-preparation suite. Include the likely interview loop, interviewer agenda map by interviewer type, strategic themes to master, story-to-interview mapping, objection handling by interviewer type, role-specific mock questions, questions to ask grouped by purpose, what not to say, and concrete answer-quality scaffolding. Reject any output that could apply unchanged to a different role family or seniority band.
 - credibility_layer: include separate blocks for verified facts, cited synthesis, informed inferences, conflicts, and unknowns or insufficient evidence. Do not collapse them together.
+
+Hard structural contract for company-facing sections:
+- company_context: if evidence quality is partial or better, return a summary plus explicit blocks titled Company Snapshot, Vision And Mission, and Culture Signals. Each returned block must contain role-relevant interpretation, not just description. Vision And Mission must explain what leadership appears to be trying to accomplish. Culture Signals must explain how people likely decide, execute, collaborate, or escalate.
+- company_context: if a required block cannot be supported, keep the title and begin the block body with INSUFFICIENT_EVIDENCE: followed by the exact evidence gap. Do not replace the block with generic filler.
+- company_role_strategy: if evidence quality is partial or better, return a summary plus explicit blocks titled Current Strategy, Strategic Tensions, SWOT - Strengths, SWOT - Weaknesses, SWOT - Opportunities, and SWOT - Threats.
+- company_role_strategy: each SWOT block must contain 3 to 5 differentiated bullets when evidence quality is partial or better. Bullets must be analytic, consequential for the role, and non-redundant.
+- company_role_strategy: the combined Current Strategy and Strategic Tensions bodies should explain the business model, present strategic priorities, current market pressure, management tradeoffs, and why those pressures shape this role now.
+- company_role_strategy: if evidence is too weak for one of these required blocks, keep the block title and begin the body with INSUFFICIENT_EVIDENCE: followed by the missing evidence. Do not silently omit the block on a repair pass.
+- company_role_strategy: on a repair pass, do not return this section with fewer than 6 blocks unless the evidence object explicitly says the section is insufficient.
+- interview_prep: on a repair pass, prefer adding interviewer logic, proof expectations, likely objections, and mock-question specificity over compressing the section.
 
 Tone rules:
 - Director+ quality bar.

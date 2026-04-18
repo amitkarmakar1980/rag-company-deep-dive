@@ -1,9 +1,74 @@
 import { supabaseAdmin } from "@/lib/db/supabase";
 import { generateCandidateOverlay } from "@/lib/ai/openai";
 import { getCandidateOverlayPrompt } from "@/lib/ai/overlayPrompt";
+import type { CandidateOverlayData } from "@/lib/types";
+import type { PremiumSectionContent } from "@/lib/report/premiumTypes";
 
 function getStoredAiQueryCount(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function titleCaseFit(value: CandidateOverlayData["candidate_role_match"]["overall_fit"]): string {
+  switch (value) {
+    case "strong":
+      return "Strong";
+    case "moderate":
+      return "Moderate";
+    case "stretch":
+      return "Stretch";
+    case "mismatch":
+      return "Mismatch";
+    default:
+      return value;
+  }
+}
+
+function buildPremiumCandidateFitSection(overlayData: CandidateOverlayData): PremiumSectionContent {
+  const match = overlayData.candidate_role_match;
+  const topStrengths = overlayData.strengths_to_emphasize.strengths.slice(0, 3);
+  const topStories = overlayData.story_recommendations.stories.slice(0, 3);
+  const topObjections = overlayData.objection_handling.objections.slice(0, 2);
+
+  return {
+    schema: "premium_section_v1",
+    group: "Candidate Fit",
+    surface: "full",
+    question: "What strengths, gaps, and stories will determine my candidacy?",
+    summary: match.rationale,
+    facts: [
+      { label: "Resume provided?", value: "true" },
+      { label: "Overall fit", value: titleCaseFit(match.overall_fit) },
+      { label: "Match score", value: `${match.match_score}/10` },
+    ],
+    callouts: topStrengths.map((strength) => ({
+      label: strength.strength,
+      value: `${strength.evidence_from_resume} ${strength.why_it_matters_for_role}`.trim(),
+      tone: "strong",
+    })),
+    bullets: match.key_gaps.length
+      ? match.key_gaps.map((gap) => `Gap to manage: ${gap}`)
+      : ["No major gaps were called out in the resume overlay."],
+    blocks: [
+      ...(topStories.length
+        ? [{
+            title: "Stories to lead with",
+            bullets: topStories.map((story) => `${story.theme}: ${story.suggested_story}`),
+          }]
+        : []),
+      ...(topObjections.length
+        ? [{
+            title: "Likely objections to pre-empt",
+            bullets: topObjections.map((objection) => `${objection.objection} ${objection.how_to_respond}`.trim()),
+          }]
+        : []),
+    ],
+    evidence: {
+      threshold: "resume overlay",
+      status: "met",
+      confidence: "high",
+      note: "This section was refreshed from the candidate resume overlay after personalization completed.",
+    },
+  };
 }
 
 /**
@@ -158,6 +223,20 @@ export async function generateOverlay(overlayId: string): Promise<void> {
         } catch {
           // Non-fatal — section will show old score but report table is correct
         }
+      }
+
+      const { data: candidateFitSection } = await supabaseAdmin
+        .from("report_sections")
+        .select("id")
+        .eq("report_id", reportRow.id)
+        .eq("section_key", "candidate_fit")
+        .maybeSingle();
+
+      if (candidateFitSection?.id) {
+        await supabaseAdmin
+          .from("report_sections")
+          .update({ content_markdown: JSON.stringify(buildPremiumCandidateFitSection(overlayData)) })
+          .eq("id", candidateFitSection.id);
       }
 
       console.log(

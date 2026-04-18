@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       safeRoleTitle,
       safeJobDescription,
       safeCompanyUrl,
-      undefined
+      safeResumeText
     );
 
     // after() keeps the serverless function alive after the response is sent (Vercel waitUntil).
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
         safeCompanyUrl,
         undefined,
         safeJobDescription,
-        undefined,
+        safeResumeText,
         safeResumeText
       ).catch((err) =>
         console.error("[Pipeline] Unhandled top-level error:", err)

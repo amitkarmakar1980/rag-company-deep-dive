@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDeepDiveRequest, getReport, getReportSectionCount } from "@/lib/db/operations";
+import { getDeepDiveRequest, getReport, getReportSectionCount, getRequestSources } from "@/lib/db/operations";
 import { PREMIUM_SECTION_DEFINITIONS } from "@/lib/report/premiumTypes";
 
 function buildGeneratingReportProgress(
@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
     }
 
     const report = await getReport(requestId);
+    const requestSources = await getRequestSources(requestId);
     const completedSections = report ? await getReportSectionCount(report.id) : 0;
     const progress = request.status === "generating_report"
       ? buildGeneratingReportProgress(report, completedSections)
@@ -63,6 +64,16 @@ export async function GET(req: NextRequest) {
       requestId,
       status: request.status,
       errorMessage: request.error_message ?? null,
+      requestMeta: {
+        companyUrl: request.company_url ?? null,
+        roleTitle: request.role_title ?? null,
+      },
+      requestSources: requestSources.map((source) => ({
+        id: source.id,
+        title: source.title,
+        type: source.source_type,
+        url: source.url ?? null,
+      })),
       progress,
       report: report
         ? {

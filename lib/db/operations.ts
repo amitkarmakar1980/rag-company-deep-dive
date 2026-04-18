@@ -578,6 +578,9 @@ export async function createReportSection(
     source_id: string;
     url?: string;
     title: string;
+    source_type?: string;
+    evidence_tier?: "primary" | "fallback_third_party";
+    evidence_label?: string;
   }>
 ): Promise<ReportSection> {
   let { data, error } = await supabaseAdmin

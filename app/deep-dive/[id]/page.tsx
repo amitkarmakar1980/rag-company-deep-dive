@@ -29,6 +29,31 @@ interface Report {
   id: string;
   reportFormat?: string;
   reportFamily?: string;
+  personaProfile?: {
+    primaryRoleFamilyLabel?: string;
+    secondaryRoleFamilyLabel?: string | null;
+    isBlendedPersona?: boolean;
+    roleFamilyLabel?: string;
+    seniorityLabel?: string;
+    subspecialization?: string | null;
+    confidence?: "high" | "medium" | "low";
+  } | null;
+  presentationPlan?: {
+    sectionOrder?: string[];
+    titleBySectionKey?: Record<string, string>;
+  } | null;
+  qualityGate?: {
+    overall_quality_score?: number;
+    depth_score?: number;
+    company_context_score?: number;
+    evidence_score?: number;
+    persona_score?: number;
+    interview_prep_score?: number;
+    readiness_to_release_score?: number;
+    release_decision?: string;
+    warning_flags?: string[];
+    blocked_release_reasons?: string[];
+  } | null;
   recommendation: RecommendationType;
   scores: ReportScore;
   sections: Array<{
@@ -54,6 +79,7 @@ interface Report {
   roleTitle: string | null;
   companyUrl: string | null;
   jobDescription: string | null;
+  resumeProvided?: boolean;
   requestCreatedAt: string | null;
   completedAt: string | null;
 }
@@ -62,6 +88,16 @@ interface RequestStatus {
   requestId: string;
   status: string;
   errorMessage?: string | null;
+  requestMeta?: {
+    companyUrl?: string | null;
+    roleTitle?: string | null;
+  } | null;
+  requestSources?: Array<{
+    id: string;
+    title: string;
+    type: string;
+    url?: string | null;
+  }>;
   progress?: {
     stage: "synthesizing" | "writing_sections" | "finalizing";
     completedSections: number;
@@ -79,6 +115,27 @@ type ProcessingStep = {
   state?: "pending" | "current" | "complete";
 };
 
+type ProcessingStepTemplate = {
+  key: string;
+  label: string;
+  detail: string;
+};
+
+type CrawlTarget = {
+  key: string;
+  label: string;
+  url: string;
+  detail: string;
+  active: boolean;
+};
+
+type CrawlGraphNodeLayout = {
+  left: string;
+  top: string;
+  x: number;
+  y: number;
+};
+
 type OverlayStatus = "none" | "uploading" | "generating" | "completed" | "failed";
 
 interface OverlayState {
@@ -88,6 +145,22 @@ interface OverlayState {
 }
 
 type ViewMode = "full" | "brief";
+
+const CRAWL_GRAPH_LAYOUTS: CrawlGraphNodeLayout[] = [
+  { left: "16%", top: "24%", x: 16, y: 24 },
+  { left: "34%", top: "14%", x: 34, y: 14 },
+  { left: "68%", top: "18%", x: 68, y: 18 },
+  { left: "84%", top: "34%", x: 84, y: 34 },
+  { left: "70%", top: "72%", x: 70, y: 72 },
+  { left: "28%", top: "76%", x: 28, y: 76 },
+];
+
+const CRAWL_GRAPH_HUB = {
+  left: "50%",
+  top: "48%",
+  x: 50,
+  y: 48,
+};
 
 const PROVENANCE_EXPLAINERS: Record<ProvenanceType, { title: string; description: string }> = {
   cited: {
@@ -126,38 +199,103 @@ const STATUS_LABELS: Record<string, string> = {
   generating_interview_layer: "Running interview prep layer...",
 };
 
-const STATUS_SUBSTEPS: Record<string, string[]> = {
-  pending: ["Initializing the analysis pipeline...", "Preparing retrieval context..."],
+const STATUS_SUBSTEPS: Record<string, ProcessingStepTemplate[]> = {
+  pending: [
+    {
+      key: "pending-bootstrap",
+      label: "Boot the premium pipeline",
+      detail: "Reserve the report slot, validate the request payload, and set the run up for a clean start.",
+    },
+    {
+      key: "pending-context",
+      label: "Prepare retrieval context",
+      detail: "Load the role and company context so the crawler does not start from vibes alone.",
+    },
+  ],
   fetching_sources: [
-    "Crawling company website...",
-    "Pulling recent news and press releases...",
-    "Retrieving earnings reports and investor docs...",
-    "Scanning industry analyst coverage...",
-    "Fetching job posting context...",
-    "Gathering competitive landscape data...",
+    {
+      key: "fetching-company",
+      label: "Sweep company-owned pages",
+      detail: "Homepage, careers, newsroom, and about surfaces are checked first for direct evidence.",
+    },
+    {
+      key: "fetching-press",
+      label: "Pull recent coverage and press",
+      detail: "Recent articles and announcement trails are scanned for role-adjacent launches or strategic context.",
+    },
+    {
+      key: "fetching-investor",
+      label: "Check investor and business signals",
+      detail: "Earnings, leadership commentary, and performance narratives are gathered where available.",
+    },
+    {
+      key: "fetching-job",
+      label: "Anchor on the role itself",
+      detail: "The job description and role-specific context are used to keep the crawl grounded.",
+    },
   ],
   indexing: [
-    "Embedding retrieved content into vector store...",
-    "Ranking sources by relevance to the role...",
-    "Deduplicating and chunking evidence...",
+    {
+      key: "indexing-clean",
+      label: "Clean and chunk the evidence",
+      detail: "The raw pages are stripped down so retrieval sees substance instead of navigation chrome.",
+    },
+    {
+      key: "indexing-embed",
+      label: "Embed the useful bits",
+      detail: "Relevant passages are converted into vectors so later passes can retrieve precise evidence quickly.",
+    },
+    {
+      key: "indexing-rank",
+      label: "Rank the strongest sources",
+      detail: "The system narrows the pile to the evidence most likely to matter for this role and company.",
+    },
   ],
   generating_report: [
-    "Preparing retrieval context for model calls...",
-    "Running semantic search over the evidence set...",
+    {
+      key: "report-context",
+      label: "Prepare premium synthesis context",
+      detail: "The strongest evidence is assembled into a context bundle the model can reason over without drifting.",
+    },
+    {
+      key: "report-search",
+      label: "Run semantic retrieval over evidence",
+      detail: "The pipeline keeps probing the indexed material to support strategy, fit, and interview-prep sections.",
+    },
   ],
   generating_deep_analysis: [
-    "Running deep strategic analysis...",
-    "Building SWOT quadrants from evidence...",
-    "Identifying why this role exists now...",
-    "Surfacing risks and red flags...",
-    "Synthesizing decision-level judgment...",
+    {
+      key: "deep-strategy",
+      label: "Interrogate the strategy layer",
+      detail: "This is where weak summaries get filtered out and the system asks what really matters about the company and role.",
+    },
+    {
+      key: "deep-swot",
+      label: "Build the strategic frame",
+      detail: "Strengths, weaknesses, timing, and leverage are assembled from the evidence rather than guessed from title alone.",
+    },
+    {
+      key: "deep-risks",
+      label: "Pressure-test the downside",
+      detail: "Risks, ambiguity, and missing evidence are surfaced before the recommendation hardens.",
+    },
   ],
   generating_interview_layer: [
-    "Generating interview prep layer...",
-    "Synthesizing candidate positioning angles...",
-    "Generating executive-caliber questions...",
-    "Building the 5-minute brief...",
-    "Finalizing personalized recommendations...",
+    {
+      key: "interview-positioning",
+      label: "Translate strategy into positioning",
+      detail: "The raw company analysis is being converted into arguments and story angles you can actually use.",
+    },
+    {
+      key: "interview-questions",
+      label: "Shape the interview agenda",
+      detail: "Likely themes, objections, and proof points are being turned into practical prep.",
+    },
+    {
+      key: "interview-brief",
+      label: "Assemble the short-form brief",
+      detail: "The high-signal version is being compressed so it is still useful five minutes before the call.",
+    },
   ],
 };
 
@@ -298,6 +436,224 @@ function getProgressValue(statusKey: string, progress?: RequestStatus["progress"
 
 function getCurrentStepLabel(steps: ProcessingStep[]): string {
   return steps.find((step) => step.state === "current")?.label ?? steps[0]?.label ?? "Preparing analysis";
+}
+
+function getCurrentPassCopy(statusKey: string, progress: RequestStatus["progress"] | undefined, currentStepLabel: string) {
+  if (statusKey === "fetching_sources") {
+    return {
+      title: "Shaking the internet until the useful receipts fall out.",
+      detail: `Actual step: ${currentStepLabel}`,
+    };
+  }
+
+  if (statusKey === "indexing") {
+    return {
+      title: "Teaching the evidence pile to organize itself without eating the good bits.",
+      detail: `Actual step: ${currentStepLabel}`,
+    };
+  }
+
+  if (statusKey === "generating_deep_analysis") {
+    return {
+      title: "Replacing decorative corporate fog with something closer to judgment.",
+      detail: `Actual step: ${currentStepLabel}`,
+    };
+  }
+
+  if (statusKey === "generating_interview_layer") {
+    return {
+      title: "Turning strategy into interview ammo before the robot gets sentimental.",
+      detail: `Actual step: ${currentStepLabel}`,
+    };
+  }
+
+  if (statusKey === "generating_report") {
+    if ((progress?.stage ?? "synthesizing") === "writing_sections") {
+      return {
+        title: "Packing the good stuff into sections and citations without dropping any sharp objects.",
+        detail: `Actual step: ${currentStepLabel}`,
+      };
+    }
+
+    if ((progress?.stage ?? "synthesizing") === "finalizing") {
+      return {
+        title: "Doing the last boring-but-important paperwork so the report can leave the building.",
+        detail: `Actual step: ${currentStepLabel}`,
+      };
+    }
+
+    return {
+      title: "Convincing the model that vibes are not evidence, no matter how confident they sound.",
+      detail: `Actual step: ${currentStepLabel}`,
+    };
+  }
+
+  return {
+    title: "Warming up the tiny consultants and trying not to spill the evidence cart.",
+    detail: `Actual step: ${currentStepLabel}`,
+  };
+}
+
+function buildCrawlTargets(
+  companyUrl: string | null | undefined,
+  statusKey: string,
+  requestSources?: RequestStatus["requestSources"]
+): CrawlTarget[] {
+  const liveTargets = Array.from(
+    new Map(
+      (requestSources ?? [])
+        .filter((source) => Boolean(normalizeHttpUrl(source.url)))
+        .map((source) => {
+          const normalizedUrl = normalizeHttpUrl(source.url)!;
+          const hostname = extractHostname(normalizedUrl);
+          const label = hostname ?? source.title;
+          const detail = source.type === "company_homepage"
+            ? "Live company source"
+            : source.type === "job_description"
+            ? "Live role source"
+            : source.type === "blog" || source.type === "newsroom"
+            ? "Live published source"
+            : "Live fetched source";
+
+          return [
+            normalizedUrl,
+            {
+              key: source.id,
+              label,
+              url: normalizedUrl,
+              detail,
+              active: true,
+            } satisfies CrawlTarget,
+          ];
+        })
+    ).values()
+  );
+
+  if (liveTargets.length > 0) {
+    return liveTargets.slice(0, 7);
+  }
+
+  const extractedHost = extractHostname(companyUrl);
+  const normalized = normalizeHttpUrl(companyUrl) ?? (extractedHost ? `https://${extractedHost}` : null);
+  const host = extractHostname(normalized);
+
+  const companyTargets: CrawlTarget[] = host && normalized
+    ? [
+        {
+          key: "company-home",
+          label: host,
+          url: normalized,
+          detail: "Homepage",
+          active: true,
+        },
+        {
+          key: "company-careers",
+          label: "Careers",
+          url: `https://${host}/careers`,
+          detail: "Role and hiring context",
+          active: statusKey === "fetching_sources" || statusKey === "indexing",
+        },
+        {
+          key: "company-newsroom",
+          label: "Newsroom",
+          url: `https://${host}/newsroom`,
+          detail: "Launches and official updates",
+          active: statusKey === "fetching_sources" || statusKey === "indexing",
+        },
+        {
+          key: "company-about",
+          label: "About",
+          url: `https://${host}/about`,
+          detail: "Company narrative",
+          active: statusKey !== "pending",
+        },
+      ]
+    : [];
+
+  const externalTargets: CrawlTarget[] = [
+    {
+      key: "external-google",
+      label: "Google",
+      url: "https://www.google.com",
+      detail: "Search sweep",
+      active: statusKey === "fetching_sources",
+    },
+    {
+      key: "external-news",
+      label: "Google News",
+      url: "https://news.google.com",
+      detail: "News sweep",
+      active: statusKey === "fetching_sources",
+    },
+    {
+      key: "external-bing",
+      label: "Bing News",
+      url: "https://www.bing.com/news",
+      detail: "Backup coverage",
+      active: statusKey === "fetching_sources",
+    },
+  ];
+
+  return [...companyTargets, ...externalTargets].slice(0, 7);
+}
+
+function getStepFillPercentage(step: ProcessingStep, statusKey: string, progress: RequestStatus["progress"] | undefined, elapsedSeconds: number): number {
+  if (step.state === "complete") return 100;
+  if (step.state === "pending") return 0;
+
+  if (statusKey === "generating_report") {
+    if (step.key === "writing_sections") {
+      const total = Math.max(progress?.totalSections ?? 1, 1);
+      return Math.max(10, Math.min(96, Math.round(((progress?.completedSections ?? 0) / total) * 100)));
+    }
+
+    if (step.key === "finalizing") {
+      return 82 + ((elapsedSeconds * 3) % 14);
+    }
+
+    return 22 + ((elapsedSeconds * 7) % 58);
+  }
+
+  return 18 + ((elapsedSeconds * 6) % 64);
+}
+
+function getAnimatedProcessingSteps(steps: ProcessingStep[], statusKey: string, elapsedSeconds: number): ProcessingStep[] {
+  if (statusKey === "generating_report") {
+    return steps;
+  }
+
+  const currentIndex = Math.min(steps.length - 1, Math.floor(elapsedSeconds / 7));
+
+  return steps.map((step, index) => ({
+    ...step,
+    state: index < currentIndex ? "complete" : index === currentIndex ? "current" : "pending",
+  }));
+}
+
+function ProgressPieIndicator({
+  fill,
+  accent,
+  state,
+}: {
+  fill: number;
+  accent: string;
+  state: ProcessingStep["state"];
+}) {
+  const clampedFill = Math.max(0, Math.min(100, fill));
+  const fillDegrees = Math.round((clampedFill / 100) * 360);
+  const background = state === "complete"
+    ? `conic-gradient(${accent} 0deg 360deg, rgba(228,221,212,0.7) 360deg 360deg)`
+    : `conic-gradient(${accent} 0deg ${fillDegrees}deg, rgba(228,221,212,0.9) ${fillDegrees}deg 360deg)`;
+
+  return (
+    <span className="relative mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" style={{ background }} aria-hidden>
+      <span className="absolute inset-[2px] rounded-full bg-[#fffdfa]" />
+      <span
+        className="relative h-1.5 w-1.5 rounded-full"
+        style={{ backgroundColor: state === "pending" ? "#c4b8aa" : accent, opacity: state === "pending" ? 0.7 : 1 }}
+      />
+    </span>
+  );
 }
 
 function parseSectionContent<T>(content: string | null | undefined): T | null {
@@ -469,6 +825,18 @@ function describeArc(cx: number, cy: number, radius: number, startAngle: number,
   const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
 
   return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+}
+
+function describeSignalCurve(startX: number, startY: number, endX: number, endY: number, bend = 0) {
+  const dx = endX - startX;
+  const dy = endY - startY;
+  const length = Math.hypot(dx, dy) || 1;
+  const normalX = -dy / length;
+  const normalY = dx / length;
+  const controlX = startX + dx * 0.5 + normalX * bend;
+  const controlY = startY + dy * 0.5 + normalY * bend;
+
+  return `M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`;
 }
 
 function ScoreMeter({ label, value }: { label: string; value: number | null | undefined }) {
@@ -735,13 +1103,176 @@ function getProcessingSteps(statusKey: string, progress?: RequestStatus["progres
     ];
   }
 
-  return (STATUS_SUBSTEPS[statusKey] ?? []).map((step, index) => ({
-    key: `${statusKey}-${index}`,
-    label: step,
+  return (STATUS_SUBSTEPS[statusKey] ?? []).map((step, index, allSteps) => ({
+    key: step.key || `${statusKey}-${index}`,
+    label: step.label,
+    detail: step.detail,
+    state: index === allSteps.length - 1 ? "current" : "complete",
   }));
 }
 
-function ProcessingScreen({ statusKey, progress }: { statusKey: string; progress?: RequestStatus["progress"] }) {
+function CrawlMapGraph({
+  crawlTargets,
+  progressPercent,
+}: {
+  crawlTargets: CrawlTarget[];
+  progressPercent: number;
+}) {
+  const visibleTargets = crawlTargets.slice(0, CRAWL_GRAPH_LAYOUTS.length);
+  const activeCount = visibleTargets.filter((target) => target.active).length;
+  const nodePalette = ["#4285F4", "#34A853", "#FBBC05", "#EA4335", "#5F6368", "#1A73E8"];
+  const graphLinks = [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [4, 5],
+    [5, 0],
+    [1, 5],
+    [2, 4],
+  ];
+  const progressStep = visibleTargets.length > 0 ? 100 / visibleTargets.length : 100;
+  const normalizedGraphProgress = Math.max(0, Math.min(100, progressPercent));
+
+  return (
+    <div className="rounded-[28px] border border-[#e5e7eb] bg-[linear-gradient(180deg,#ffffff_0%,#f9fafb_100%)] px-4 py-4 shadow-[0_14px_28px_rgba(60,64,67,0.06)] sm:px-5 sm:py-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-[#80868b]">Knowledge graph</p>
+          <h3 className="mt-1 text-[1.06rem] font-semibold tracking-[-0.03em] text-[#202124]">Active company sources</h3>
+          <p className="mt-1.5 max-w-2xl text-xs leading-5 text-[#5f6368]">Minimal source map with live crawl progress.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-[0.68rem]">
+          <span className="rounded-full border border-[#dbe3fd] bg-white px-2.5 py-1 font-medium text-[#1a73e8]">
+            {activeCount} live routes
+          </span>
+          <span className="rounded-full border border-[#e6eaef] bg-white px-2.5 py-1 font-medium text-[#5f6368]">
+            {visibleTargets.length} nodes
+          </span>
+        </div>
+      </div>
+
+      <div className="relative mt-4 overflow-hidden rounded-[26px] border border-[#eceff1] bg-white px-3 py-4 sm:px-4 sm:py-5">
+        <div className="absolute inset-0 opacity-70" style={{ backgroundImage: "radial-gradient(circle at 20% 18%, rgba(52,168,83,0.05), transparent 18%), radial-gradient(circle at 50% 14%, rgba(251,188,5,0.06), transparent 18%), radial-gradient(circle at 78% 20%, rgba(66,133,244,0.06), transparent 18%), radial-gradient(circle at 86% 78%, rgba(234,67,53,0.05), transparent 16%)" }} aria-hidden />
+        <div className="relative aspect-[2.35/1] min-h-[300px] w-full sm:min-h-[340px]">
+          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+            <circle cx={CRAWL_GRAPH_HUB.x} cy={CRAWL_GRAPH_HUB.y} r="1.9" fill="#dadce0" />
+
+            {graphLinks.map(([startIndex, endIndex]) => {
+              const start = CRAWL_GRAPH_LAYOUTS[startIndex];
+              const end = CRAWL_GRAPH_LAYOUTS[endIndex];
+
+              if (!start || !end || !visibleTargets[startIndex] || !visibleTargets[endIndex]) {
+                return null;
+              }
+
+              return (
+                <line
+                  key={`crawl-link-${startIndex}-${endIndex}`}
+                  x1={start.x}
+                  y1={start.y}
+                  x2={end.x}
+                  y2={end.y}
+                  stroke="#d2d6dc"
+                  strokeWidth="0.8"
+                  opacity="0.9"
+                />
+              );
+            })}
+
+            {visibleTargets.map((target, index) => {
+              const nodeLayout = CRAWL_GRAPH_LAYOUTS[index];
+              const path = describeSignalCurve(CRAWL_GRAPH_HUB.x, CRAWL_GRAPH_HUB.y, nodeLayout.x, nodeLayout.y, 0);
+
+              return (
+                <g key={target.key}>
+                  <path
+                    d={path}
+                    fill="none"
+                    stroke="#c9cdd2"
+                    strokeWidth={target.active ? 0.95 : 0.75}
+                    strokeLinecap="round"
+                    opacity={0.9}
+                  />
+                  {target.active ? (
+                    <circle r="0.8" fill={nodePalette[index % nodePalette.length]} opacity="0.95">
+                      <animateMotion dur={`${3 + index * 0.35}s`} repeatCount="indefinite" path={path} />
+                    </circle>
+                  ) : null}
+                </g>
+              );
+            })}
+          </svg>
+
+          {visibleTargets.map((target, index) => {
+            const nodeLayout = CRAWL_GRAPH_LAYOUTS[index];
+            const favicon = getFaviconUrl(target.url);
+            const domainLabel = extractHostname(target.url) ?? target.label;
+            const nodeColor = nodePalette[index % nodePalette.length];
+            const nodeProgress = Math.max(
+              0,
+              Math.min(100, ((normalizedGraphProgress - index * progressStep) / progressStep) * 100)
+            );
+
+            return (
+              <div
+                key={target.key}
+                className="absolute z-10 -translate-x-1/2 -translate-y-1/2"
+                style={{ left: nodeLayout.left, top: nodeLayout.top }}
+              >
+                <div className="relative flex items-start gap-2 sm:gap-2.5">
+                  <div className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e5e7eb] bg-white shadow-[0_4px_12px_rgba(60,64,67,0.12)] sm:h-9 sm:w-9">
+                    {favicon ? (
+                      <img src={favicon} alt={`${target.label} logo`} className="h-4 w-4 sm:h-[1.05rem] sm:w-[1.05rem]" />
+                    ) : (
+                      <span className="text-[0.68rem] font-semibold text-[#5f6368]">{target.label.charAt(0)}</span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col items-center">
+                    <div className="relative flex h-[54px] w-[54px] items-center justify-center rounded-full sm:h-[66px] sm:w-[66px]" style={{ backgroundColor: nodeColor }}>
+                      <span className="absolute inset-0 rounded-full shadow-[inset_0_1px_0_rgba(255,255,255,0.28)]" />
+                      {target.active ? <span className="absolute inset-[-6px] rounded-full border opacity-60" style={{ borderColor: `${nodeColor}55` }} /> : null}
+                    </div>
+                    <p className="mt-2 max-w-[92px] text-center text-[0.68rem] font-medium tracking-[-0.01em] text-[#5f6368] sm:max-w-[108px] sm:text-[0.72rem]">
+                      {domainLabel}
+                    </p>
+                  </div>
+
+                  <div className="min-w-[74px] pt-4 sm:min-w-[96px] sm:pt-5">
+                    <div className="h-2 overflow-hidden rounded-full bg-[#e8eaed]">
+                      <div
+                        className="h-full rounded-full transition-[width] duration-700 ease-out"
+                        style={{
+                          width: `${nodeProgress}%`,
+                          background: nodeProgress > 0
+                            ? `linear-gradient(90deg, ${nodeColor} 0%, ${nodeColor} 100%)`
+                            : "linear-gradient(90deg, #d2d6dc 0%, #e8eaed 100%)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProcessingScreen({
+  statusKey,
+  progress,
+  requestMeta,
+  requestSources,
+}: {
+  statusKey: string;
+  progress?: RequestStatus["progress"];
+  requestMeta?: RequestStatus["requestMeta"];
+  requestSources?: RequestStatus["requestSources"];
+}) {
   const label = progress?.headline ?? STATUS_LABELS[statusKey] ?? "Generating report...";
   const detail = progress?.detail;
   const steps = getProcessingSteps(statusKey, progress);
@@ -758,20 +1289,37 @@ function ProcessingScreen({ statusKey, progress }: { statusKey: string; progress
   }, [statusKey, progress?.stage]);
 
   const progressValue = useMemo(() => getProgressValue(statusKey, progress), [statusKey, progress]);
+  const [displayProgressValue, setDisplayProgressValue] = useState(progressValue);
   const palette = PROCESSING_COLOR_BY_STAGE[statusKey] ?? PROCESSING_COLOR_BY_STAGE.pending;
-  const currentStepLabel = useMemo(() => getCurrentStepLabel(steps), [steps]);
+  const animatedSteps = useMemo(() => getAnimatedProcessingSteps(steps, statusKey, elapsedSeconds), [steps, statusKey, elapsedSeconds]);
+  const currentStepLabel = useMemo(() => getCurrentStepLabel(animatedSteps), [animatedSteps]);
+  const currentPassCopy = useMemo(() => getCurrentPassCopy(statusKey, progress, currentStepLabel), [statusKey, progress, currentStepLabel]);
+  const crawlTargets = useMemo(
+    () => buildCrawlTargets(requestMeta?.companyUrl, statusKey, requestSources),
+    [requestMeta?.companyUrl, requestSources, statusKey]
+  );
   const stageNotes = PROCESSING_SIDE_NOTES[statusKey] ?? PROCESSING_SIDE_NOTES.pending;
   const rotatingNote = stageNotes[Math.floor(elapsedSeconds / 6) % stageNotes.length];
   const patienceNote = elapsedSeconds >= 90
     ? LONG_WAIT_NOTES[Math.floor((elapsedSeconds - 90) / 10) % LONG_WAIT_NOTES.length]
     : null;
 
+  useEffect(() => {
+    setDisplayProgressValue((current) => {
+      if (progressValue <= 10 && current >= 90) {
+        return progressValue;
+      }
+
+      return Math.max(current, progressValue);
+    });
+  }, [progressValue]);
+
   return (
     <div className="mx-auto flex w-full max-w-5xl items-start px-4 py-10 sm:py-14">
       <div className="relative w-full overflow-hidden rounded-[32px] border border-[#ddd4c8] bg-[linear-gradient(180deg,rgba(255,250,243,0.98)_0%,rgba(250,246,239,0.98)_100%)] px-6 py-8 shadow-[0_28px_70px_rgba(28,23,19,0.10)] sm:px-8">
         <div className="absolute inset-x-0 top-0 h-28 bg-[radial-gradient(circle_at_top_left,rgba(26,74,58,0.10),transparent_52%),radial-gradient(circle_at_top_right,rgba(45,92,106,0.12),transparent_45%)]" aria-hidden />
         <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]">
-          <div>
+          <div className="xl:col-span-2">
             <div className="flex items-center gap-4">
               <span className="relative flex h-12 w-12 items-center justify-center rounded-full border border-[#ddd4c8] bg-white/90 shadow-[0_10px_24px_rgba(28,23,19,0.08)]" role="status" aria-label="Generating">
                 <span className="absolute inset-1.5 animate-spin rounded-full border-2 border-[#e4ddd4] border-t-[#1a4a3a]" />
@@ -783,71 +1331,77 @@ function ProcessingScreen({ statusKey, progress }: { statusKey: string; progress
                 {detail ? <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6b5e52]">{detail}</p> : null}
               </div>
             </div>
-
-            <div className="mt-6 rounded-[24px] border border-[#e7ddd2] bg-white/80 px-4 py-4 shadow-[0_14px_30px_rgba(28,23,19,0.04)] sm:px-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#9c8d81]">Current pass</p>
-                  <p className="mt-1 text-sm font-medium text-[#4a3f36]">{currentStepLabel}</p>
-                </div>
-                <div className="flex flex-wrap gap-2.5 text-xs">
-                  <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-medium ${palette.border} ${palette.soft}`} style={{ color: palette.accent }}>
-                    Elapsed {formatElapsed(elapsedSeconds)}
-                  </span>
-                  <span className="inline-flex items-center gap-2 rounded-full border border-[#ddd4c8] bg-[#faf6ef] px-3 py-1.5 font-medium text-[#6b5e52]">
-                    Progress {progressValue}%
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#efe7dc]">
-                <div
-                  className="h-full rounded-full transition-[width] duration-700 ease-out"
-                  style={{
-                    width: `${progressValue}%`,
-                    background: `linear-gradient(90deg, ${palette.accent} 0%, rgba(26,74,58,0.78) 100%)`,
-                  }}
-                />
-              </div>
-
-              <p className="mt-3 text-sm leading-6 text-[#6b5e52]">{rotatingNote}</p>
-              {patienceNote ? <p className="mt-2 text-xs leading-5 text-[#8a7050]">{patienceNote}</p> : null}
-            </div>
-
-            {steps.length > 0 && (
-              <ul className="mt-6 space-y-3 text-sm text-[#6b5e52]">
-                {steps.map((step) => (
-                  <li key={step.key} className="flex gap-3 rounded-[18px] border border-transparent px-1 py-1">
-                    <span
-                      className={`mt-1.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border text-[0.65rem] font-semibold ${step.state === "complete" ? "border-[#cfe1d8] bg-[#edf6f0] text-[#1a4a3a]" : step.state === "current" ? "border-[#1a4a3a] bg-[#1a4a3a] text-white" : "border-[#ddd4c8] bg-[#faf6ef] text-[#9c8d81]"}`}
-                      aria-hidden
-                    >
-                      {step.state === "complete" ? "\u2713" : step.state === "current" ? "~" : ""}
-                    </span>
-                    <div>
-                      <p className="font-medium text-[#4a3f36]">{step.label}</p>
-                      {step.detail ? <p className="mt-1 text-xs leading-5 text-[#7a6d63]">{step.detail}</p> : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
-          <aside className="space-y-4">
-            <div className="rounded-[24px] border border-[#e7ddd2] bg-white/82 px-5 py-5 shadow-[0_14px_30px_rgba(28,23,19,0.04)]">
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Analyst desk</p>
-              <h2 className="mt-2 text-[1.15rem] font-semibold tracking-[-0.03em] text-[#1c1713]">What the system is doing</h2>
-              <p className="mt-3 text-sm leading-6 text-[#6b5e52]">
-                This premium run does not stream partial filler. It waits until the strategy and interview-prep passes are coherent enough to persist.
-              </p>
+          {crawlTargets.length > 0 ? (
+            <div className="xl:col-span-2">
+              <CrawlMapGraph crawlTargets={crawlTargets} progressPercent={displayProgressValue} />
+            </div>
+          ) : null}
+
+          <div className="rounded-[24px] border border-[#e7ddd2] bg-white/80 px-4 py-4 shadow-[0_14px_30px_rgba(28,23,19,0.04)] sm:px-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-[#9c8d81]">Current pass</p>
+                <p className="mt-1 text-sm font-medium text-[#4a3f36]">{currentPassCopy.title}</p>
+                <p className="mt-1 text-xs leading-5 text-[#8a7d70]">{currentPassCopy.detail}</p>
+              </div>
+              <div className="flex flex-wrap gap-2.5 text-xs">
+                <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-medium ${palette.border} ${palette.soft}`} style={{ color: palette.accent }}>
+                  Elapsed {formatElapsed(elapsedSeconds)}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#ddd4c8] bg-[#faf6ef] px-3 py-1.5 font-medium text-[#6b5e52]">
+                  Progress {displayProgressValue}%
+                </span>
+              </div>
             </div>
 
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#efe7dc]">
+              <div
+                className="h-full rounded-full transition-[width] duration-700 ease-out"
+                style={{
+                  width: `${displayProgressValue}%`,
+                  background: `linear-gradient(90deg, ${palette.accent} 0%, rgba(26,74,58,0.78) 100%)`,
+                }}
+              />
+            </div>
+
+            <p className="mt-3 text-sm leading-6 text-[#6b5e52]">{rotatingNote}</p>
+            {patienceNote ? <p className="mt-2 text-xs leading-5 text-[#8a7050]">{patienceNote}</p> : null}
+          </div>
+
+          <div className="flex h-full flex-col rounded-[24px] border border-[#e7ddd2] bg-white/82 px-5 py-5 shadow-[0_14px_30px_rgba(28,23,19,0.04)]">
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Analyst desk</p>
+            <h2 className="mt-2 text-[1.15rem] font-semibold tracking-[-0.03em] text-[#1c1713]">What the system is doing</h2>
+            <p className="mt-3 text-sm leading-6 text-[#6b5e52]">
+              This premium run does not stream partial filler. It waits until the strategy and interview-prep passes are coherent enough to persist.
+            </p>
+          </div>
+
+          {animatedSteps.length > 0 && (
+            <ul className="space-y-3 text-sm text-[#6b5e52]">
+              {animatedSteps.map((step) => (
+                <li key={step.key} className="flex gap-3 rounded-[18px] border border-transparent px-1 py-1">
+                  <ProgressPieIndicator
+                    fill={getStepFillPercentage(step, statusKey, progress, elapsedSeconds)}
+                    accent={palette.accent}
+                    state={step.state}
+                  />
+                  <div>
+                    <p className="font-medium text-[#4a3f36]">{step.label}</p>
+                    {step.detail ? <p className="mt-1 text-xs leading-5 text-[#9c8d81]">{step.detail}</p> : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <aside className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
               <div className="rounded-[22px] border border-[#e7ddd2] bg-[#fffdfa] px-4 py-4">
                 <p className="text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Stage</p>
                 <p className="mt-2 text-lg font-semibold tracking-[-0.03em] text-[#1c1713]">{titleCaseWord((progress?.stage ?? statusKey).replace(/_/g, " "))}</p>
-                <p className="mt-2 text-xs leading-5 text-[#7a6d63]">The card on the left will update as the run moves from synthesis to section writing and finalization.</p>
+                <p className="mt-2 text-xs leading-5 text-[#7a6d63]">The current-pass card stays at the top while the checklist and crawl graphics update underneath it.</p>
               </div>
               <div className="rounded-[22px] border border-[#e7ddd2] bg-[#fffdfa] px-4 py-4">
                 <p className="text-[0.66rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Why it can take time</p>
@@ -1002,6 +1556,7 @@ export default function ReportPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [overallFeedback, setOverallFeedback] = useState<"useful" | "not_useful" | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("full");
+  const [credibilityCollapsed, setCredibilityCollapsed] = useState(true);
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
   const [activeProvenance, setActiveProvenance] = useState<ProvenanceType | null>(null);
   const [completionHandoff, setCompletionHandoff] = useState<{ visible: boolean; companyName?: string | null; roleTitle?: string | null }>({
@@ -1312,7 +1867,12 @@ export default function ReportPage() {
   if (status && PROCESSING_STATUSES.has(status.status)) {
     return (
       <main className="min-h-[calc(100vh-5rem)] bg-[#faf8f3]">
-        <ProcessingScreen statusKey={status.status} progress={status.progress} />
+        <ProcessingScreen
+          statusKey={status.status}
+          progress={status.progress}
+          requestMeta={status.requestMeta}
+          requestSources={status.requestSources}
+        />
       </main>
     );
   }
@@ -2205,8 +2765,42 @@ export default function ReportPage() {
                       title="Credibility"
                       description="Review the evidence model, citations, and model workflow after reading the report body."
                     />
-                    {renderCredibilitySection()}
-                    {renderCredibilityAppendix()}
+                    <div className="mt-3 rounded-[22px] border border-[#ddd4c8] bg-white/80 px-4 py-3 shadow-[0_12px_28px_rgba(28,23,19,0.04)] sm:px-5">
+                      <button
+                        type="button"
+                        onClick={() => setCredibilityCollapsed((current) => !current)}
+                        className="flex w-full items-center justify-between gap-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 rounded-[16px]"
+                        aria-expanded={!credibilityCollapsed}
+                        aria-controls="credibility-section-content"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-[#4a3f36]">
+                            {credibilityCollapsed ? "Credibility details are hidden." : "Credibility details are expanded."}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-[#9c8d81]">
+                            Toggle the evidence model, citations, and AI activity appendix.
+                          </p>
+                        </div>
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#e4ddd4] bg-[#faf6ef] text-[#6b5e52]">
+                          <svg
+                            className={`h-4 w-4 transition-transform duration-200 ${credibilityCollapsed ? "" : "rotate-180"}`}
+                            viewBox="0 0 20 20"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            aria-hidden
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 7.5l5 5 5-5" />
+                          </svg>
+                        </span>
+                      </button>
+                    </div>
+                    {!credibilityCollapsed && (
+                      <div id="credibility-section-content">
+                        {renderCredibilitySection()}
+                        {renderCredibilityAppendix()}
+                      </div>
+                    )}
                   </>
                 )}
               </div>

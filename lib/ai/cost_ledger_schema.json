@@ -5,33 +5,164 @@
   "user_id": "string",
   "company": "string",
   "role_title": "string",
+  "inferred_primary_role_family": "Product|Engineering|Design|DataML|Marketing|SalesGTM|OperationsProgram|Executive",
+  "inferred_secondary_role_family": "Product|Engineering|Design|DataML|Marketing|SalesGTM|OperationsProgram|Executive|null",
+  "is_blended_persona": false,
+  "inferred_role_family": "Product|Engineering|Design|DataML|Marketing|SalesGTM|OperationsProgram|Executive|Mixed",
+  "inferred_role_family_confidence": "high|medium|low",
+  "inferred_seniority": "ic_junior_mid|senior_ic|staff_principal_architect|manager|senior_manager_group_manager|director|senior_director_vp|executive_gm_c_level",
+  "inferred_seniority_confidence": "high|medium|low",
+  "inferred_subspecialization": "string|null",
+  "inferred_subspecialization_confidence": "high|medium|low|null",
+  "persona_confidence": "high|medium|low",
+  "persona_reasoning_trace_summary": "string",
+  "persona_evidence": [
+    "string"
+  ],
+  "mixed_role_flag": false,
+  "persona_profile": {
+    "primary_role_family": "string",
+    "secondary_role_family": "string|null",
+    "is_blended": false,
+    "role_family": "string",
+    "seniority": "string",
+    "subspecialization": "string|null",
+    "blend": [
+      "string"
+    ],
+    "proof_model": "string",
+    "stakeholder_model": "string",
+    "interview_model": "string"
+  },
+  "persona_reading_experience_template": "string",
+  "persona_reading_experience_profile": {
+    "section_ordering_basis": "string",
+    "sections_to_expand": [
+      "string"
+    ],
+    "sections_to_compress": [
+      "string"
+    ],
+    "five_minute_brief_priorities": [
+      "string"
+    ]
+  },
+  "persona_retrieval_profile": {
+    "mandatory_source_classes": [
+      "string"
+    ],
+    "preferred_source_classes": [
+      "string"
+    ],
+    "optional_source_classes": [
+      "string"
+    ]
+  },
+  "persona_strategy_profile": {
+    "dominant_lenses": [
+      "string"
+    ],
+    "sections_to_expand": [
+      "string"
+    ],
+    "sections_to_compress": [
+      "string"
+    ]
+  },
+  "persona_interview_framework": {
+    "dominant_themes": [
+      "string"
+    ],
+    "dominant_proof_expectations": [
+      "string"
+    ],
+    "dominant_objections": [
+      "string"
+    ],
+    "dominant_question_types": [
+      "string"
+    ]
+  },
+  "persona_interview_profile": {
+    "likely_interviewer_types": [
+      "string"
+    ],
+    "dominant_story_requirements": [
+      "string"
+    ],
+    "dominant_objections": [
+      "string"
+    ],
+    "dominant_question_families": [
+      "string"
+    ]
+  },
   "resume_overlay_enabled": true,
   "started_at": "ISO-8601",
   "ended_at": "ISO-8601",
   "currency": "USD",
   "status": "success",
+  "release_mode": "premium_full|inference_visible_full|partial|blocked",
+  "report_override_available": false,
+  "report_override_used": false,
   "summary": {
     "total_cost_usd": 0.0,
     "total_duration_ms": 0,
     "cached_cost_avoided_usd": 0.0,
     "llm_cost_usd": 0.0,
     "retrieval_cost_usd": 0.0,
+    "company_context_retrieval_cost_usd": 0.0,
+    "sentiment_retrieval_cost_usd": 0.0,
     "embedding_cost_usd": 0.0,
     "rerank_cost_usd": 0.0,
     "storage_cost_usd": 0.0,
     "verification_cost_usd": 0.0,
+    "persona_inference_cost_usd": 0.0,
+    "persona_deepening_cost_usd": 0.0,
+    "blended_retrieval_incremental_cost_usd": 0.0,
+    "persona_specific_synthesis_incremental_cost_usd": 0.0,
+    "module_planning_cost_usd": 0.0,
+    "quality_evaluation_cost_usd": 0.0,
+    "depth_evaluation_cost_usd": 0.0,
+    "company_context_evaluation_cost_usd": 0.0,
+    "repair_loop_cost_usd": 0.0,
+    "persona_correction_reruns": 0,
+    "fit_rescoring_reruns": 0,
+    "contradiction_repair_loops": 0,
+    "re_retrieval_quality_gate_cost_usd": 0.0,
+    "re_synthesis_quality_gate_cost_usd": 0.0,
+    "depth_repair_loop_cost_usd": 0.0,
+    "prompt_improvement_analysis_cost_usd": 0.0,
     "personalization_cost_usd": 0.0,
     "rendering_cost_usd": 0.0
   },
   "cost_events": [],
   "stages": {
+    "persona_inference": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "model": "string",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "mixed_role_detected": false,
+      "persona_recheck_triggered": false,
+      "persona_confidence": "high|medium|low",
+      "secondary_persona_suppressed": false
+    },
     "source_acquisition": {
       "cost_usd": 0.0,
       "duration_ms": 0,
       "requests": 0,
       "pages_fetched": 0,
       "pages_retained": 0,
-      "cache_hit_rate": 0.0
+      "cache_hit_rate": 0.0,
+      "persona_branch": "string",
+      "company_context_source_classes_satisfied": 0,
+      "official_culture_sources_retained": 0,
+      "sentiment_sources_retained": 0,
+      "sentiment_source_platform_count": 0,
+      "mandatory_source_classes_satisfied": 0,
+      "preferred_source_classes_satisfied": 0
     },
     "parsing_and_cleanup": {
       "cost_usd": 0.0,
@@ -50,22 +181,37 @@
       "cost_usd": 0.0,
       "duration_ms": 0,
       "queries": 0,
+      "company_context_queries": 0,
+      "sentiment_queries": 0,
+      "competitor_queries": 0,
       "candidates_scored": 0,
-      "top_k_selected": 0
+      "top_k_selected": 0,
+      "persona_conditioned_queries": 0,
+      "persona_deepening_triggered": false,
+      "blended_retrieval_incremental_cost_usd": 0.0,
+      "secondary_branch_activated": false
     },
     "evidence_normalization": {
       "cost_usd": 0.0,
       "duration_ms": 0,
       "claims_extracted": 0,
       "claims_retained": 0,
-      "conflicts_found": 0
+      "conflicts_found": 0,
+      "persona_conflicts_found": 0
     },
     "strategy_synthesis": {
       "cost_usd": 0.0,
       "duration_ms": 0,
       "model": "string",
       "input_tokens": 0,
-      "output_tokens": 0
+      "output_tokens": 0,
+      "persona_template": "string",
+      "narrative_brief_template": "string",
+      "module_plan_generated": false,
+      "module_types_generated": [
+        "string"
+      ],
+      "persona_specific_synthesis_incremental_cost_usd": 0.0
     },
     "candidate_fit_synthesis": {
       "cost_usd": 0.0,
@@ -79,7 +225,8 @@
       "duration_ms": 0,
       "model": "string",
       "input_tokens": 0,
-      "output_tokens": 0
+      "output_tokens": 0,
+      "persona_framework": "string"
     },
     "verification_and_qa": {
       "cost_usd": 0.0,
@@ -88,8 +235,80 @@
         "unsupported_claims",
         "contradictions",
         "redundancy",
-        "confidence_evidence_alignment"
-      ]
+        "confidence_evidence_alignment",
+        "persona_correctness",
+        "product_centric_leakage",
+        "seniority_proof_alignment",
+        "mixed_role_handling"
+      ],
+      "persona_passed": true,
+      "persona_recheck_triggered": false,
+      "wrong_persona_detected": false,
+      "secondary_persona_suppressed": false
+    },
+    "quality_evaluation": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "model": "string",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "overall_quality_score": 0,
+      "evidence_quality_score": 0,
+      "interview_prep_score": 0,
+      "warnings_generated": 0
+    },
+    "company_context_evaluation": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "model": "string",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "company_context_score": 0,
+      "subsections_suppressed": 0,
+      "employee_review_overreach_detected": false
+    },
+    "depth_evaluation": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "model": "string",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "depth_score": 0,
+      "shallow_sections_detected": 0,
+      "depth_repair_triggered": false
+    },
+    "repair_loops": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "targeted_retrieval_loops": 0,
+      "persona_correction_reruns": 0,
+      "fit_rescoring_reruns": 0,
+      "contradiction_repair_loops": 0,
+      "synthesis_repair_loops": 0,
+      "depth_repair_loops": 0,
+      "sections_repaired": 0
+    },
+    "release_gate": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "model": "string|null",
+      "release_decision": "approved|approved_with_warnings|inference_visible_full|partial|suppress_and_release|reretrieve|resynthesize|depth_repair|prompt_improvement_recommended|blocked",
+      "release_mode": "premium_full|inference_visible_full|partial|blocked",
+      "report_override_available": false,
+      "report_override_used": false,
+      "inference_visible_sections_count": 0,
+      "critical_sections_with_strong_warnings": 0,
+      "warnings_count": 0,
+      "blocked_reason_count": 0
+    },
+    "prompt_improvement_analysis": {
+      "cost_usd": 0.0,
+      "duration_ms": 0,
+      "model": "string|null",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "recommendations_produced": 0,
+      "systemic_failure_patterns_detected": 0
     },
     "resume_overlay": {
       "cost_usd": 0.0,
@@ -114,9 +333,139 @@
     "cost_per_successful_report_usd": 0.0,
     "cost_per_abandoned_report_usd": 0.0,
     "cost_per_refresh_usd": 0.0,
+    "cost_per_released_report_usd": 0.0,
+    "cost_per_failed_quality_gate_usd": 0.0,
+    "repair_loop_cost_per_released_report_usd": 0.0,
+    "quality_uplift_after_repairs": 0.0,
+    "depth_uplift_after_repairs": 0.0,
     "marginal_cost_resume_overlay_usd": 0.0,
     "marginal_cost_verification_pass_usd": 0.0,
+    "marginal_cost_persona_inference_usd": 0.0,
+    "marginal_cost_persona_deepening_usd": 0.0,
+    "marginal_cost_blended_retrieval_usd": 0.0,
+    "marginal_cost_persona_specific_synthesis_usd": 0.0,
     "premium_quality_multiplier_vs_standard": 0.0
+  },
+  "quality_gate": {
+    "overall_quality_score": 0,
+    "depth_score": 0,
+    "company_context_score": 0,
+    "module_richness_score": 0,
+    "evidence_score": 0,
+    "persona_score": 0,
+    "interview_prep_score": 0,
+    "readiness_to_release_score": 0,
+    "release_decision": "approved|approved_with_warnings|inference_visible_full|partial|suppress_and_release|reretrieve|resynthesize|depth_repair|prompt_improvement_recommended|blocked",
+    "release_mode": "premium_full|inference_visible_full|partial|blocked",
+    "report_override_available": false,
+    "report_override_used": false,
+    "inference_visible_eligible": false,
+    "warning_flags": [
+      "string"
+    ],
+    "sentiment_used_as_supporting_texture": false,
+    "blocked_release_reasons": [
+      "string"
+    ],
+    "section_scores": {
+      "decision_memo": 0,
+      "five_minute_brief": 0,
+      "company_context": 0,
+      "why_role_exists_now": 0,
+      "company_role_strategy": 0,
+      "candidate_fit": 0,
+      "interview_prep": 0,
+      "how_to_win_this_process": 0,
+      "credibility_layer": 0
+    },
+    "section_states": {
+      "decision_memo": "approved|weak|suppress|rerun",
+      "five_minute_brief": "approved|weak|suppress|rerun",
+      "company_context": "approved|weak|suppress|rerun",
+      "why_role_exists_now": "approved|weak|suppress|rerun",
+      "company_role_strategy": "approved|weak|suppress|rerun",
+      "candidate_fit": "approved|weak|suppress|rerun",
+      "interview_prep": "approved|weak|suppress|rerun",
+      "how_to_win_this_process": "approved|weak|suppress|rerun",
+      "credibility_layer": "approved|weak|suppress|rerun"
+    },
+    "section_evidence_states": {
+      "decision_memo": "VERIFIED_FACT|CITED_SYNTHESIS|MIXED|INFERRED|LOW_EVIDENCE|SUPPRESSED|NOT_SHOWN_DUE_TO_BLOCK",
+      "five_minute_brief": "VERIFIED_FACT|CITED_SYNTHESIS|MIXED|INFERRED|LOW_EVIDENCE|SUPPRESSED|NOT_SHOWN_DUE_TO_BLOCK",
+      "company_context": "VERIFIED_FACT|CITED_SYNTHESIS|MIXED|INFERRED|LOW_EVIDENCE|SUPPRESSED|NOT_SHOWN_DUE_TO_BLOCK",
+      "why_role_exists_now": "VERIFIED_FACT|CITED_SYNTHESIS|MIXED|INFERRED|LOW_EVIDENCE|SUPPRESSED|NOT_SHOWN_DUE_TO_BLOCK",
+      "company_role_strategy": "VERIFIED_FACT|CITED_SYNTHESIS|MIXED|INFERRED|LOW_EVIDENCE|SUPPRESSED|NOT_SHOWN_DUE_TO_BLOCK",
+      "candidate_fit": "VERIFIED_FACT|CITED_SYNTHESIS|MIXED|INFERRED|LOW_EVIDENCE|SUPPRESSED|NOT_SHOWN_DUE_TO_BLOCK",
+      "interview_prep": "VERIFIED_FACT|CITED_SYNTHESIS|MIXED|INFERRED|LOW_EVIDENCE|SUPPRESSED|NOT_SHOWN_DUE_TO_BLOCK",
+      "how_to_win_this_process": "VERIFIED_FACT|CITED_SYNTHESIS|MIXED|INFERRED|LOW_EVIDENCE|SUPPRESSED|NOT_SHOWN_DUE_TO_BLOCK",
+      "credibility_layer": "VERIFIED_FACT|CITED_SYNTHESIS|MIXED|INFERRED|LOW_EVIDENCE|SUPPRESSED|NOT_SHOWN_DUE_TO_BLOCK"
+    },
+    "section_quality_states": {
+      "decision_memo": "premium_ready|usable_with_caution|below_premium_threshold|exploratory_only",
+      "five_minute_brief": "premium_ready|usable_with_caution|below_premium_threshold|exploratory_only",
+      "company_context": "premium_ready|usable_with_caution|below_premium_threshold|exploratory_only",
+      "why_role_exists_now": "premium_ready|usable_with_caution|below_premium_threshold|exploratory_only",
+      "company_role_strategy": "premium_ready|usable_with_caution|below_premium_threshold|exploratory_only",
+      "candidate_fit": "premium_ready|usable_with_caution|below_premium_threshold|exploratory_only",
+      "interview_prep": "premium_ready|usable_with_caution|below_premium_threshold|exploratory_only",
+      "how_to_win_this_process": "premium_ready|usable_with_caution|below_premium_threshold|exploratory_only",
+      "credibility_layer": "premium_ready|usable_with_caution|below_premium_threshold|exploratory_only"
+    },
+    "section_confidence_states": {
+      "decision_memo": "high|medium|low",
+      "five_minute_brief": "high|medium|low",
+      "company_context": "high|medium|low",
+      "why_role_exists_now": "high|medium|low",
+      "company_role_strategy": "high|medium|low",
+      "candidate_fit": "high|medium|low",
+      "interview_prep": "high|medium|low",
+      "how_to_win_this_process": "high|medium|low",
+      "credibility_layer": "high|medium|low"
+    },
+    "section_warning_notes": {
+      "decision_memo": "string|null",
+      "five_minute_brief": "string|null",
+      "company_context": "string|null",
+      "why_role_exists_now": "string|null",
+      "company_role_strategy": "string|null",
+      "candidate_fit": "string|null",
+      "interview_prep": "string|null",
+      "how_to_win_this_process": "string|null",
+      "credibility_layer": "string|null"
+    },
+    "section_missing_evidence_notes": {
+      "decision_memo": "string|null",
+      "five_minute_brief": "string|null",
+      "company_context": "string|null",
+      "why_role_exists_now": "string|null",
+      "company_role_strategy": "string|null",
+      "candidate_fit": "string|null",
+      "interview_prep": "string|null",
+      "how_to_win_this_process": "string|null",
+      "credibility_layer": "string|null"
+    },
+    "section_show_in_inference_visible_mode": {
+      "decision_memo": true,
+      "five_minute_brief": true,
+      "company_context": true,
+      "why_role_exists_now": true,
+      "company_role_strategy": true,
+      "candidate_fit": true,
+      "interview_prep": true,
+      "how_to_win_this_process": true,
+      "credibility_layer": true
+    },
+    "prompt_improvement_recommendations": [
+      {
+        "scope": "retrieval|synthesis|section_writing|evaluation|persona|company_context",
+        "reason": "string",
+        "recommended_change": "string",
+        "apply_mode": "log_only|review_required"
+      }
+    ],
+    "persona_correction_triggered": false,
+    "fit_rescoring_triggered": false,
+    "contradiction_repair_triggered": false
   },
   "budget_controls": {
     "soft_budget_usd": 0.0,
@@ -138,6 +487,25 @@
     "sources_used": 0,
     "primary_sources_used": 0,
     "verification_pass_ran": true,
-    "resume_overlay_applied": true
+    "quality_gate_ran": true,
+    "depth_gate_ran": true,
+    "resume_overlay_applied": true,
+    "persona_adaptation_applied": true,
+    "release_decision": "approved|approved_with_warnings|inference_visible_full|partial|suppress_and_release|blocked",
+    "release_mode": "premium_full|inference_visible_full|partial|blocked",
+    "report_override_available": false,
+    "report_override_used": false,
+    "warning_flags": [
+      "string"
+    ],
+    "persona": {
+      "primary_role_family": "string",
+      "secondary_role_family": "string|null",
+      "is_blended": false,
+      "role_family": "string",
+      "seniority": "string",
+      "subspecialization": "string|null",
+      "confidence": "high|medium|low"
+    }
   }
 }

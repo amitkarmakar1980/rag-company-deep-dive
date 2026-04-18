@@ -5,6 +5,8 @@ export default defineConfig({
   testDir: './tests',
   timeout: 60_000,
   retries: 0,
+  globalSetup: './tests/global.setup.ts',
+  globalTeardown: './tests/global.teardown.ts',
   use: {
     baseURL: 'http://localhost:3000',
     headless: true,

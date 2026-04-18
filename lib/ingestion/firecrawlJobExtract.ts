@@ -2,6 +2,16 @@ import { fetchPageWithFirecrawl } from "./firecrawl";
 import { generateStructuredCompletion } from "@/lib/ai/openai";
 import { cleanContent } from "./clean";
 
+interface ExtractedJobPostingSchema {
+  companyName?: string;
+  roleTitle?: string;
+  department?: string;
+  employmentType?: string;
+  locations: string[];
+  applyUrl?: string;
+  descriptionText?: string;
+}
+
 /**
  * Fetches a job posting URL and extracts company name, role title, and full
  * job description text. Uses Firecrawl with onlyMainContent=true, then strips
@@ -14,44 +24,69 @@ export async function fetchAndExtractJobDetails(
   roleTitle?: string;
   companyUrl?: string;
   jobDescription?: string;
+  extractionWarning?: string;
 } | null> {
   const res = await fetchPageWithFirecrawl(url, { onlyMainContent: true, timeoutMs: 60000 });
-  if (!res.success || !res.data) return null;
+  if (!res.success || !res.data) {
+    return fallbackResult(url, undefined, "Could not reliably extract job details from this page. You can still review and edit the fields manually.");
+  }
 
-  const { markdown, html } = res.data;
+  const { markdown, html, metadata } = res.data;
+  const structuredPosting = html ? extractJobPostingSchemaFromHtml(html, url) : null;
 
   let rawText: string;
 
-  if (markdown && markdown.length > 200) {
+  if (structuredPosting?.descriptionText) {
+    rawText = structuredPosting.descriptionText;
+  } else if (markdown && markdown.length > 200) {
     rawText = stripMarkdown(markdown);
   } else if (html && html.length > 200) {
     rawText = cleanContent(html);
   } else {
     console.warn("[JD Extraction] Both markdown and html too short — cannot extract");
-    return null;
+    return fallbackResult(url, undefined, "The page did not expose enough readable content to extract structured job details.");
   }
 
   rawText = rawText.trim();
-  if (!rawText) return null;
+  if (!rawText) {
+    return fallbackResult(url, undefined, "The page content was empty after cleaning, so job details could not be extracted automatically.");
+  }
 
   console.log(`[JD Extraction] Raw text length: ${rawText.length} chars`);
 
   // Remove obvious leading boilerplate (cookie banners, login walls, etc.)
   rawText = removeLeadingBoilerplate(rawText);
+  rawText = normalizeExtractedJobText(rawText);
 
-  // Cap at 25k chars — most JDs are well under this; LLM context allows it
-  const textForLLM = rawText.length > 25000 ? rawText.slice(0, 25000) : rawText;
+  const canonicalJobDescription = buildCanonicalJobDescription({
+    rawText,
+    structuredPosting,
+  }).slice(0, 20000);
+
+  const needsMetadataExtraction = !structuredPosting?.companyName || !structuredPosting?.roleTitle;
+  const textForLLM = canonicalJobDescription.length > 8000 ? canonicalJobDescription.slice(0, 8000) : canonicalJobDescription;
+  const metadataContext = [
+    structuredPosting?.roleTitle,
+    metadata?.title,
+    structuredPosting?.department,
+    structuredPosting?.locations.length ? structuredPosting.locations.join(" | ") : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   try {
-    const extracted = await generateStructuredCompletion(`You are extracting structured data from a job posting page.
+    const extracted = needsMetadataExtraction
+      ? await generateStructuredCompletion(`You are extracting job posting metadata from a job posting page.
 
 Extract the following from the text below:
 1. companyName — the name of the hiring company (not a job board like LinkedIn, Indeed, etc.)
 2. roleTitle — the exact job title for this specific role
-3. jobDescription — the FULL job description text: all responsibilities, requirements,
-   qualifications, about-the-team sections, and any other role-specific content.
-   Include everything that describes the role. Do NOT include company boilerplate,
-   cookie notices, navigation menus, or repeated site-wide content.
+
+Candidate header context:
+${metadataContext || "NONE"}
+
+Page URL:
+${url}
 
 Text:
 ${textForLLM}
@@ -59,38 +94,40 @@ ${textForLLM}
 Return ONLY valid JSON with this shape:
 {
   "companyName": "...",
-  "roleTitle": "...",
-  "jobDescription": "..."
+  "roleTitle": "..."
 }
 
-If you cannot determine a field, omit it. The jobDescription field should be comprehensive — do not truncate it.`
-    );
+If you cannot determine a field, omit it.`)
+      : null;
 
-    if (!extracted) return fallbackResult(url, rawText);
+    const companyName = structuredPosting?.companyName || extracted?.companyName || inferCompanyNameFromUrl(url);
+    const roleTitle = structuredPosting?.roleTitle || extracted?.roleTitle || inferRoleTitleFromUrl(url) || inferRoleTitleFromMetadata(metadata?.title);
 
-    const jobDescription: string =
-      extracted.jobDescription?.trim() ||
-      // If LLM didn't extract a JD, use the cleaned raw text as fallback
-      rawText.slice(0, 15000);
-
-    console.log(`[JD Extraction] Extracted JD length: ${jobDescription.length} chars`);
+    console.log(`[JD Extraction] Extracted JD length: ${canonicalJobDescription.length} chars`);
 
     return {
-      companyName: extracted.companyName || undefined,
-      roleTitle: extracted.roleTitle || undefined,
-      jobDescription: jobDescription || undefined,
+      companyName: companyName || undefined,
+      roleTitle: roleTitle || undefined,
+      jobDescription: canonicalJobDescription || undefined,
       companyUrl: safeOrigin(url),
+      extractionWarning: undefined,
     };
   } catch (e) {
     console.error("[JD Extraction] LLM call failed:", e);
-    return fallbackResult(url, rawText);
+    return {
+      companyName: structuredPosting?.companyName || inferCompanyNameFromUrl(url),
+      roleTitle: structuredPosting?.roleTitle || inferRoleTitleFromUrl(url) || inferRoleTitleFromMetadata(metadata?.title),
+      companyUrl: safeOrigin(url),
+      jobDescription: canonicalJobDescription || undefined,
+      extractionWarning: "The page loaded, but structured extraction failed. Review the fallback details before generating the report.",
+    };
   }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Strip markdown syntax while preserving text and newlines. */
-function stripMarkdown(md: string): string {
+export function stripMarkdown(md: string): string {
   return md
     .replace(/```[\s\S]*?```/g, "")           // code fences
     .replace(/`[^`\n]*`/g, "")                // inline code
@@ -100,10 +137,237 @@ function stripMarkdown(md: string): string {
     .replace(/(\*\*|__)(.*?)\1/g, "$2")      // bold
     .replace(/(\*|_)(.*?)\1/g, "$2")         // italic
     .replace(/^>\s+/gm, "")                  // blockquotes
-    .replace(/^[-*+]\s+/gm, "")             // unordered list markers
-    .replace(/^\d+\.\s+/gm, "")             // ordered list markers
+    .replace(/^[-*+]\s+/gm, "• ")            // unordered list markers
+    .replace(/^(\d+)\.\s+/gm, "$1. ")       // ordered list markers
     .replace(/\n{3,}/g, "\n\n")             // collapse blank lines
     .trim();
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#x27;/gi, "'");
+}
+
+function cleanJobPostingHtml(value: string): string {
+  return decodeHtmlEntities(
+    value
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(p|h[1-6])>/gi, "\n\n")
+      .replace(/<\/(div|section|article|header|footer|ul|ol|table|tr)>/gi, "\n")
+      .replace(/<li[^>]*>/gi, "\n• ")
+      .replace(/<[^>]+>/g, "")
+  );
+}
+
+export function normalizeExtractedJobText(text: string): string {
+  const normalizedLines = text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .filter((line, index, lines) => !(line && index > 0 && line === lines[index - 1]));
+
+  return normalizedLines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function collectStringValues(value: unknown): string[] {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => collectStringValues(entry));
+  }
+
+  return [];
+}
+
+function stringifyAddress(address: Record<string, unknown> | undefined): string | undefined {
+  if (!address) {
+    return undefined;
+  }
+
+  const locality = typeof address.addressLocality === "string" ? address.addressLocality.trim() : "";
+  const region = typeof address.addressRegion === "string" ? address.addressRegion.trim() : "";
+  const country = typeof address.addressCountry === "string" ? address.addressCountry.trim() : "";
+  const parts = [locality, region, country && country.length <= 3 ? "" : country].filter(Boolean);
+  return parts.length ? parts.join(", ") : undefined;
+}
+
+function normalizeEmploymentType(value: unknown): string | undefined {
+  const options = collectStringValues(value);
+  return options.length ? options.join(" | ") : undefined;
+}
+
+function normalizeDepartment(jobPosting: Record<string, unknown>): string | undefined {
+  const values = [
+    ...collectStringValues(jobPosting.department),
+    ...collectStringValues(jobPosting.occupationalCategory),
+  ].filter((value, index, list) => list.indexOf(value) === index);
+
+  return values.length ? values.join(", ") : undefined;
+}
+
+function extractLocations(jobLocation: unknown): string[] {
+  if (Array.isArray(jobLocation)) {
+    return jobLocation.flatMap((entry) => extractLocations(entry));
+  }
+
+  if (typeof jobLocation !== "object" || jobLocation === null) {
+    return [];
+  }
+
+  const candidate = jobLocation as Record<string, unknown>;
+  const directAddress = stringifyAddress(candidate.address as Record<string, unknown> | undefined);
+  const nestedLocations = extractLocations(candidate.jobLocation);
+
+  return [directAddress, ...nestedLocations]
+    .filter((value): value is string => Boolean(value))
+    .filter((value, index, list) => list.indexOf(value) === index);
+}
+
+function findApplyUrl(html: string, pageUrl: string): string | undefined {
+  const hrefMatch = html.match(/href=["']([^"']*apply[^"']*)["']/i);
+  if (!hrefMatch?.[1]) {
+    return undefined;
+  }
+
+  try {
+    return new URL(hrefMatch[1], pageUrl).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function safeParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function hasJobPostingType(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value === "JobPosting";
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasJobPostingType(entry));
+  }
+
+  return false;
+}
+
+function findJobPostingNode(value: unknown): Record<string, unknown> | undefined {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const match = findJobPostingNode(entry);
+      if (match) {
+        return match;
+      }
+    }
+    return undefined;
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  if (hasJobPostingType(candidate["@type"])) {
+    return candidate;
+  }
+
+  if (candidate["@graph"]) {
+    return findJobPostingNode(candidate["@graph"]);
+  }
+
+  for (const nestedValue of Object.values(candidate)) {
+    const match = findJobPostingNode(nestedValue);
+    if (match) {
+      return match;
+    }
+  }
+
+  return undefined;
+}
+
+export function extractJobPostingSchemaFromHtml(html: string, pageUrl = "https://example.com"): ExtractedJobPostingSchema | null {
+  const scriptMatches = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+
+  for (const match of scriptMatches) {
+    const parsed = safeParseJson(match[1]);
+    const jobPosting = findJobPostingNode(parsed);
+    if (!jobPosting) {
+      continue;
+    }
+
+    const description = typeof jobPosting.description === "string" ? cleanJobPostingHtml(jobPosting.description) : undefined;
+    const hiringOrganization = typeof jobPosting.hiringOrganization === "object" && jobPosting.hiringOrganization !== null
+      ? jobPosting.hiringOrganization as Record<string, unknown>
+      : undefined;
+
+    return {
+      companyName: typeof hiringOrganization?.name === "string" ? hiringOrganization.name.trim() : undefined,
+      roleTitle: typeof jobPosting.title === "string" ? jobPosting.title.trim() : undefined,
+      department: normalizeDepartment(jobPosting),
+      employmentType: normalizeEmploymentType(jobPosting.employmentType),
+      locations: extractLocations(jobPosting.jobLocation),
+      applyUrl: findApplyUrl(html, pageUrl),
+      descriptionText: description ? normalizeExtractedJobText(description) : undefined,
+    };
+  }
+
+  return null;
+}
+
+function includesNormalizedLine(haystack: string, needle: string): boolean {
+  const normalizedHaystack = haystack.toLowerCase();
+  const normalizedNeedle = needle.trim().toLowerCase();
+  return normalizedNeedle.length > 0 && normalizedHaystack.includes(normalizedNeedle);
+}
+
+export function buildCanonicalJobDescription(args: {
+  rawText: string;
+  structuredPosting?: ExtractedJobPostingSchema | null;
+}): string {
+  const body = normalizeExtractedJobText(args.rawText);
+  const headerLines: string[] = [];
+  const topOfBody = body.split("\n").slice(0, 12).join("\n");
+
+  const pushHeaderLine = (line: string | undefined) => {
+    if (!line) {
+      return;
+    }
+
+    if (includesNormalizedLine(topOfBody, line)) {
+      return;
+    }
+
+    headerLines.push(line);
+  };
+
+  pushHeaderLine(args.structuredPosting?.roleTitle);
+  pushHeaderLine(args.structuredPosting?.department);
+  pushHeaderLine(args.structuredPosting?.locations.length ? args.structuredPosting.locations.join("   |   ") : undefined);
+  pushHeaderLine(args.structuredPosting?.employmentType);
+  pushHeaderLine(args.structuredPosting?.applyUrl ? "Apply Now" : undefined);
+
+  if (headerLines.length === 0) {
+    return body;
+  }
+
+  return `${headerLines.join("\n")}\n\n${body}`.trim();
 }
 
 /**
@@ -136,11 +400,70 @@ function removeLeadingBoilerplate(text: string): string {
   return lines.slice(startIdx).join("\n").trim();
 }
 
-function fallbackResult(url: string, rawText: string) {
+function fallbackResult(url: string, rawText?: string, extractionWarning?: string) {
   return {
+    companyName: inferCompanyNameFromUrl(url),
+    roleTitle: inferRoleTitleFromUrl(url),
     companyUrl: safeOrigin(url),
-    jobDescription: rawText.slice(0, 15000) || undefined,
+    jobDescription: rawText?.slice(0, 20000) || undefined,
+    extractionWarning,
   };
+}
+
+function inferRoleTitleFromMetadata(title: string | undefined): string | undefined {
+  if (!title) {
+    return undefined;
+  }
+
+  const cleaned = title
+    .replace(/\s*[|\-:]\s*(careers?|jobs?|job search).*$/i, "")
+    .replace(/\s*[|\-:]\s*uber.*$/i, "")
+    .trim();
+
+  return cleaned.length >= 3 ? cleaned : undefined;
+}
+
+function inferCompanyNameFromUrl(url: string): string | undefined {
+  try {
+    const hostname = new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+    const baseLabel = hostname.split(".")[0];
+    if (!baseLabel || /^(jobs|boards|careers|greenhouse|lever)$/i.test(baseLabel)) {
+      return undefined;
+    }
+
+    return baseLabel
+      .split(/[-_]+/)
+      .filter(Boolean)
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(" ");
+  } catch {
+    return undefined;
+  }
+}
+
+function inferRoleTitleFromUrl(url: string): string | undefined {
+  try {
+    const pathname = new URL(url.startsWith("http") ? url : `https://${url}`).pathname;
+    const segments = pathname.split("/").filter(Boolean).reverse();
+    const candidate = segments.find((segment) => /[a-z]/i.test(segment) && !/^jobs?$|^job$|^careers?$|^positions?$|^openings?$|^en-us$/i.test(segment));
+    if (!candidate) {
+      return undefined;
+    }
+
+    const normalized = decodeURIComponent(candidate)
+      .replace(/[-_]+/g, " ")
+      .replace(/\b\d+\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!normalized || normalized.length < 3) {
+      return undefined;
+    }
+
+    return normalized.replace(/\b\w/g, (match) => match.toUpperCase());
+  } catch {
+    return undefined;
+  }
 }
 
 function safeOrigin(url: string): string | undefined {

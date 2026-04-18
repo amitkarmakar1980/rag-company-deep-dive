@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { ResumeProfileIcon } from "@/components/ResumeProfileIcon";
 import { useResumeStore } from "@/lib/hooks/useResumeStore";
 
 interface StoredResume {
@@ -129,11 +130,15 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
     return (
       <div className="bg-white border border-[#e4ddd4] rounded-xl px-6 py-5" role="region" aria-label="Personalize report">
         <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
-          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[#f0ece4] flex items-center justify-center">
-            <svg className="w-4 h-4 text-[#7a6d63]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
+          <ResumeProfileIcon
+            containerClassName="flex-shrink-0 w-9 h-9 rounded-lg bg-[#f0ece4] flex items-center justify-center"
+            cardClassName="relative h-5 w-4 rounded-[5px] border border-[#b8aa9c] bg-white shadow-[0_1px_2px_rgba(28,23,19,0.08)]"
+            lineClassName="bg-[#cabeb1]"
+            photoFrameClassName="absolute left-[2px] top-[2px] h-[8px] w-[8px] overflow-hidden rounded-[3px] border border-[#d8cfc4]"
+            photoBackgroundClassName="absolute inset-0 bg-[linear-gradient(180deg,#f4d7bf_0%,#f6efe7_100%)]"
+            photoHeadClassName="absolute left-1/2 top-[1px] h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-[#8d6852]"
+            photoBodyClassName="absolute bottom-0 left-1/2 h-[4px] w-[6px] -translate-x-1/2 rounded-t-full bg-[#b58b73]"
+          />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-[#1c1713] mb-0.5">
               Personalize with your resume
@@ -187,11 +192,15 @@ export function ResumeUploadPanel({ requestId, onUploaded, storedResume }: Resum
         aria-label="Resume upload CTA"
       >
         <div className="flex items-start gap-4 flex-wrap sm:flex-nowrap">
-          <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-[#f0ece4] flex items-center justify-center">
-            <svg className="w-4 h-4 text-[#7a6d63]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
+          <ResumeProfileIcon
+            containerClassName="flex-shrink-0 w-9 h-9 rounded-lg bg-[#f0ece4] flex items-center justify-center"
+            cardClassName="relative h-5 w-4 rounded-[5px] border border-[#b8aa9c] bg-white shadow-[0_1px_2px_rgba(28,23,19,0.08)]"
+            lineClassName="bg-[#cabeb1]"
+            photoFrameClassName="absolute left-[2px] top-[2px] h-[8px] w-[8px] overflow-hidden rounded-[3px] border border-[#d8cfc4]"
+            photoBackgroundClassName="absolute inset-0 bg-[linear-gradient(180deg,#f4d7bf_0%,#f6efe7_100%)]"
+            photoHeadClassName="absolute left-1/2 top-[1px] h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-[#8d6852]"
+            photoBodyClassName="absolute bottom-0 left-1/2 h-[4px] w-[6px] -translate-x-1/2 rounded-t-full bg-[#b58b73]"
+          />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-[#1c1713] mb-0.5">
               Personalize this report with your background

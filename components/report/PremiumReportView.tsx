@@ -5,11 +5,12 @@ import { FeedbackButtons } from "@/components/FeedbackButtons";
 import { AssessmentSnapshotSection } from "@/components/report/AssessmentSnapshot";
 import { PremiumSectionCard } from "@/components/report/PremiumSectionCard";
 import { ProvenancePill, type ProvenanceType } from "@/components/report/SectionShell";
-import { PREMIUM_SECTION_DEFINITIONS, PremiumSectionContent } from "@/lib/report/premiumTypes";
+import { PremiumSectionContent } from "@/lib/report/premiumTypes";
+import { buildPremiumPresentationViewModel, type PremiumParsedViewSection, type PremiumViewMode } from "@/lib/report/premiumPresentationViewModel";
 import { RecommendationType, ReportScore, ScoreDetail, StructuredReport } from "@/lib/types";
 import { formatDateTimeParts } from "@/lib/timezone";
 
-type ViewMode = "brief" | "full";
+type ViewMode = PremiumViewMode;
 
 type TocItem = {
   id: string;
@@ -17,15 +18,7 @@ type TocItem = {
   group: string;
 };
 
-type ParsedPremiumSection = {
-  id: string;
-  key: string;
-  title: string;
-  content: string;
-  citations?: Array<{ source_id: string; url?: string; title: string }>;
-  parsed: PremiumSectionContent;
-  group: string;
-};
+type ParsedPremiumSection = PremiumParsedViewSection;
 
 type AssessmentSnapshotData = StructuredReport["assessment_snapshot"];
 
@@ -34,6 +27,27 @@ interface PremiumReportViewProps {
     id: string;
     recommendation: RecommendationType;
     reportFormat?: string | null;
+    personaProfile?: {
+      primaryRoleFamilyLabel?: string;
+      secondaryRoleFamilyLabel?: string | null;
+      isBlendedPersona?: boolean;
+      roleFamilyLabel?: string;
+      seniorityLabel?: string;
+      subspecialization?: string | null;
+      confidence?: "high" | "medium" | "low";
+    } | null;
+    qualityGate?: {
+      overall_quality_score?: number;
+      depth_score?: number;
+      company_context_score?: number;
+      evidence_score?: number;
+      persona_score?: number;
+      interview_prep_score?: number;
+      readiness_to_release_score?: number;
+      release_decision?: string;
+      warning_flags?: string[];
+      blocked_release_reasons?: string[];
+    } | null;
     sections: Array<{
       id: string;
       key: string;
@@ -53,6 +67,7 @@ interface PremiumReportViewProps {
     roleTitle: string | null;
     companyUrl?: string | null;
     jobDescription?: string | null;
+    resumeProvided?: boolean;
     scores: ReportScore;
     createdAt: string;
     completedAt: string | null;
@@ -85,29 +100,75 @@ const PROVENANCE_EXPLAINERS: Record<ProvenanceType, { description: string }> = {
   },
 };
 
-const LEGACY_GROUP_BY_SECTION_KEY: Record<string, string> = {
-  decision_memo: "Decision",
-  five_minute_brief: "Decision",
-  candidate_fit: "Candidate Positioning",
-  how_to_win_this_process: "Interview Prep",
-  interview_prep: "Interview Prep",
-  company_role_strategy: "Strategic Context",
-  why_role_exists_now: "Strategic Context",
-  credibility_layer: "Credibility",
-  operations_and_cost: "Credibility",
-};
+function countWords(value: string | undefined): number {
+  return (value ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
 
-const LEGACY_SECTION_ORDER = [
-  "decision_memo",
-  "five_minute_brief",
-  "candidate_fit",
-  "how_to_win_this_process",
-  "interview_prep",
-  "company_role_strategy",
-  "why_role_exists_now",
-  "credibility_layer",
-  "operations_and_cost",
-] as const;
+function buildCompanyDepthWarnings(args: {
+  companyContextSection?: ParsedPremiumSection["parsed"];
+  strategySection?: ParsedPremiumSection["parsed"];
+  releaseWarnings: string[];
+}): string[] {
+  const warnings = [...args.releaseWarnings.filter((warning) => /company context|company-context|company strategy|swot|mission|vision|culture/i.test(warning))];
+  const companyContext = args.companyContextSection;
+  const strategy = args.strategySection;
+
+  if (!companyContext) {
+    warnings.push("Company context is missing from this report, so vision, mission, and culture are underrepresented.");
+  } else {
+    const contextText = [
+      companyContext.summary,
+      ...(companyContext.blocks ?? []).flatMap((block) => [block.title, block.body ?? "", ...(block.bullets ?? [])]),
+    ].filter(Boolean).join(" ");
+
+    if (countWords(contextText) < 150) {
+      warnings.push("Company context is below the current 150-word production minimum.");
+    }
+
+    if (!(companyContext.blocks ?? []).some((block) => /vision|mission/i.test(block.title))) {
+      warnings.push("Company context does not surface vision and mission as a distinct subsection.");
+    }
+
+    if (!(companyContext.blocks ?? []).some((block) => /culture|values|operating principles|leadership principles/i.test(block.title))) {
+      warnings.push("Company context does not surface culture as a distinct subsection.");
+    }
+  }
+
+  if (!strategy) {
+    warnings.push("Company strategy is missing from this report.");
+  } else {
+    const strategyText = [
+      strategy.summary,
+      ...(strategy.blocks ?? []).flatMap((block) => [block.title, block.body ?? "", ...(block.bullets ?? [])]),
+    ].filter(Boolean).join(" ");
+
+    if (countWords(strategyText) < 300) {
+      warnings.push("Company strategy is below the current 300-word production minimum.");
+    }
+
+    if (!(strategy.blocks ?? []).some((block) => /current strategy|strategic priorities|strategy/i.test(block.title))) {
+      warnings.push("Company strategy does not include a clearly labeled current-strategy subsection.");
+    }
+
+    const swotTitles = ["Strengths", "Weaknesses", "Opportunities", "Threats"];
+    for (const title of swotTitles) {
+      const block = (strategy.blocks ?? []).find((item) => new RegExp(`swot\\s*-?\\s*${title}|${title}`, "i").test(item.title));
+      if (!block) {
+        warnings.push(`Company strategy is missing a SWOT ${title.toLowerCase()} subsection.`);
+        continue;
+      }
+
+      if ((block.bullets ?? []).length < 3) {
+        warnings.push(`SWOT ${title.toLowerCase()} has fewer than 3 substantive points.`);
+      }
+    }
+  }
+
+  return warnings.filter((warning, index, list) => list.indexOf(warning) === index);
+}
 
 const RECOMMENDATION_META: Record<RecommendationType, { label: string; icon: string; tone: string; pill: string }> = {
   pursue: {
@@ -135,15 +196,6 @@ const RECOMMENDATION_META: Record<RecommendationType, { label: string; icon: str
     pill: "bg-[#6b5e52] text-white",
   },
 };
-
-function parsePremiumSection(content: string): PremiumSectionContent | null {
-  try {
-    const parsed = JSON.parse(content) as PremiumSectionContent;
-    return parsed?.schema === "premium_section_v1" ? parsed : null;
-  } catch {
-    return null;
-  }
-}
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value);
@@ -715,36 +767,14 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  const sections = useMemo(
-    () => report.sections.map((section) => ({ ...section, parsed: parsePremiumSection(section.content) })),
-    [report.sections]
+  const presentationViewModel = useMemo(
+    () => buildPremiumPresentationViewModel(report, viewMode),
+    [report, viewMode]
   );
 
-  const visibleSections = useMemo(
-    () =>
-      PREMIUM_SECTION_DEFINITIONS.map((definition) => {
-        const section = sections.find((item) => item.key === definition.key);
-        if (!section?.parsed) {
-          return null;
-        }
+  const visibleSections = presentationViewModel.visibleSections;
 
-        if (viewMode !== "full" && section.parsed.surface !== "both") {
-          return null;
-        }
-
-        return {
-          ...section,
-          parsed: section.parsed,
-          group: LEGACY_GROUP_BY_SECTION_KEY[definition.key] ?? definition.group,
-        } satisfies ParsedPremiumSection;
-      }).filter((section): section is ParsedPremiumSection => Boolean(section)),
-    [sections, viewMode]
-  );
-
-  const orderedVisibleSections = useMemo(() => {
-    const order = new Map<string, number>(LEGACY_SECTION_ORDER.map((key, index) => [key, index]));
-    return [...visibleSections].sort((left, right) => (order.get(left.key) ?? 999) - (order.get(right.key) ?? 999));
-  }, [visibleSections]);
+  const orderedVisibleSections = visibleSections;
 
   const sectionMap = useMemo(
     () => Object.fromEntries(orderedVisibleSections.map((section) => [section.key, section])) as Record<string, ParsedPremiumSection>,
@@ -756,7 +786,12 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
   const roleTitle = report.roleTitle || "Target Role";
   const companyHref = report.companyUrl ?? report.company.websiteUrl;
   const companyLogoUrl = getFaviconUrl(companyHref);
+  const [personaFamilyLabel, personaSeniorityLabel, personaSubspecialization] = presentationViewModel.personaBadges;
+  const releaseDecision = report.qualityGate?.release_decision ?? null;
+  const releaseWarnings = report.qualityGate?.warning_flags ?? [];
+  const blockedReasons = report.qualityGate?.blocked_release_reasons ?? [];
   const decisionSection = sectionMap.decision_memo?.parsed;
+  const companyContextSection = sectionMap.company_context?.parsed;
   const strategySection = sectionMap.company_role_strategy?.parsed;
   const roleSection = sectionMap.why_role_exists_now?.parsed;
   const candidateFitSection = sectionMap.candidate_fit?.parsed;
@@ -770,7 +805,11 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
       .map((source) => extractHostname(source.url))
       .filter((host): host is string => Boolean(host))
   ).size;
-  const hasResumePersonalization = report.scores.candidate_fit > 0;
+  const hasResumePersonalization = Boolean(report.resumeProvided) || report.scores.candidate_fit > 0;
+  const companyDepthWarnings = useMemo(
+    () => buildCompanyDepthWarnings({ companyContextSection, strategySection, releaseWarnings }),
+    [companyContextSection, strategySection, releaseWarnings]
+  );
 
   const freshestMeaningfulSource = report.sources
     .filter((source) => source.type !== "job_description" && !!source.publishedAt)
@@ -960,7 +999,7 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
     return [
       groupIntro ? (
         <SectionGroupLabel
-          key={`${section.group}-label`}
+          key={`${section.id}-group-label`}
           title={section.group}
           description={GROUP_DESCRIPTIONS[section.group] ?? ""}
         />
@@ -1054,6 +1093,17 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
                       <span aria-hidden>{recommendationMeta.icon}</span>
                       {recommendationMeta.label}
                     </span>
+                    {personaFamilyLabel ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d3c7b9] bg-white px-3.5 py-1.5 text-[0.82rem] font-medium text-[#1c1713] sm:text-sm">
+                        {personaFamilyLabel}
+                        {personaSubspecialization ? <span className="text-[#9c8d81]">· {personaSubspecialization}</span> : null}
+                      </span>
+                    ) : null}
+                    {personaSeniorityLabel ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d3c7b9] bg-[#f5f1e8] px-3.5 py-1.5 text-[0.82rem] font-medium text-[#4a3f36] sm:text-sm">
+                        {personaSeniorityLabel}
+                      </span>
+                    ) : null}
                     {hasResumePersonalization ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-[#1a4a3a]/20 bg-[#1a4a3a]/8 px-3.5 py-1.5 text-[0.82rem] font-medium text-[#1a4a3a] sm:text-sm">
                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
@@ -1092,6 +1142,59 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
                       <ViewModeToggle mode={viewMode} onChange={setViewMode} />
                     </div>
                   </div>
+
+                  {releaseDecision && releaseDecision !== "approved" ? (
+                    <div className="mt-5 rounded-[24px] border border-[#eadfbf] bg-[#fff6e7] px-5 py-4 text-[#6b531d] shadow-[0_10px_28px_rgba(28,23,19,0.05)] sm:px-6">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#b66a00] text-sm font-semibold text-white">
+                          !
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-[#9b6a16]">Quality Gate</p>
+                          <p className="mt-1 text-sm font-semibold text-[#6b531d]">
+                            {releaseDecision === "partial"
+                              ? "This report was released as partial because some premium sections did not clear the quality gate."
+                              : releaseDecision === "suppress_and_release"
+                              ? "Weak sections were suppressed before release."
+                              : releaseDecision === "approved_with_warnings"
+                              ? "This report cleared the gate with explicit warnings."
+                              : `Release state: ${releaseDecision.replace(/_/g, " ")}.`}
+                          </p>
+                          {releaseWarnings.length > 0 ? (
+                            <ul className="mt-2 space-y-1 text-[0.82rem] leading-6 text-[#7a6440]">
+                              {releaseWarnings.slice(0, 4).map((warning) => (
+                                <li key={warning}>• {warning}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {blockedReasons.length > 0 ? (
+                            <p className="mt-2 text-[0.82rem] leading-6 text-[#7a6440]">Blocked reasons captured for QA: {blockedReasons.join(" ")}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {companyDepthWarnings.length > 0 ? (
+                    <div className="mt-5 rounded-[24px] border border-[#ead7d2] bg-[#fbefeb] px-5 py-4 text-[#6b3f35] shadow-[0_10px_28px_rgba(28,23,19,0.05)] sm:px-6">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#8a3d2f] text-sm font-semibold text-white">
+                          !
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-[#9b4b3b]">Company Strategy Standard</p>
+                          <p className="mt-1 text-sm font-semibold text-[#6b3f35]">
+                            This report is below the current production bar for company research depth and should be treated as an older or underbuilt draft.
+                          </p>
+                          <ul className="mt-2 space-y-1 text-[0.82rem] leading-6 text-[#7a5147]">
+                            {companyDepthWarnings.slice(0, 6).map((warning) => (
+                              <li key={warning}>• {warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="mt-7 grid grid-cols-1 gap-3 sm:mt-8 sm:grid-cols-2 xl:grid-cols-4">
                     {overviewCards.map((card) => (

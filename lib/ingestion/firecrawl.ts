@@ -1,10 +1,15 @@
 import axios from "axios";
 import { generateStructuredCompletion } from "@/lib/ai/openai";
+import { buildPersonaAwareRetrievalQueries, formatPersonaForPrompt, inferPremiumPersona } from "@/lib/report/premiumPersona";
 
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
 const FIRECRAWL_BASE_URL = "https://api.firecrawl.dev/v1";
 const MIN_EXTERNAL_SITES = 5;
 const MAX_RESEARCH_SOURCES = 10;
+const FIRECRAWL_BYPASS_WINDOW_MS = 5 * 60 * 1000;
+const MAX_RESOLVED_SOURCE_DEPTH = 2;
+
+let firecrawlBypassUntil = 0;
 
 export interface FirecrawlResponse {
   success: boolean;
@@ -42,6 +47,115 @@ export interface ResearchPlan {
   retrievalQueries: string[];
 }
 
+export interface ResolvedPlannedSource {
+  url: string;
+  type: PlannedSourceType;
+  priority: number;
+  title: string;
+  content: string;
+}
+
+interface AxiosResolvedPage {
+  success: boolean;
+  finalUrl: string;
+  content?: string;
+}
+
+const canonicalResolutionCache = new Map<string, Promise<string>>();
+
+interface FirstPartyDiscoveryRule {
+  keywords: string[];
+  type: PlannedSourceType;
+  priority: number;
+  label: string;
+  signal: string;
+}
+
+const SOURCE_CLASS_TARGET_TERMS: Record<string, string[]> = {
+  job_description: ["careers", "job description", "role-context search"],
+  product_surfaces: ["product", "pricing", "platform", "blog", "launch", "competitive landscape search", "g2", "capterra"],
+  leadership_strategy: ["investor", "leadership", "about", "strategy", "shareholder", "leadership interview"],
+  leadership_commentary: ["leadership", "leadership interview", "about", "team", "the org search"],
+  investor_materials: ["investor", "shareholder", "earnings", "finance", "crunchbase", "yahoo finance"],
+  competitor_positioning: ["competitive", "competitor", "g2", "capterra", "competitive landscape search"],
+  technical_context: ["engineering", "developer", "api", "platform", "blog"],
+  engineering_docs: ["developer", "api", "docs", "platform"],
+  governance_signals: ["leadership", "about", "team", "the org search"],
+};
+
+const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
+  {
+    keywords: ["career", "careers", "jobs", "job-search", "join-us"],
+    type: "custom_url",
+    priority: 10,
+    label: "Discovered careers page",
+    signal: "Homepage-linked careers or job-search page for exact role-context discovery.",
+  },
+  {
+    keywords: ["investor", "shareholder", "earnings", "financial", "annual-report"],
+    type: "custom_url",
+    priority: 10,
+    label: "Discovered investor page",
+    signal: "Homepage-linked investor or earnings page for strategy and business-model evidence.",
+  },
+  {
+    keywords: ["press", "news", "newsroom", "media"],
+    type: "newsroom",
+    priority: 9,
+    label: "Discovered newsroom",
+    signal: "Homepage-linked newsroom or press page for launches and company updates.",
+  },
+  {
+    keywords: ["blog", "stories", "insights"],
+    type: "blog",
+    priority: 8,
+    label: "Discovered blog",
+    signal: "Homepage-linked blog or stories page for product and operating context.",
+  },
+  {
+    keywords: ["leadership", "leaders", "team", "management", "executives"],
+    type: "custom_url",
+    priority: 8,
+    label: "Discovered leadership page",
+    signal: "Homepage-linked leadership page for stakeholder and operating-style context.",
+  },
+  {
+    keywords: ["about", "company", "mission", "values"],
+    type: "custom_url",
+    priority: 7,
+    label: "Discovered about page",
+    signal: "Homepage-linked about page for company narrative and cultural framing.",
+  },
+  {
+    keywords: ["product", "platform", "pricing", "features", "solutions", "safety", "trust", "privacy"],
+    type: "custom_url",
+    priority: 8,
+    label: "Discovered product surface",
+    signal: "Homepage-linked product or domain page for role-adjacent product evidence.",
+  },
+  {
+    keywords: ["developer", "docs", "api", "engineering"],
+    type: "custom_url",
+    priority: 7,
+    label: "Discovered technical docs",
+    signal: "Homepage-linked developer or documentation page for technical context.",
+  },
+];
+
+const SEARCH_RESULT_HOSTS = new Set(["google.com", "news.google.com", "bing.com"]);
+const SEARCH_INTERNAL_HOSTS = new Set([
+  "google.com",
+  "www.google.com",
+  "accounts.google.com",
+  "support.google.com",
+  "policies.google.com",
+  "bing.com",
+  "www.bing.com",
+]);
+const STATIC_ASSET_HOSTS = new Set(["fonts.googleapis.com"]);
+const STATIC_ASSET_HOST_SUFFIXES = ["googleusercontent.com", "gstatic.com"];
+const STATIC_ASSET_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".css", ".js", ".woff", ".woff2"];
+
 export async function fetchPageWithFirecrawl(
   url: string,
   opts: { onlyMainContent?: boolean; timeoutMs?: number } = {}
@@ -50,7 +164,7 @@ export async function fetchPageWithFirecrawl(
 
   console.log("[Firecrawl] Using API key:", FIRECRAWL_API_KEY ? FIRECRAWL_API_KEY.slice(0, 8) + "..." : "undefined");
 
-  if (!FIRECRAWL_API_KEY) {
+  if (!FIRECRAWL_API_KEY || shouldBypassFirecrawl()) {
     return fetchPageWithAxios(url);
   }
 
@@ -59,7 +173,7 @@ export async function fetchPageWithFirecrawl(
       `${FIRECRAWL_BASE_URL}/scrape`,
       {
         url,
-        formats: ["markdown"],
+        formats: ["markdown", "html"],
         onlyMainContent,
         waitFor: 2000,
       },
@@ -99,6 +213,10 @@ export async function fetchPageWithFirecrawl(
     };
   } catch (error) {
     console.error("[Firecrawl] Error:", error instanceof Error ? error.message : error);
+    if (isFirecrawlQuotaError(error)) {
+      firecrawlBypassUntil = Date.now() + FIRECRAWL_BYPASS_WINDOW_MS;
+      console.warn("[Firecrawl] Quota exhausted; bypassing Firecrawl temporarily and using direct fetch fallback.");
+    }
     return fetchPageWithAxios(url);
   }
 }
@@ -108,6 +226,7 @@ async function fetchPageWithAxios(url: string): Promise<FirecrawlResponse> {
   try {
     const response = await axios.get(url, {
       timeout: 15000,
+      maxRedirects: 5,
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -129,6 +248,30 @@ async function fetchPageWithAxios(url: string): Promise<FirecrawlResponse> {
     console.error("[Firecrawl] Axios fallback also failed:", url, error instanceof Error ? error.message : error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
+}
+
+function shouldBypassFirecrawl(now = Date.now()): boolean {
+  return firecrawlBypassUntil > now;
+}
+
+export function isFirecrawlQuotaError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const candidate = error as { response?: { status?: unknown }; status?: unknown; message?: unknown };
+  const status = typeof candidate.response?.status === "number"
+    ? candidate.response.status
+    : typeof candidate.status === "number"
+    ? candidate.status
+    : undefined;
+  const message = String(candidate.message ?? "").toLowerCase();
+
+  return status === 402 || /status code 402|payment required|quota/i.test(message);
+}
+
+export function resetFirecrawlBypassForTest(): void {
+  firecrawlBypassUntil = 0;
 }
 
 function extractTitle(html: string): string {
@@ -170,46 +313,567 @@ function slugifyCompanyName(companyName: string): string {
     .slice(0, 80);
 }
 
+function normalizeResolvedUrl(url: string, baseUrl?: string): string | null {
+  if (!url?.trim()) {
+    return null;
+  }
+
+  const trimmed = url.trim();
+  if (/^(mailto:|tel:|javascript:)/i.test(trimmed)) {
+    return null;
+  }
+
+  try {
+    const resolved = baseUrl ? new URL(trimmed, baseUrl) : new URL(trimmed);
+    if (!/^https?:$/i.test(resolved.protocol)) {
+      return null;
+    }
+    resolved.hash = "";
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function collectLinkTargets(content: string): string[] {
+  const matches: string[] = [];
+  const htmlHrefPattern = /href\s*=\s*["']([^"'#>]+)["']/gi;
+  const markdownLinkPattern = /\[[^\]]+\]\(([^)\s#]+)(?:\s+"[^"]*")?\)/g;
+
+  for (const pattern of [htmlHrefPattern, markdownLinkPattern]) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(content)) !== null) {
+      if (match[1]) {
+        matches.push(decodeHtmlEntities(match[1]));
+      }
+    }
+  }
+
+  return matches;
+}
+
+function getBaseHostname(url: string): string | null {
+  const hostname = getHostname(url);
+  if (!hostname) {
+    return null;
+  }
+
+  const parts = hostname.split(".");
+  if (parts.length <= 2) {
+    return hostname;
+  }
+
+  return parts.slice(-2).join(".");
+}
+
+export function isSearchResultsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const baseHost = getBaseHostname(url);
+    if (!baseHost || !SEARCH_RESULT_HOSTS.has(baseHost)) {
+      return false;
+    }
+
+    return parsed.pathname === "/search" || parsed.pathname === "/news/search";
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedSearchResultTarget(searchUrl: string, candidateUrl: string): boolean {
+  try {
+    const parsedCandidate = new URL(candidateUrl);
+    const parsedSearch = new URL(searchUrl);
+    const candidateHost = parsedCandidate.hostname.toLowerCase();
+    const searchBaseHost = getBaseHostname(searchUrl);
+
+    if (!/^https?:$/i.test(parsedCandidate.protocol)) {
+      return false;
+    }
+
+    if (STATIC_ASSET_HOSTS.has(candidateHost) || STATIC_ASSET_HOST_SUFFIXES.some((suffix) => candidateHost.endsWith(suffix))) {
+      return false;
+    }
+
+    if (STATIC_ASSET_EXTENSIONS.some((extension) => parsedCandidate.pathname.toLowerCase().endsWith(extension))) {
+      return false;
+    }
+
+    if (SEARCH_INTERNAL_HOSTS.has(candidateHost) && !(candidateHost === "news.google.com" && /\/(articles|read)\//.test(parsedCandidate.pathname))) {
+      return false;
+    }
+
+    if (candidateHost === parsedSearch.hostname.toLowerCase() && !/\/(articles|read)\//.test(parsedCandidate.pathname)) {
+      return false;
+    }
+
+    if (searchBaseHost === "google.com" && parsedCandidate.pathname === "/search") {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function extractSearchResultLinks(args: {
+  searchUrl: string;
+  content: string;
+  maxLinks?: number;
+}): string[] {
+  const maxLinks = args.maxLinks ?? 3;
+  const results: string[] = [];
+  const seen = new Set<string>();
+
+  const pushUrl = (value: string | null) => {
+    if (!value) {
+      return;
+    }
+
+    if (!isAllowedSearchResultTarget(args.searchUrl, value) || seen.has(value)) {
+      return;
+    }
+
+    seen.add(value);
+    results.push(value);
+  };
+
+  const googleRedirectPattern = /\/url\?q=([^&"'>\s]+)/gi;
+  let redirectMatch: RegExpExecArray | null;
+  while ((redirectMatch = googleRedirectPattern.exec(args.content)) !== null) {
+    pushUrl(normalizeResolvedUrl(decodeURIComponent(redirectMatch[1]), args.searchUrl));
+    if (results.length >= maxLinks) {
+      return results;
+    }
+  }
+
+  for (const rawLink of collectLinkTargets(args.content)) {
+    pushUrl(normalizeResolvedUrl(rawLink, args.searchUrl));
+    if (results.length >= maxLinks) {
+      break;
+    }
+  }
+
+  return results;
+}
+
+async function fetchPageWithAxiosResolved(url: string): Promise<AxiosResolvedPage> {
+  try {
+    const response = await axios.get(url, {
+      timeout: 15000,
+      maxRedirects: 5,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+    });
+
+    const finalUrl = normalizeUrl(String((response.request as any)?.res?.responseUrl || response.config.url || url)) || normalizeUrl(url) || url;
+    return {
+      success: true,
+      finalUrl,
+      content: typeof response.data === "string" ? response.data : undefined,
+    };
+  } catch {
+    return {
+      success: false,
+      finalUrl: normalizeUrl(url) || url,
+    };
+  }
+}
+
+async function resolveCanonicalSourceUrlInBrowser(url: string): Promise<string | null> {
+  try {
+    const { chromium } = await import("playwright");
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      try {
+        await page.waitForURL(
+          currentUrl => {
+            try {
+              return new URL(currentUrl.toString()).hostname !== "news.google.com";
+            } catch {
+              return false;
+            }
+          },
+          { timeout: 15000 },
+        );
+      } catch {
+        try {
+          await page.waitForLoadState("load", { timeout: 5000 });
+        } catch {
+          // Ignore load-state timeouts and inspect the current document as-is.
+        }
+      }
+
+      const resolved = await page.evaluate(() => {
+        const href = window.location.href;
+        const canonical = document.querySelector('link[rel="canonical"]')?.getAttribute("href") || null;
+        const ogUrl = document.querySelector('meta[property="og:url"]')?.getAttribute("content") || null;
+        return canonical || ogUrl || href;
+      });
+
+      const normalized = normalizeUrl(resolved || url);
+      if (!normalized) {
+        return null;
+      }
+
+      const hostname = getHostname(normalized);
+      if (hostname && hostname !== "news.google.com") {
+        return normalized;
+      }
+
+      return null;
+    } finally {
+      await page.close();
+      await browser.close();
+    }
+  } catch (error) {
+    console.warn("[Firecrawl] Browser canonical resolution failed:", error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+function isGoogleNewsWrapperUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.toLowerCase() === "news.google.com" && /\/(read|articles)\//.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+export async function resolveCanonicalSourceUrl(url: string): Promise<string> {
+  const normalized = normalizeUrl(url);
+  if (!normalized) {
+    return url;
+  }
+
+  if (canonicalResolutionCache.has(normalized)) {
+    return canonicalResolutionCache.get(normalized)!;
+  }
+
+  const resolutionPromise = (async () => {
+    if (!isGoogleNewsWrapperUrl(normalized)) {
+      return normalized;
+    }
+
+    const resolved = await fetchPageWithAxiosResolved(normalized);
+    if (resolved.success) {
+      const finalHostname = getHostname(resolved.finalUrl);
+      if (finalHostname && finalHostname !== "news.google.com") {
+        return resolved.finalUrl;
+      }
+
+      const canonicalMatch = resolved.content?.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
+      const canonicalUrl = canonicalMatch?.[1] ? normalizeResolvedUrl(decodeHtmlEntities(canonicalMatch[1]), resolved.finalUrl) : null;
+      if (canonicalUrl) {
+        const canonicalHostname = getHostname(canonicalUrl);
+        if (canonicalHostname && canonicalHostname !== "news.google.com") {
+          return canonicalUrl;
+        }
+      }
+    }
+
+    const browserResolved = await resolveCanonicalSourceUrlInBrowser(normalized);
+    return browserResolved ?? normalized;
+  })();
+
+  canonicalResolutionCache.set(normalized, resolutionPromise);
+  return resolutionPromise;
+}
+
+function getSearchIntentTerm(url: string, paramNames: string[]): string | null {
+  try {
+    const parsed = new URL(url);
+    for (const name of paramNames) {
+      const value = parsed.searchParams.get(name)?.trim();
+      if (value) {
+        return decodeURIComponent(value).replace(/\s+/g, " ").trim();
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function isUberDomain(hostname: string): boolean {
+  return hostname === "uber.com" || hostname.endsWith(".uber.com");
+}
+
+export function getDomainSpecificSourceFallbackUrls(url: string): string[] {
+  const normalizedUrl = normalizeUrl(url);
+  if (!normalizedUrl) {
+    return [];
+  }
+
+  const parsed = new URL(normalizedUrl);
+  const hostname = parsed.hostname.toLowerCase();
+  const pathname = parsed.pathname.toLowerCase();
+  const uberDomain = isUberDomain(hostname);
+
+  if (uberDomain && (hostname === "jobs.uber.com" || pathname.includes("/careers"))) {
+    return [
+      "https://www.uber.com/us/en/careers/list/",
+      "https://www.uber.com/us/en/careers/",
+      "https://www.uber.com/global/en/careers/",
+    ];
+  }
+
+  if (uberDomain && (hostname === "investor.uber.com" || pathname.includes("/investors"))) {
+    return [
+      "https://www.uber.com/us/en/about/investors/",
+      "https://www.uber.com/newsroom/",
+      "https://www.uber.com/us/en/about/",
+    ];
+  }
+
+  if (hostname.endsWith("crunchbase.com")) {
+    const term = getSearchIntentTerm(normalizedUrl, ["q"]);
+    if (term) {
+      const encoded = encodeURIComponent(term);
+      return [
+        `https://www.google.com/search?q=${encodeURIComponent(`${term} funding valuation acquisition revenue strategy`)}`,
+        `https://finance.yahoo.com/lookup?s=${encoded}`,
+        `https://www.reuters.com/site-search/?query=${encoded}`,
+      ];
+    }
+  }
+
+  if (hostname.endsWith("g2.com")) {
+    const term = getSearchIntentTerm(normalizedUrl, ["query", "q"]);
+    if (term) {
+      const encoded = encodeURIComponent(term);
+      return [
+        `https://www.google.com/search?q=${encodeURIComponent(`${term} reviews alternatives pricing`)}`,
+        `https://www.capterra.com/search/?query=${encoded}`,
+        `https://www.google.com/search?q=${encodeURIComponent(`${term} product offerings customer reviews`)}`,
+      ];
+    }
+  }
+
+  if (hostname.endsWith("glassdoor.com")) {
+    const term = getSearchIntentTerm(normalizedUrl, ["keyword", "q"]);
+    if (term) {
+      return [
+        `https://www.google.com/search?q=${encodeURIComponent(`${term} employee reviews culture management`)}`,
+        `https://www.google.com/search?q=${encodeURIComponent(`${term} interview experience culture`)}`,
+        `https://www.google.com/search?q=${encodeURIComponent(`${term} company culture leadership employees`)}`,
+      ];
+    }
+  }
+
+  return [];
+}
+
+function isSameCompanyHost(candidateUrl: string, companyUrl: string): boolean {
+  try {
+    const candidateHost = new URL(candidateUrl).hostname.toLowerCase().replace(/^www\./, "");
+    const companyHost = new URL(companyUrl).hostname.toLowerCase().replace(/^www\./, "");
+    return candidateHost === companyHost || candidateHost.endsWith(`.${companyHost}`);
+  } catch {
+    return false;
+  }
+}
+
+function classifyFirstPartyLink(url: string): FirstPartyDiscoveryRule | null {
+  const lowerUrl = url.toLowerCase();
+  return FIRST_PARTY_DISCOVERY_RULES.find((rule) => rule.keywords.some((keyword) => lowerUrl.includes(keyword))) ?? null;
+}
+
+export function extractFirstPartyCandidatesFromHomepage(args: {
+  companyUrl: string;
+  content: string;
+  maxCandidates?: number;
+}): PlannerCandidate[] {
+  const maxCandidates = args.maxCandidates ?? 8;
+  const seenUrls = new Set<string>();
+  const discovered: PlannerCandidate[] = [];
+
+  for (const rawLink of collectLinkTargets(args.content)) {
+    const normalizedUrl = normalizeResolvedUrl(rawLink, args.companyUrl);
+    if (!normalizedUrl || seenUrls.has(normalizedUrl) || !isSameCompanyHost(normalizedUrl, args.companyUrl)) {
+      continue;
+    }
+
+    const classification = classifyFirstPartyLink(normalizedUrl);
+    if (!classification) {
+      continue;
+    }
+
+    seenUrls.add(normalizedUrl);
+    discovered.push({
+      url: normalizedUrl,
+      type: classification.type,
+      priority: classification.priority,
+      label: classification.label,
+      domain: getHostname(normalizedUrl) ?? "company-site",
+      signal: classification.signal,
+    });
+
+    if (discovered.length >= maxCandidates) {
+      break;
+    }
+  }
+
+  return discovered;
+}
+
+async function fetchResolvedSourcesFromUrls(args: {
+  urls: string[];
+  type: PlannedSourceType;
+  priority: number;
+  visited: Set<string>;
+  depth: number;
+}): Promise<ResolvedPlannedSource[]> {
+  const settled = await Promise.allSettled(
+    args.urls.map((url) =>
+      fetchResolvedPlannedSource(
+        {
+          url,
+          type: args.type,
+          priority: args.priority,
+        },
+        args.visited,
+        args.depth
+      )
+    )
+  );
+
+  return settled.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+}
+
+export async function fetchResolvedPlannedSource(
+  plannedSource: PlannedSource,
+  visited = new Set<string>(),
+  depth = 0
+): Promise<ResolvedPlannedSource[]> {
+  const normalizedUrl = await resolveCanonicalSourceUrl(plannedSource.url);
+  if (!normalizedUrl || visited.has(normalizedUrl)) {
+    return [];
+  }
+
+  visited.add(normalizedUrl);
+
+  const response = await fetchPageWithFirecrawl(normalizedUrl);
+  const pageContent = response.data?.markdown || response.data?.content || "";
+
+  if (response.success && pageContent) {
+    if (isSearchResultsUrl(normalizedUrl)) {
+      const resultLinks = extractSearchResultLinks({
+        searchUrl: normalizedUrl,
+        content: response.data?.html || pageContent,
+      });
+
+      if (resultLinks.length > 0) {
+        if (depth >= MAX_RESOLVED_SOURCE_DEPTH) {
+          return [];
+        }
+
+        const resolvedSources = await fetchResolvedSourcesFromUrls({
+          urls: resultLinks,
+          type: plannedSource.type,
+          priority: Math.max(1, plannedSource.priority - 1),
+          visited,
+          depth: depth + 1,
+        });
+        if (resolvedSources.length > 0) {
+          return resolvedSources;
+        }
+      }
+
+      return [];
+    }
+
+    return [
+      {
+        url: normalizedUrl,
+        type: plannedSource.type,
+        priority: plannedSource.priority,
+        title: response.data?.metadata?.title || normalizedUrl,
+        content: pageContent,
+      },
+    ];
+  }
+
+  const fallbackUrls = getDomainSpecificSourceFallbackUrls(normalizedUrl).filter((url) => !visited.has(url));
+  if (fallbackUrls.length === 0 || depth >= MAX_RESOLVED_SOURCE_DEPTH) {
+    return [];
+  }
+
+  return fetchResolvedSourcesFromUrls({
+    urls: fallbackUrls,
+    type: plannedSource.type,
+    priority: Math.max(1, plannedSource.priority - 1),
+    visited,
+    depth: depth + 1,
+  });
+}
+
+async function discoverFirstPartyCandidates(companyUrl?: string): Promise<PlannerCandidate[]> {
+  if (!companyUrl) {
+    return [];
+  }
+
+  const response = await fetchPageWithFirecrawl(companyUrl, {
+    onlyMainContent: false,
+    timeoutMs: 20000,
+  });
+
+  if (!response.success) {
+    return [];
+  }
+
+  const content = response.data?.html || response.data?.markdown || response.data?.content || "";
+  if (!content) {
+    return [];
+  }
+
+  return extractFirstPartyCandidatesFromHomepage({
+    companyUrl,
+    content,
+  });
+}
+
 function buildFallbackRetrievalQueries(
   companyName: string,
   roleTitle: string,
-  jobDescription?: string
+  jobDescription?: string,
+  profileContext?: string
 ): string[] {
-  const jdHint = jobDescription?.trim()
-    ? ` job description responsibilities requirements ${jobDescription.slice(0, 300)}`
-    : "";
-
-  return [
-    `${companyName} strategy business model revenue growth market position competitive advantage core products${jdHint}`,
-    `${companyName} ${roleTitle} responsibilities success metrics charter stakeholder scope hiring needs${jdHint}`,
-    `${companyName} investor relations earnings shareholder letter investor day monetization priorities`,
-    `${companyName} leadership team executives org structure culture values decision making`,
-    `${companyName} recent launches partnerships acquisitions growth milestones quarterly results news`,
-    `${companyName} related roles leadership bios team pages stakeholder org structure ${roleTitle}`,
-    `${companyName} ${roleTitle} why now strategic inflection priority shift hiring urgency catalyst`,
-  ];
+  const persona = inferPremiumPersona(roleTitle, jobDescription, profileContext);
+  return buildPersonaAwareRetrievalQueries(companyName, roleTitle, jobDescription, persona);
 }
 
-function roleSlug(roleTitle: string): string {
-  return roleTitle
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
-
-function buildPlannerCandidatePool(
+export function buildPlannerCandidatePool(
   companyName: string,
   roleTitle: string,
   companyUrl?: string,
-  customUrls: string[] = []
+  customUrls: string[] = [],
+  discoveredCandidates: PlannerCandidate[] = []
 ): PlannerCandidate[] {
   const candidates: PlannerCandidate[] = [];
   const seenUrls = new Set<string>();
   const encodedCompany = encodeURIComponent(companyName);
   const encodedRole = encodeURIComponent(`${companyName} ${roleTitle}`.trim());
   const companySlug = slugifyCompanyName(companyName);
-  const roleTitleSlug = roleSlug(roleTitle);
 
   const pushCandidate = (candidate: PlannerCandidate) => {
     const normalizedUrl = normalizeUrl(candidate.url);
@@ -220,7 +884,9 @@ function buildPlannerCandidatePool(
 
   if (companyUrl) {
     const normalizedCompanyUrl = normalizeUrl(companyUrl);
-    const companyHost = normalizedCompanyUrl ? new URL(normalizedCompanyUrl).hostname.replace(/^www\./, "") : null;
+    const companyUri = normalizedCompanyUrl ? new URL(normalizedCompanyUrl) : null;
+    const companyHost = companyUri?.hostname.replace(/^www\./, "") ?? null;
+    const companyOrigin = companyUri?.origin ?? null;
 
     if (normalizedCompanyUrl) {
       pushCandidate({
@@ -232,9 +898,9 @@ function buildPlannerCandidatePool(
         signal: "Official messaging, product framing, and core positioning.",
       });
 
-      if (companyHost) {
+      if (companyHost && companyOrigin) {
         pushCandidate({
-          url: `https://${companyHost}/careers`,
+          url: `${companyOrigin}/careers`,
           type: "custom_url",
           priority: 10,
           label: "Company careers",
@@ -242,15 +908,7 @@ function buildPlannerCandidatePool(
           signal: "Exact job description and role-context source discovery.",
         });
         pushCandidate({
-          url: `https://${companyHost}/careers/${roleTitleSlug}`,
-          type: "custom_url",
-          priority: 9,
-          label: "Role-specific careers path",
-          domain: companyHost,
-          signal: "Potential exact JD landing page for the target role.",
-        });
-        pushCandidate({
-          url: `https://${companyHost}/investors`,
+          url: `${companyOrigin}/investors`,
           type: "custom_url",
           priority: 10,
           label: "Investor relations",
@@ -258,23 +916,7 @@ function buildPlannerCandidatePool(
           signal: "Primary source for earnings, shareholder letters, and strategic priorities.",
         });
         pushCandidate({
-          url: `https://${companyHost}/investor-relations`,
-          type: "custom_url",
-          priority: 10,
-          label: "Investor relations alternate path",
-          domain: companyHost,
-          signal: "Alternate primary source for filings, earnings, and investor day material.",
-        });
-        pushCandidate({
-          url: `https://${companyHost}/newsroom`,
-          type: "newsroom",
-          priority: 9,
-          label: "Company newsroom",
-          domain: companyHost,
-          signal: "Official launches, partnerships, and strategic updates.",
-        });
-        pushCandidate({
-          url: `https://${companyHost}/press`,
+          url: `${companyOrigin}/press`,
           type: "newsroom",
           priority: 8,
           label: "Company press",
@@ -282,7 +924,7 @@ function buildPlannerCandidatePool(
           signal: "Official press releases and launch announcements.",
         });
         pushCandidate({
-          url: `https://${companyHost}/blog`,
+          url: `${companyOrigin}/blog`,
           type: "blog",
           priority: 8,
           label: "Company blog",
@@ -290,15 +932,7 @@ function buildPlannerCandidatePool(
           signal: "Long-form product, engineering, and leadership content.",
         });
         pushCandidate({
-          url: `https://${companyHost}/engineering`,
-          type: "blog",
-          priority: 8,
-          label: "Engineering blog or engineering landing page",
-          domain: companyHost,
-          signal: "Official product and technical context tied to execution realities.",
-        });
-        pushCandidate({
-          url: `https://${companyHost}/leadership`,
+          url: `${companyOrigin}/leadership`,
           type: "custom_url",
           priority: 8,
           label: "Leadership page",
@@ -306,7 +940,7 @@ function buildPlannerCandidatePool(
           signal: "Leadership bios and executive context for stakeholder mapping.",
         });
         pushCandidate({
-          url: `https://${companyHost}/team`,
+          url: `${companyOrigin}/team`,
           type: "custom_url",
           priority: 7,
           label: "Team page",
@@ -314,7 +948,7 @@ function buildPlannerCandidatePool(
           signal: "Role-context and team topology evidence.",
         });
         pushCandidate({
-          url: `https://${companyHost}/about`,
+          url: `${companyOrigin}/about`,
           type: "custom_url",
           priority: 6,
           label: "About page",
@@ -323,6 +957,10 @@ function buildPlannerCandidatePool(
         });
       }
     }
+  }
+
+  for (const candidate of discoveredCandidates) {
+    pushCandidate(candidate);
   }
 
   for (const url of customUrls) {
@@ -476,16 +1114,76 @@ function buildPlannerCandidatePool(
   return candidates;
 }
 
+function candidateMatchesSourceClass(candidate: PlannerCandidate, sourceClass: string): boolean {
+  const targetTerms = SOURCE_CLASS_TARGET_TERMS[sourceClass] ?? [];
+  if (targetTerms.length === 0) {
+    return false;
+  }
+
+  const haystack = `${candidate.label} ${candidate.signal} ${candidate.url}`.toLowerCase();
+  return targetTerms.some((term) => haystack.includes(term));
+}
+
+export async function buildTargetedSourceUrls(args: {
+  companyName: string;
+  roleTitle: string;
+  companyUrl?: string;
+  missingSourceClasses: string[];
+  maxSources?: number;
+  enableHomepageDiscovery?: boolean;
+}): Promise<string[]> {
+  const maxSources = args.maxSources ?? 6;
+  const discoveredCandidates = args.enableHomepageDiscovery === false ? [] : await discoverFirstPartyCandidates(args.companyUrl);
+  const candidatePool = buildPlannerCandidatePool(args.companyName, args.roleTitle, args.companyUrl, [], discoveredCandidates);
+  const prioritized = [...candidatePool].sort((left, right) => right.priority - left.priority);
+  const selected: string[] = [];
+
+  const pushUrl = (url: string | undefined) => {
+    if (!url || selected.includes(url)) {
+      return;
+    }
+
+    selected.push(url);
+  };
+
+  for (const sourceClass of args.missingSourceClasses) {
+    for (const candidate of prioritized) {
+      if (!candidateMatchesSourceClass(candidate, sourceClass)) {
+        continue;
+      }
+
+      pushUrl(candidate.url);
+      if (selected.length >= maxSources) {
+        return selected;
+      }
+    }
+  }
+
+  if (selected.length < maxSources) {
+    for (const candidate of prioritized) {
+      pushUrl(candidate.url);
+      if (selected.length >= maxSources) {
+        break;
+      }
+    }
+  }
+
+  return selected;
+}
+
 async function planResearchTargets(
   companyName: string,
   roleTitle: string,
   companyUrl?: string,
   customUrls: string[] = [],
-  jobDescription?: string
+  jobDescription?: string,
+  profileContext?: string
 ): Promise<ResearchPlan> {
-  const candidatePool = buildPlannerCandidatePool(companyName, roleTitle, companyUrl, customUrls);
+  const discoveredCandidates = await discoverFirstPartyCandidates(companyUrl);
+  const candidatePool = buildPlannerCandidatePool(companyName, roleTitle, companyUrl, customUrls, discoveredCandidates);
   const companyDomain = companyUrl ? getHostname(companyUrl) : null;
-  const fallbackQueries = buildFallbackRetrievalQueries(companyName, roleTitle, jobDescription);
+  const persona = inferPremiumPersona(roleTitle, jobDescription, profileContext);
+  const fallbackQueries = buildFallbackRetrievalQueries(companyName, roleTitle, jobDescription, profileContext);
   const fallbackSources = [...candidatePool]
     .sort((left, right) => right.priority - left.priority)
     .filter((candidate, index, list) => index === list.findIndex((entry) => entry.url === candidate.url))
@@ -515,6 +1213,8 @@ Role: ${roleTitle}
 Company URL: ${companyUrl ?? "UNKNOWN"}
 Job description excerpt: ${(jobDescription ?? "").slice(0, 1200) || "NONE"}
 
+${formatPersonaForPrompt(persona)}
+
 Candidate source pool:
 ${candidatePool.map((candidate, index) => `${index + 1}. ${candidate.label}\n   url: ${candidate.url}\n   domain: ${candidate.domain}\n   type: ${candidate.type}\n   priority: ${candidate.priority}\n   signal: ${candidate.signal}`).join("\n")}
 
@@ -526,6 +1226,7 @@ Rules:
 - Use custom URLs if they are relevant.
 - Selected source type must be one of: company_homepage, newsroom, blog, custom_url.
 - Retrieval queries must be optimized for vector retrieval and cover: strategy/business model, role charter, investor or monetization context, leadership/operating style, role-context/stakeholders, and why-now.
+- Retrieval queries and source selection must adapt to the inferred persona. For engineering, design, data/ML, GTM, operations, and executive roles, do not default to product-style priorities.
 
 Return only valid JSON in this shape:
 {
@@ -630,7 +1331,8 @@ export async function buildSourceUrls(
   roleTitle: string,
   companyUrl?: string,
   customUrls: string[] = [],
-  jobDescription?: string
+  jobDescription?: string,
+  profileContext?: string
 ): Promise<ResearchPlan> {
-  return planResearchTargets(companyName, roleTitle, companyUrl, customUrls, jobDescription);
+  return planResearchTargets(companyName, roleTitle, companyUrl, customUrls, jobDescription, profileContext);
 }

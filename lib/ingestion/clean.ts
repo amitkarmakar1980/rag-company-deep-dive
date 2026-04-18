@@ -1,7 +1,11 @@
 // Simple text cleaning for ingestion
 
+export function sanitizeTextForStorage(value: string): string {
+  return value.replace(/\u0000/g, "");
+}
+
 export function cleanContent(rawHtml: string): string {
-  let text = rawHtml;
+  let text = sanitizeTextForStorage(rawHtml);
 
   // Remove script and style tags
   text = text.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");

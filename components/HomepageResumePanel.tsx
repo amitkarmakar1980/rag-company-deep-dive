@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { ResumeProfileIcon } from "@/components/ResumeProfileIcon";
 import { useResumeStore } from "@/lib/hooks/useResumeStore";
 
 export function HomepageResumePanel() {
@@ -66,11 +67,15 @@ export function HomepageResumePanel() {
     return (
       <div className="border border-[#22d3ee]/25 bg-[#22d3ee]/8 rounded-xl px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-[#22d3ee]/15 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-[#22d3ee]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
+          <ResumeProfileIcon
+            containerClassName="w-8 h-8 rounded-lg bg-[#22d3ee]/15 flex items-center justify-center flex-shrink-0"
+            cardClassName="relative h-[18px] w-[14px] rounded-[5px] border border-[#66d7ea]/45 bg-[#0f172a] shadow-[0_1px_3px_rgba(8,15,37,0.32)]"
+            lineClassName="bg-[#6dd3eb]/45"
+            photoFrameClassName="absolute left-[2px] top-[2px] h-[7px] w-[7px] overflow-hidden rounded-[3px] border border-[#67e8f9]/45"
+            photoBackgroundClassName="absolute inset-0 bg-[linear-gradient(180deg,#10394a_0%,#1d5f77_100%)]"
+            photoHeadClassName="absolute left-1/2 top-[1px] h-[3px] w-[3px] -translate-x-1/2 rounded-full bg-[#9be7f3]"
+            photoBodyClassName="absolute bottom-0 left-1/2 h-[4px] w-[5px] -translate-x-1/2 rounded-t-full bg-[#67e8f9]"
+          />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white">
               Resume saved

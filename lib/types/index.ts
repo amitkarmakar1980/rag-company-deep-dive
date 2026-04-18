@@ -124,6 +124,9 @@ export interface ReportSection {
     source_id: string;
     url?: string;
     title: string;
+    source_type?: string;
+    evidence_tier?: "primary" | "fallback_third_party";
+    evidence_label?: string;
   }>;
 }
 

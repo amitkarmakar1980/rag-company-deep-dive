@@ -16,6 +16,7 @@ import {
   PremiumSectionContent,
   PremiumSectionKey,
 } from "@/lib/report/premiumTypes";
+import { buildReportCitations } from "@/lib/report/citationMetadata";
 
 interface PremiumEvidenceQuality {
   raw_chunk_count: number;
@@ -91,22 +92,43 @@ function wrapSection(
   fallbackGroup: PremiumSectionContent["group"],
   fallbackSurface: PremiumSectionContent["surface"]
 ): PremiumSectionContent {
+  const normalizeCitationStyle = (text: string | undefined): string | undefined => {
+    if (!text) {
+      return text;
+    }
+
+    return text.replace(/\b[Ss]ource\s+(\d+)\b/g, "[$1]");
+  };
+
   return {
     schema: "premium_section_v1",
     group: fallbackGroup,
     surface: fallbackSurface,
     question: fallbackQuestion,
-    summary: generated.summary || "INSUFFICIENT_EVIDENCE",
-    callouts: generated.callouts,
-    facts: generated.facts,
-    bullets: generated.bullets,
-    blocks: generated.blocks,
+    summary: normalizeCitationStyle(generated.summary) || "INSUFFICIENT_EVIDENCE",
+    callouts: generated.callouts?.map((callout) => ({
+      ...callout,
+      label: normalizeCitationStyle(callout.label) || callout.label,
+      value: normalizeCitationStyle(callout.value) || callout.value,
+    })),
+    facts: generated.facts?.map((fact) => ({
+      ...fact,
+      label: normalizeCitationStyle(fact.label) || fact.label,
+      value: normalizeCitationStyle(fact.value) || fact.value,
+    })),
+    bullets: generated.bullets?.map((bullet) => normalizeCitationStyle(bullet) || bullet),
+    blocks: generated.blocks?.map((block) => ({
+      ...block,
+      title: normalizeCitationStyle(block.title) || block.title,
+      body: normalizeCitationStyle(block.body),
+      bullets: block.bullets?.map((bullet) => normalizeCitationStyle(bullet) || bullet),
+    })),
     evidence: generated.evidence
       ? {
-          threshold: generated.evidence.threshold || "See report generation spec",
+          threshold: normalizeCitationStyle(generated.evidence.threshold) || "See report generation spec",
           status: generated.evidence.status || "partial",
           confidence: generated.evidence.confidence || "suppressed",
-          note: generated.evidence.note || "Confidence is suppressed because the evidence bar was not explicitly met.",
+          note: normalizeCitationStyle(generated.evidence.note) || "Confidence is suppressed because the evidence bar was not explicitly met.",
         }
       : undefined,
   };
@@ -265,11 +287,7 @@ export async function assemblePremiumReport(
     }
   );
 
-  const citations = context.chunks.map((chunk) => ({
-    source_id: chunk.source_id,
-    url: chunk.source_url,
-    title: chunk.source_title,
-  }));
+  const citations = buildReportCitations(context.chunks, request.company_url ?? undefined);
 
   for (const [index, sectionDefinition] of PREMIUM_SECTION_DEFINITIONS.entries()) {
     const content = sectionDefinition.key === "operations_and_cost"

@@ -1,51 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { config as loadEnv } from 'dotenv';
-import { createClient } from '@supabase/supabase-js';
-
-loadEnv({ path: '.env.local' });
-
-// Utility to generate random emails for isolation
-function randomEmail() {
-  return `user${Math.random().toString(36).substring(2, 10)}@mailinator.com`;
-}
-
-function getTestSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !serviceRoleKey) {
-    throw new Error('Missing Supabase admin credentials for acceptance tests.');
-  }
-
-  return createClient(url, serviceRoleKey);
-}
-
-async function ensureConfirmedUser(email: string, password: string) {
-  const supabaseAdmin = getTestSupabaseAdmin();
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  });
-
-  if (error && !/already|exists|registered/i.test(error.message)) {
-    throw error;
-  }
-
-  if (data?.user?.id) {
-    await supabaseAdmin
-      .from('users')
-      .upsert({ id: data.user.id, email }, { onConflict: 'id', ignoreDuplicates: true });
-  }
-}
-
-async function signInSeededUser(page: import('@playwright/test').Page, email: string, password: string) {
-  await ensureConfirmedUser(email, password);
-  await page.goto('/auth');
-  await page.fill('input[type=email]', email);
-  await page.fill('input[type=password]', password);
-  await page.getByRole('button', { name: 'Sign In' }).click();
-}
+import { randomTestEmail, signInSeededUser } from './support/testAccounts';
 
 // Test 1: Sign up User A, create deep dive, verify in history
 // Test 2: Sign up User B, confirm cannot access User A's report
@@ -58,8 +12,8 @@ async function signInSeededUser(page: import('@playwright/test').Page, email: st
 test.describe('Alpha Acceptance Suite', () => {
   test.setTimeout(300_000);
 
-  let userA = { email: randomEmail(), password: 'TestPass123!' };
-  let userB = { email: randomEmail(), password: 'TestPass123!' };
+  let userA = { email: randomTestEmail('alpha-user-a'), password: 'TestPass123!' };
+  let userB = { email: randomTestEmail('alpha-user-b'), password: 'TestPass123!' };
   let userAReportId: string;
 
   test('Sign up User A, create deep dive, verify in history', async ({ page }) => {

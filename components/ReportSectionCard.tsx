@@ -1,6 +1,7 @@
 "use client";
 
 import { StructuredReport } from "@/lib/types";
+import { isFallbackThirdPartyCitation, type ReportCitation } from "@/lib/report/citationMetadata";
 import { normalizeHttpUrl } from "@/lib/report/sourceLinks";
 import { SectionShell, BulletList, ProseBlock, ConfidencePill, type ProvenanceType } from "./report/SectionShell";
 import { ExecutiveSummarySection } from "./report/ExecutiveSummary";
@@ -15,11 +16,7 @@ import { LikelyInterviewAgenda } from "./report/LikelyInterviewAgenda";
 import { UnknownsToValidate } from "./report/UnknownsToValidate";
 import { EvidenceContractCard } from "./report/EvidenceContractCard";
 
-interface Citation {
-  source_id: string;
-  url?: string;
-  title: string;
-}
+type Citation = ReportCitation;
 
 interface ReportSectionCardProps {
   sectionKey: string;
@@ -465,6 +462,7 @@ function CitationList({ citations }: { citations: Citation[] }) {
   const unique = Array.from(
     new Map(citations.map((c) => [c.source_id, c])).values()
   ).filter((c) => c.title && normalizeHttpUrl(c.url));
+  const fallbackCount = unique.filter((citation) => isFallbackThirdPartyCitation(citation)).length;
 
   if (unique.length === 0) return null;
 
@@ -473,9 +471,14 @@ function CitationList({ citations }: { citations: Citation[] }) {
       <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
         Sources Used
       </h3>
+      {fallbackCount ? (
+        <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+          Fallback third-party sources are labeled below and should be read as supporting evidence, not primary company evidence.
+        </p>
+      ) : null}
       <ul className="space-y-1" role="list">
         {unique.map((c, i) => (
-          <li key={i} className="text-xs">
+          <li key={i} className="space-y-1 text-xs">
             {normalizeHttpUrl(c.url) ? (
               <a
                 href={normalizeHttpUrl(c.url)!}
@@ -488,6 +491,13 @@ function CitationList({ citations }: { citations: Citation[] }) {
             ) : (
               <span className="text-gray-400">{c.title}</span>
             )}
+            {c.evidence_label ? (
+              <div>
+                <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-amber-800">
+                  {c.evidence_label}
+                </span>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>

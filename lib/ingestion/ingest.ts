@@ -1,5 +1,5 @@
-import { buildSourceUrls, fetchPageWithFirecrawl, ResearchPlan } from "./firecrawl";
-import { cleanContent, calculateContentHash } from "./clean";
+import { buildSourceUrls, fetchResolvedPlannedSource, ResearchPlan } from "./firecrawl";
+import { cleanContent, calculateContentHash, sanitizeTextForStorage } from "./clean";
 import { chunkContent } from "./chunk";
 import { generateEmbeddings } from "@/lib/ai/embeddings";
 import {
@@ -75,29 +75,33 @@ export async function ingestSources(
       roleTitle,
       companyUrl,
       customUrls,
-      jobDescription
+      jobDescription,
+      profileContext
     );
     console.log(`[Ingest] Research plan: ${researchPlan.strategySummary}`);
     console.log(`[Ingest] Planned web sources=${researchPlan.selectedSources.length} retrievalQueries=${researchPlan.retrievalQueries.length}`);
 
     // Fetch all web sources in parallel
     const fetchResults = await Promise.allSettled(
-      researchPlan.selectedSources.map((urlSource) =>
-        fetchPageWithFirecrawl(urlSource.url).then((response) => ({ urlSource, response }))
-      )
+      researchPlan.selectedSources.map((urlSource) => fetchResolvedPlannedSource(urlSource))
     );
+
+    const seenFetchedUrls = new Set<string>();
 
     for (const result of fetchResults) {
       if (result.status === "rejected") continue;
-      const { urlSource, response } = result.value;
-      const pageContent = response.data?.markdown || (response.data as any)?.content;
-      if (response.success && pageContent) {
+      for (const resolvedSource of result.value) {
+        if (seenFetchedUrls.has(resolvedSource.url)) {
+          continue;
+        }
+
+        seenFetchedUrls.add(resolvedSource.url);
         sources.push({
-          type: urlSource.type as any,
-          content: pageContent,
-          title: response.data?.metadata?.title || urlSource.url,
-          url: urlSource.url,
-          priority: urlSource.priority,
+          type: resolvedSource.type as any,
+          content: resolvedSource.content,
+          title: resolvedSource.title,
+          url: resolvedSource.url,
+          priority: resolvedSource.priority,
         });
       }
     }
@@ -135,7 +139,8 @@ async function processSource(
   companyId: string,
   sourceInput: SourceInput
 ): Promise<{ sourcesCreated: number; chunksCreated: number }> {
-  const cleanedContent = cleanContent(sourceInput.content);
+  const sanitizedRawContent = sanitizeTextForStorage(sourceInput.content);
+  const cleanedContent = cleanContent(sanitizedRawContent);
 
   if (!cleanedContent.trim()) {
     console.warn("Source produced no content after cleaning:", sourceInput.url);
@@ -150,7 +155,7 @@ async function processSource(
     requestId,
     sourceInput.type,
     sourceInput.title,
-    sourceInput.content,
+    sanitizedRawContent,
     cleanedContent,
     contentHash,
     sourceInput.url,

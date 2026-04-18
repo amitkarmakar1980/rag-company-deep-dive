@@ -102,6 +102,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No existing resume found for this request" }, { status: 404 });
     }
 
+    const { data: existingResume } = await supabaseAdmin
+      .from("candidate_resumes")
+      .select("raw_text")
+      .eq("id", existingOverlay.resume_id)
+      .single();
+
+    if (existingResume?.raw_text?.trim()) {
+      await supabaseAdmin
+        .from("deep_dive_requests")
+        .update({ profile_context: existingResume.raw_text.trim() })
+        .eq("id", requestId);
+    }
+
     // Create a new overlay from the existing resume record
     const { data: overlay, error: overlayErr } = await supabaseAdmin
       .from("candidate_overlays")
@@ -135,6 +148,11 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  await supabaseAdmin
+    .from("deep_dive_requests")
+    .update({ profile_context: resumeText.trim() })
+    .eq("id", requestId);
 
   // Create resume record
   const { data: resume, error: resumeErr } = await supabaseAdmin

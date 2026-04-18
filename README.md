@@ -91,7 +91,7 @@ Planner-selected topic query embedding
 | Styling | Tailwind CSS |
 | Database | Supabase PostgreSQL + pgvector |
 | Auth | Supabase Auth (email/password + Google OAuth) |
-| LLM | OpenAI (`o4-mini`, `gpt-4o`, `gpt-4o-mini`, `text-embedding-3-small`) |
+| LLM | OpenAI-compatible providers with automatic fallback (`o3`, `o4-mini`, `gpt-4o`, `gpt-4o-mini`, `text-embedding-3-small`) |
 | Web scraping | Firecrawl v2 API (axios fallback) |
 | File parsing | pdf-parse (v1), mammoth (DOCX/DOC) |
 | Resume persistence | localStorage (`useResumeStore` hook) |
@@ -230,6 +230,9 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 # OpenAI
 OPENAI_API_KEY=
+OPENAI_BASE_URL=
+OPENAI_FALLBACK_API_KEY=
+OPENAI_FALLBACK_BASE_URL=
 
 # Firecrawl (optional)
 FIRECRAWL_API_KEY=

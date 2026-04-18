@@ -51,15 +51,6 @@ function ArrowRightOnRectangleIcon({ className }: { className?: string }) {
   );
 }
 
-function UserBadgeIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className ?? "h-4 w-4"}>
-      <circle cx="12" cy="8" r="3.25" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5.5 18.25a6.5 6.5 0 0 1 13 0" />
-    </svg>
-  );
-}
-
 function Bars3Icon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className={className ?? "h-5 w-5"}>
@@ -78,6 +69,74 @@ function XMarkIcon({ className }: { className?: string }) {
 
 function NavLabel({ icon, label, labelClassName }: { icon: ReactNode; label: string; labelClassName?: string }) {
   return <span className="inline-flex items-center gap-1.5">{icon}<span className={labelClassName}>{label}</span></span>;
+}
+
+function getUserDisplayName(user: User | null): string {
+  if (!user) {
+    return "User";
+  }
+
+  return user.user_metadata?.full_name || user.user_metadata?.name || user.email || "User";
+}
+
+function getUserAvatarUrl(user: User | null): string | null {
+  if (!user) {
+    return null;
+  }
+
+  const metadata = user.user_metadata ?? {};
+  return metadata.avatar_url || metadata.picture || null;
+}
+
+function getUserInitials(user: User | null): string {
+  const displayName = getUserDisplayName(user).trim();
+  if (!displayName) {
+    return "U";
+  }
+
+  const parts = displayName.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) {
+    return parts[0].slice(0, 1).toUpperCase();
+  }
+
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
+function UserIdentity({ user, mobile = false }: { user: User | null; mobile?: boolean }) {
+  const avatarUrl = getUserAvatarUrl(user);
+  const displayName = getUserDisplayName(user);
+  const initials = getUserInitials(user);
+  const avatarSize = mobile ? "h-9 w-9" : "h-8 w-8";
+  const labelClassName = mobile ? "text-stone-100" : "text-stone-200";
+
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2.5">
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={`${displayName} profile photo`}
+          referrerPolicy="no-referrer"
+          className={`${avatarSize} rounded-full border border-white/15 object-cover shadow-[0_6px_16px_rgba(0,0,0,0.24)]`}
+        />
+      ) : (
+        <span
+          className={`${avatarSize} inline-flex items-center justify-center rounded-full border border-[#22d3ee]/30 bg-[#22d3ee]/12 text-[0.72rem] font-semibold tracking-[0.08em] text-[#b6f3ff]`}
+          aria-hidden
+        >
+          {initials}
+        </span>
+      )}
+      <span className={`truncate ${labelClassName}`}>{displayName}</span>
+    </span>
+  );
+}
+
+function NavDivider({ mobile = false }: { mobile?: boolean }) {
+  return mobile ? (
+    <div className="mx-1 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" aria-hidden />
+  ) : (
+    <span className="h-6 w-px bg-white/30 shadow-[0_0_0_1px_rgba(255,255,255,0.05)]" aria-hidden />
+  );
 }
 
 export function Header() {
@@ -127,13 +186,6 @@ export function Header() {
           <nav className="hidden items-center gap-6 sm:flex">
           {user ? (
             <>
-              <span className="hidden text-sm text-stone-200 sm:block">
-                <NavLabel
-                  icon={<UserBadgeIcon className="h-4 w-4 text-[#22d3ee]" />}
-                  label={user.user_metadata?.name || user.email || "User"}
-                  labelClassName="text-stone-200"
-                />
-              </span>
               <Link href="/deep-dive/new" className="text-sm text-stone-100 hover:text-[#22d3ee] transition-colors">
                 <NavLabel
                   icon={<PencilSquareIcon className="h-4 w-4 text-[#a5b4fc]" />}
@@ -141,6 +193,7 @@ export function Header() {
                   labelClassName="text-stone-100"
                 />
               </Link>
+              <NavDivider />
               <Link href="/history" className="text-sm text-stone-100 hover:text-[#22d3ee] transition-colors">
                 <NavLabel
                   icon={<ClockIcon className="h-4 w-4 text-[#22d3ee]" />}
@@ -149,24 +202,33 @@ export function Header() {
                 />
               </Link>
               {isAdmin(user.email) && (
-                <Link href="/admin" className="text-sm text-stone-100 hover:text-[#22d3ee] transition-colors">
+                <>
+                  <NavDivider />
+                  <Link href="/admin" className="text-sm text-stone-100 hover:text-[#22d3ee] transition-colors">
+                    <NavLabel
+                      icon={<ShieldIcon className="h-4 w-4 text-[#a5b4fc]" />}
+                      label="Admin"
+                      labelClassName="text-stone-100"
+                    />
+                  </Link>
+                </>
+              )}
+              <NavDivider />
+              <span className="inline-flex items-center gap-3">
+                <span className="hidden max-w-[16rem] text-sm text-stone-200 sm:block">
+                  <UserIdentity user={user} />
+                </span>
+                <button
+                  onClick={handleSignOut}
+                  className="text-sm text-stone-100 hover:text-rose-200 transition-colors"
+                >
                   <NavLabel
-                    icon={<ShieldIcon className="h-4 w-4 text-[#a5b4fc]" />}
-                    label="Admin"
+                    icon={<ArrowRightOnRectangleIcon className="h-4 w-4 text-rose-300" />}
+                    label="Sign out"
                     labelClassName="text-stone-100"
                   />
-                </Link>
-              )}
-              <button
-                onClick={handleSignOut}
-                className="text-sm text-stone-100 hover:text-rose-200 transition-colors"
-              >
-                <NavLabel
-                  icon={<ArrowRightOnRectangleIcon className="h-4 w-4 text-rose-300" />}
-                  label="Sign out"
-                  labelClassName="text-stone-100"
-                />
-              </button>
+                </button>
+              </span>
             </>
           ) : (
             <Link
@@ -188,11 +250,20 @@ export function Header() {
               {user ? (
                 <>
                   <div className="rounded-xl border border-white/8 bg-white/[0.04] px-3 py-3 text-sm text-stone-200">
-                    <NavLabel
-                      icon={<UserBadgeIcon className="h-4 w-4 text-[#22d3ee]" />}
-                      label={user.user_metadata?.name || user.email || "User"}
-                      labelClassName="text-stone-200"
-                    />
+                    <div className="flex items-center justify-between gap-3">
+                      <UserIdentity user={user} mobile />
+                      <button
+                        type="button"
+                        onClick={handleSignOut}
+                        className="shrink-0 rounded-lg px-2 py-2 text-left text-sm text-stone-100 transition-colors hover:bg-white/[0.06] hover:text-rose-200"
+                      >
+                        <NavLabel
+                          icon={<ArrowRightOnRectangleIcon className="h-4 w-4 text-rose-300" />}
+                          label="Sign out"
+                          labelClassName="text-stone-100"
+                        />
+                      </button>
+                    </div>
                   </div>
                   <Link
                     href="/deep-dive/new"
@@ -204,6 +275,7 @@ export function Header() {
                       labelClassName="text-stone-100"
                     />
                   </Link>
+                  <NavDivider mobile />
                   <Link
                     href="/history"
                     className="rounded-xl px-3 py-3 text-sm text-stone-100 transition-colors hover:bg-white/[0.06] hover:text-[#22d3ee]"
@@ -215,28 +287,20 @@ export function Header() {
                     />
                   </Link>
                   {isAdmin(user.email) && (
-                    <Link
-                      href="/admin"
-                      className="rounded-xl px-3 py-3 text-sm text-stone-100 transition-colors hover:bg-white/[0.06] hover:text-[#22d3ee]"
-                    >
-                      <NavLabel
-                        icon={<ShieldIcon className="h-4 w-4 text-[#a5b4fc]" />}
-                        label="Admin"
-                        labelClassName="text-stone-100"
-                      />
-                    </Link>
+                    <>
+                      <NavDivider mobile />
+                      <Link
+                        href="/admin"
+                        className="rounded-xl px-3 py-3 text-sm text-stone-100 transition-colors hover:bg-white/[0.06] hover:text-[#22d3ee]"
+                      >
+                        <NavLabel
+                          icon={<ShieldIcon className="h-4 w-4 text-[#a5b4fc]" />}
+                          label="Admin"
+                          labelClassName="text-stone-100"
+                        />
+                      </Link>
+                    </>
                   )}
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="rounded-xl px-3 py-3 text-left text-sm text-stone-100 transition-colors hover:bg-white/[0.06] hover:text-rose-200"
-                  >
-                    <NavLabel
-                      icon={<ArrowRightOnRectangleIcon className="h-4 w-4 text-rose-300" />}
-                      label="Sign out"
-                      labelClassName="text-stone-100"
-                    />
-                  </button>
                 </>
               ) : (
                 <Link

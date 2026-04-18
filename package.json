@@ -6,6 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:prompt-assembly": "npx tsx --test tests/prompt-assembly.test.ts",
+    "test:e2e": "npx playwright test",
+    "test:cleanup": "npx tsx tests/cleanup-test-accounts.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

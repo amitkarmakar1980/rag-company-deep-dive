@@ -99,6 +99,7 @@ export async function GET(
       personaQa: report.summary_json?.persona_qa ?? null,
       qualityGate: report.summary_json?.quality_gate ?? null,
       personaProfile: report.summary_json?.persona_profile ?? null,
+      researchPlan: report.summary_json?.research_plan ?? null,
       presentationPlan,
       createdAt: report.created_at,
       company: {

@@ -171,7 +171,27 @@ test("targeted reretrieval source urls prioritize source classes needed for arch
 
   assert.ok(urls.length > 0);
   assert.ok(urls.some((url) => /uber\.com\/investors|google\.com\/search\?q=.*investor|google\.com\/search\?q=.*leadership/i.test(url)));
-  assert.ok(urls.some((url) => /uber\.com\/blog|uber\.com\/pricing|google\.com\/search\?q=.*product/i.test(url)));
+  assert.ok(urls.some((url) => /strategic priorities|engineering blog|site:uber\.com.*newsroom/i.test(decodeURIComponent(url))));
+});
+
+test("targeted reretrieval source urls pull deeper company-strategy artifacts for weak strategy evidence", async () => {
+  const coverage = makeCoverage();
+  coverage.total_sources = 8;
+  coverage.distinct_hosts = 4;
+  coverage.primary_sources_used = 4;
+  coverage.persona_source_class_audit.missingMandatory = [];
+
+  const urls = await buildTargetedReretrievalSourceUrls({
+    companyName: "Uber",
+    roleTitle: "Lead Product Manager, In-App Recording (Safety)",
+    companyUrl: "https://www.uber.com",
+    qualityGate: makeWeakEvidenceQualityGate(),
+    coverage,
+    enableHomepageDiscovery: false,
+  });
+
+  assert.ok(urls.some((url) => /uber\.com\/investors|google\.com\/search\?q=.*site:sec\.gov.*uber.*10-k|google\.com\/search\?q=.*investor/i.test(url)));
+  assert.ok(urls.some((url) => /strategic priorities|capital allocation|leadership interview|site:uber\.com.*newsroom/i.test(decodeURIComponent(url))));
 });
 
 test("targeted reretrieval queries add company-strategy and interview-specific probes for weak-evidence partial releases", () => {

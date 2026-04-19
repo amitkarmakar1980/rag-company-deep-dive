@@ -8,6 +8,8 @@ import { SourcesPanel } from "@/components/report/SourcesPanel";
 import { CitationResourcesPanel } from "@/components/report/CitationResourcesPanel";
 import { ResumeUploadPanel } from "@/components/report/ResumeUploadPanel";
 import { PremiumReportView } from "@/components/report/PremiumReportView";
+import { SourceStrategyPanel, type SourceStrategyResearchPlan } from "@/components/report/SourceStrategyPanel";
+import { SourceStrategyFeedback } from "@/components/report/SourceStrategyFeedback";
 import { getCanonicalRecommendation } from "@/lib/report/recommendation";
 import {
   CandidateRoleMatchSection,
@@ -71,6 +73,7 @@ interface Report {
     publishedAt?: string;
   }>;
   tokenUsage: ReportTokenUsage | null;
+  researchPlan?: SourceStrategyResearchPlan | null;
   createdAt: string;
   company: {
     name: string;
@@ -98,6 +101,7 @@ interface RequestStatus {
     type: string;
     url?: string | null;
   }>;
+  researchPlan?: SourceStrategyResearchPlan | null;
   progress?: {
     stage: "synthesizing" | "writing_sections" | "finalizing";
     completedSections: number;
@@ -1267,11 +1271,13 @@ function ProcessingScreen({
   progress,
   requestMeta,
   requestSources,
+  researchPlan,
 }: {
   statusKey: string;
   progress?: RequestStatus["progress"];
   requestMeta?: RequestStatus["requestMeta"];
   requestSources?: RequestStatus["requestSources"];
+  researchPlan?: SourceStrategyResearchPlan | null;
 }) {
   const label = progress?.headline ?? STATUS_LABELS[statusKey] ?? "Generating report...";
   const detail = progress?.detail;
@@ -1336,6 +1342,18 @@ function ProcessingScreen({
           {crawlTargets.length > 0 ? (
             <div className="xl:col-span-2">
               <CrawlMapGraph crawlTargets={crawlTargets} progressPercent={displayProgressValue} />
+            </div>
+          ) : null}
+
+          {researchPlan ? (
+            <div className="xl:col-span-2">
+              <SourceStrategyPanel
+                researchPlan={researchPlan}
+                eyebrow="Planned Sources"
+                title="Source strategy for this run"
+                description="This is the generated source list the pipeline is using to deepen company strategy before the report is written."
+                compact
+              />
             </div>
           ) : null}
 
@@ -1872,6 +1890,7 @@ export default function ReportPage() {
           progress={status.progress}
           requestMeta={status.requestMeta}
           requestSources={status.requestSources}
+          researchPlan={status.researchPlan}
         />
       </main>
     );
@@ -2104,10 +2123,11 @@ export default function ReportPage() {
     sectionByKey.why_role_exists_now && visibleSections("why_role_exists_now")
       ? { id: "why_role_exists_now", label: sectionByKey.why_role_exists_now.title, group: "Strategic Context" }
       : null,
-    hasCredibilityFlow ? { id: "how-this-was-built", label: "How This Brief Was Built", group: "Credibility" } : null,
     hasCredibilityFlow && hasValidCitations ? { id: "citations", label: "Citations", group: "Credibility" } : null,
+    hasCredibilityFlow ? { id: "how-this-was-built", label: "How This Brief Was Built", group: "Credibility" } : null,
     hasCredibilityFlow ? { id: "ai-activity", label: "AI Activity", group: "Credibility" } : null,
     hasCredibilityFlow && report.sources.length > 0 ? { id: "sources", label: "Evidence Sources", group: "Credibility" } : null,
+    report.researchPlan ? { id: "source-strategy-catalog", label: "Source Strategy Catalog", group: "Credibility" } : null,
   ]
     .flat()
     .filter((item): item is { id: string; label: string; group: string } => Boolean(item));
@@ -2358,10 +2378,6 @@ export default function ReportPage() {
 
     return (
       <>
-        <div className="mt-9 sm:mt-10">
-          <CitationResourcesPanel sections={report.sections} sources={report.sources} onBackToTop={scrollReportToTop} />
-        </div>
-
         <div className="mt-9 sm:mt-10">
           <section id="ai-activity" className="rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:rounded-[30px] sm:px-6 sm:py-6">
             <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -2759,6 +2775,12 @@ export default function ReportPage() {
                 {renderBaseSection("role_swot")}
                 {renderBaseSection("why_role_exists_now")}
 
+                {hasCredibilityFlow && hasValidCitations && (
+                  <div className="mt-9 sm:mt-10">
+                    <CitationResourcesPanel sections={report.sections} sources={report.sources} onBackToTop={scrollReportToTop} />
+                  </div>
+                )}
+
                 {hasCredibilityFlow && (
                   <>
                     <SectionGroupLabel
@@ -2806,6 +2828,16 @@ export default function ReportPage() {
               </div>
 
               <section className="mt-10 rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:mt-12 sm:rounded-[30px] sm:px-6 sm:py-6">
+                {report.researchPlan ? (
+                  <div className="mb-8">
+                    <SourceStrategyPanel
+                      id="source-strategy-catalog"
+                      researchPlan={report.researchPlan}
+                      feedback={<SourceStrategyFeedback reportId={report.id} />}
+                    />
+                  </div>
+                ) : null}
+
                 <h2 className="text-2xl font-semibold tracking-[-0.04em] text-[#1c1713]">Was this brief useful overall?</h2>
                 {overallFeedback ? (
                   <p className="mt-3 text-sm text-[#9c8d81]" role="status" aria-live="polite">

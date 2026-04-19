@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
     // sectionKey is optional — null/omitted means report-level feedback
     const { reportId, sectionKey, feedbackType } = await req.json();
 
-    if (!["useful", "not_useful"].includes(feedbackType)) {
+    if (!["useful", "not_useful", "too_little", "just_right", "too_much"].includes(feedbackType)) {
       return NextResponse.json(
         { error: "Invalid feedback type" },
         { status: 400 }

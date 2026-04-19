@@ -281,7 +281,7 @@ test("cost ledger embeds quality gate state and release-stage telemetry", () => 
       total_ms: 700,
     },
     targetedRetrievalLoops: 1,
-  });
+  }) as Record<string, any>;
 
   assert.equal(ledger.quality_gate.release_decision, "approved_with_warnings");
   assert.equal(ledger.stages.release_gate.release_decision, "approved_with_warnings");

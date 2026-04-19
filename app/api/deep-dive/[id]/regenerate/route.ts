@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/db/supabase";
 import {
   getDeepDiveRequest,
   getReport,
+  updateDeepDiveRequestMetadata,
   updateDeepDiveStatus,
   deleteSourcesForRequest,
   getSourceCount,
@@ -57,11 +58,13 @@ export async function POST(
     }
 
     await updateDeepDiveStatus(requestId, "pending");
+  await updateDeepDiveRequestMetadata(requestId, { research_plan: null });
 
     after(
       (async () => {
         try {
           let plannerQueries: string[] | undefined;
+          let plannerResearchPlan: Awaited<ReturnType<typeof import("@/lib/ingestion/ingest")["ingestSources"]>>["researchPlan"] | undefined;
 
           if (sourceCount === 0) {
             // Stage 1: Re-ingest sources
@@ -84,12 +87,13 @@ export async function POST(
             }
 
             plannerQueries = result.researchPlan.retrievalQueries;
+            plannerResearchPlan = result.researchPlan;
           }
 
           // Stage 2: premium report generation
           await updateDeepDiveStatus(requestId, "generating_report");
           const { assemblePremiumReportV2 } = await import("@/lib/report/assemblePremiumReportV2");
-          await assemblePremiumReportV2(requestId, plannerQueries);
+          await assemblePremiumReportV2(requestId, plannerResearchPlan ?? plannerQueries);
           await updateDeepDiveStatus(requestId, "completed");
           console.log(`[Regenerate] Complete for requestId=${requestId}`);
         } catch (err) {

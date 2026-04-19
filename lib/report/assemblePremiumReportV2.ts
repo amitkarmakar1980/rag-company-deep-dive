@@ -11,7 +11,7 @@ import { supabaseAdmin } from "@/lib/db/supabase";
 import { generatePremiumEvaluation, generatePremiumReport } from "@/lib/ai/openai";
 import { getPremiumEvaluationPrompt } from "@/lib/ai/premiumEvaluationPrompt";
 import { getPremiumReportPromptV2 } from "@/lib/ai/premiumPromptsV2";
-import { buildTargetedSourceUrls } from "@/lib/ingestion/firecrawl";
+import { buildTargetedSourceUrls, type ResearchPlan } from "@/lib/ingestion/firecrawl";
 import { multiTopicSearch, rerank } from "@/lib/retrieval/search";
 import { Report, ReportTokenUsage, RetrievalContext, RecommendationType } from "@/lib/types";
 import {
@@ -459,6 +459,18 @@ export function resolveQualityGateForPersistence(
     const score = qualityGate.section_scores[key] ?? 0;
     return sections[key] && state !== "suppress" && score >= 55;
   }).length;
+  const recoverableStrategicCoreSections = ["company_role_strategy", "credibility_layer"] as const;
+  const recoverableStrategicCoreCount = recoverableStrategicCoreSections.filter((key) => {
+    const state = qualityGate.section_states[key];
+    const score = qualityGate.section_scores[key] ?? 0;
+    return sections[key] && state !== "suppress" && score >= 55;
+  }).length;
+  const recoverableDecisionSupportSections = ["five_minute_brief", "why_role_exists_now"] as const;
+  const recoverableDecisionSupportCount = recoverableDecisionSupportSections.filter((key) => {
+    const state = qualityGate.section_states[key];
+    const score = qualityGate.section_scores[key] ?? 0;
+    return sections[key] && state !== "suppress" && score >= 55;
+  }).length;
   const weakCriticalSections = ["company_role_strategy", "interview_prep", "how_to_win_this_process", "credibility_layer"] as const;
   const weakCriticalCount = weakCriticalSections.filter((key) => {
     const state = qualityGate.section_states[key];
@@ -471,14 +483,24 @@ export function resolveQualityGateForPersistence(
     return state !== "suppress" && score >= 55;
   }).length;
   const hasRecoverableBriefingSpine = recoverableBriefingSpineCount >= 2 && weakCriticalCount <= 1;
+  const hasRecoverableStrategicCore = recoverableStrategicCoreCount >= 2
+    && (recoverableDecisionSupportCount >= 1 || hasRecoverableDecisionMemo);
 
   if (
     hasFatalBlockedReason
     || !hasRecoverableDecisionMemo
-    || totalUsableSections < 4
-    || (viableSpineCount < 2 && !hasRecoverableBriefingSpine)
+      || totalUsableSections < 3
+      || (viableSpineCount < 2 && !hasRecoverableBriefingSpine && !hasRecoverableStrategicCore)
   ) {
-    return qualityGate;
+    return {
+      ...qualityGate,
+      release_decision: "suppress_and_release",
+      warning_flags: dedupeStrings([
+        ...qualityGate.warning_flags,
+        "Premium quality bar was not met; the report was still released with explicit low-confidence qualifiers in affected sections.",
+      ]),
+      reasoning_summary: `${qualityGate.reasoning_summary} Persisted as a low-confidence draft instead of failing generation.`,
+    };
   }
 
   return {
@@ -490,8 +512,6 @@ export function resolveQualityGateForPersistence(
     ]),
     reasoning_summary: `${qualityGate.reasoning_summary} Persisted as a degraded draft because the decision memo and briefing spine remained serviceable.`,
   };
-
-  return qualityGate;
 }
 
 export function ensureRequiredSectionsForPersistence(args: {
@@ -552,7 +572,7 @@ async function evaluateDraft(args: {
 
 export async function assemblePremiumReportV2(
   requestId: string,
-  retrievalQueries?: string[]
+  researchPlanOrQueries?: ResearchPlan | string[]
 ): Promise<Report | null> {
   const assemblyStartedAt = Date.now();
   const runId = randomUUID();
@@ -575,8 +595,14 @@ export async function assemblePremiumReportV2(
     .single();
   const companyName = company?.name ?? "the company";
 
-  let normalizedQueries = (retrievalQueries?.length
-    ? retrievalQueries
+  let latestResearchPlan = Array.isArray(researchPlanOrQueries)
+    ? null
+    : researchPlanOrQueries ?? null;
+  const initialQueryList = Array.isArray(researchPlanOrQueries)
+    ? researchPlanOrQueries
+    : researchPlanOrQueries?.retrievalQueries;
+  let normalizedQueries = (initialQueryList && initialQueryList.length > 0
+    ? initialQueryList
     : buildPersonaAwareRetrievalQueries(companyName, request.role_title, request.job_description ?? undefined, persona)
   ).filter((query, index, list) => query.trim().length > 0 && list.indexOf(query) === index);
 
@@ -686,6 +712,7 @@ export async function assemblePremiumReportV2(
         );
 
         if (ingestResult.success) {
+          latestResearchPlan = ingestResult.researchPlan;
           normalizedQueries = dedupeStrings([...targetedQueries, ...ingestResult.researchPlan.retrievalQueries]);
         }
         await updateDeepDiveStatus(requestId, "generating_report");
@@ -714,14 +741,6 @@ export async function assemblePremiumReportV2(
   }
 
   const resolvedQualityGate = resolveQualityGateForPersistence(qualityGate, wrappedSections);
-  if (resolvedQualityGate.release_decision === "blocked") {
-    throw new Error(
-      resolvedQualityGate.blocked_release_reasons.length
-        ? `Premium quality gate blocked release: ${resolvedQualityGate.blocked_release_reasons.join(" ")}`
-        : "Premium quality gate blocked release."
-    );
-  }
-
   const gatedSections = ensureRequiredSectionsForPersistence({
     sections: applyQualityGateToSections(wrappedSections, resolvedQualityGate),
     hasResumeOverlay: Boolean(request.profile_context?.trim()),
@@ -757,6 +776,14 @@ export async function assemblePremiumReportV2(
       persona_profile: persona,
       presentation_plan: presentationPlan,
       retrieval_queries: retrievalState.normalizedQueries,
+      research_plan: latestResearchPlan
+        ? {
+            strategy_summary: latestResearchPlan.strategySummary,
+            selected_sources: latestResearchPlan.selectedSources,
+            retrieval_queries: latestResearchPlan.retrievalQueries,
+            source_strategy: latestResearchPlan.sourceStrategy,
+          }
+        : null,
     },
     {
       ai_query_count: tokenUsage.calls.length,
@@ -832,6 +859,14 @@ export async function assemblePremiumReportV2(
     persona_profile: persona,
     presentation_plan: presentationPlan,
     retrieval_queries: retrievalState.normalizedQueries,
+    research_plan: latestResearchPlan
+      ? {
+          strategy_summary: latestResearchPlan.strategySummary,
+          selected_sources: latestResearchPlan.selectedSources,
+          retrieval_queries: latestResearchPlan.retrievalQueries,
+          source_strategy: latestResearchPlan.sourceStrategy,
+        }
+      : null,
     cost_ledger: buildPremiumCostLedger({
       reportId: report.id,
       requestId,

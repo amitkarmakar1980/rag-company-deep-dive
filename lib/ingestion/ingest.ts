@@ -5,6 +5,7 @@ import { generateEmbeddings } from "@/lib/ai/embeddings";
 import {
   createSource,
   createChunks as dbCreateChunks,
+  updateDeepDiveRequestMetadata,
 } from "@/lib/db/operations";
 import { supabaseAdmin } from "@/lib/db/supabase";
 
@@ -46,6 +47,13 @@ export async function ingestSources(
     strategySummary: `Fallback research plan for ${companyName}.`,
     selectedSources: [],
     retrievalQueries: [],
+    sourceStrategy: {
+      goal: `Fallback source strategy for ${companyName}.`,
+      requiredSourceClasses: [],
+      priorityOrder: [],
+      recommendedSources: [],
+      notes: [],
+    },
   };
 
   try {
@@ -78,6 +86,9 @@ export async function ingestSources(
       jobDescription,
       profileContext
     );
+    await updateDeepDiveRequestMetadata(requestId, {
+      research_plan: researchPlan,
+    });
     console.log(`[Ingest] Research plan: ${researchPlan.strategySummary}`);
     console.log(`[Ingest] Planned web sources=${researchPlan.selectedSources.length} retrievalQueries=${researchPlan.retrievalQueries.length}`);
 

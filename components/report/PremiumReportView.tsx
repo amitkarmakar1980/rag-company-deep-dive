@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FeedbackButtons } from "@/components/FeedbackButtons";
 import { AssessmentSnapshotSection } from "@/components/report/AssessmentSnapshot";
 import { PremiumSectionCard } from "@/components/report/PremiumSectionCard";
+import { SourceStrategyFeedback } from "@/components/report/SourceStrategyFeedback";
+import { SourceStrategyPanel, type SourceStrategyResearchPlan } from "@/components/report/SourceStrategyPanel";
 import { ProvenancePill, type ProvenanceType } from "@/components/report/SectionShell";
 import { PremiumSectionContent } from "@/lib/report/premiumTypes";
 import { buildPremiumPresentationViewModel, type PremiumParsedViewSection, type PremiumViewMode } from "@/lib/report/premiumPresentationViewModel";
@@ -63,6 +65,7 @@ interface PremiumReportViewProps {
       publishedAt?: string;
     }>;
     tokenUsage: { total_cost_usd: number } | null;
+    researchPlan?: SourceStrategyResearchPlan | null;
     company: { name: string; websiteUrl: string | null };
     roleTitle: string | null;
     companyUrl?: string | null;
@@ -939,8 +942,9 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
         label: section.title,
         group: section.group,
       })),
+      ...(report.researchPlan ? [{ id: "source-strategy-catalog", label: "Source Strategy Catalog", group: "Appendix" }] : []),
     ],
-    [orderedVisibleSections, report.jobDescription]
+    [orderedVisibleSections, report.jobDescription, report.researchPlan]
   );
 
   const currentTocItem = tocItems.find((item) => item.id === activeSectionId) ?? tocItems[0] ?? null;
@@ -1274,6 +1278,16 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
               </section>
 
               <div className="mt-9 space-y-1.5 sm:mt-10">{groupedContent}</div>
+
+              {report.researchPlan ? (
+                <div className="mt-9 sm:mt-10">
+                  <SourceStrategyPanel
+                    id="source-strategy-catalog"
+                    researchPlan={report.researchPlan}
+                    feedback={<SourceStrategyFeedback reportId={report.id} />}
+                  />
+                </div>
+              ) : null}
 
               {report.jobDescription ? (
                 <section id="job-description" className="mt-8 rounded-[24px] bg-[#f7f2ea] px-4 py-5 ring-1 ring-[#e5dbcf] sm:mt-9 sm:rounded-[30px] sm:px-7 sm:py-6">

@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
     const report = await getReport(requestId);
     const requestSources = await getRequestSources(requestId);
     const completedSections = report ? await getReportSectionCount(report.id) : 0;
+    const researchPlan = request.metadata_json?.research_plan ?? report?.summary_json?.research_plan ?? null;
     const progress = request.status === "generating_report"
       ? buildGeneratingReportProgress(report, completedSections)
       : null;
@@ -74,6 +75,7 @@ export async function GET(req: NextRequest) {
         type: source.source_type,
         url: source.url ?? null,
       })),
+      researchPlan,
       progress,
       report: report
         ? {

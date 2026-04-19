@@ -505,16 +505,56 @@ export function applyQualityGateToSections(
   sections: Record<string, PremiumSectionContent>,
   qualityGate: PremiumQualityGateResult
 ): Record<string, PremiumSectionContent> {
+  const buildQualityGateCallout = (sectionState: PremiumSectionState) => {
+    if (sectionState === "suppress") {
+      return {
+        label: "Confidence qualifier",
+        value: "Low confidence. This section is being shown as exploratory guidance because the quality gate found the evidence or specificity too weak for a premium-grade claim set.",
+        tone: "unknown" as const,
+      };
+    }
+
+    if (sectionState === "weak" || sectionState === "rerun") {
+      return {
+        label: "Confidence qualifier",
+        value: "Released with caution. This section contains useful signal, but it remained below the premium threshold for depth, specificity, or support.",
+        tone: "caution" as const,
+      };
+    }
+
+    return null;
+  };
+
   return Object.fromEntries(
-    Object.entries(sections)
-      .filter(([key]) => !qualityGate.suppressed_sections.includes(key as PremiumSectionKey))
-      .map(([key, section]) => {
+    Object.entries(sections).map(([key, section]) => {
         const sectionState = qualityGate.section_states[key];
+        const qualityCallout = buildQualityGateCallout(sectionState);
+        const mergedCallouts = qualityCallout
+          ? [qualityCallout, ...(section.callouts ?? []).filter((callout) => callout.label !== qualityCallout.label)]
+          : section.callouts;
+
+        if (sectionState === "suppress") {
+          return [
+            key,
+            {
+              ...section,
+              callouts: mergedCallouts,
+              evidence: {
+                threshold: section.evidence?.threshold ?? section.question,
+                status: "insufficient",
+                confidence: "suppressed",
+                note: `${section.evidence?.note ?? "This section is being shown for transparency despite weak evidence."} Quality gate note: this section stayed below the quality threshold, so treat it as exploratory and low-confidence rather than decision-grade guidance.`,
+              },
+            } satisfies PremiumSectionContent,
+          ];
+        }
+
         if (sectionState === "weak" || sectionState === "rerun") {
           return [
             key,
             {
               ...section,
+              callouts: mergedCallouts,
               evidence: {
                 threshold: section.evidence?.threshold ?? section.question,
                 status: section.evidence?.status ?? "partial",

@@ -1,8 +1,7 @@
 "use client";
 
 import { StructuredReport } from "@/lib/types";
-import { isFallbackThirdPartyCitation, type ReportCitation } from "@/lib/report/citationMetadata";
-import { normalizeHttpUrl } from "@/lib/report/sourceLinks";
+import type { ReportCitation } from "@/lib/report/citationMetadata";
 import { SectionShell, BulletList, ProseBlock, ConfidencePill, type ProvenanceType } from "./report/SectionShell";
 import { ExecutiveSummarySection } from "./report/ExecutiveSummary";
 import { AssessmentSnapshotSection } from "./report/AssessmentSnapshot";
@@ -98,9 +97,6 @@ export function ReportSectionCard({
             </p>
           ))}
         </div>
-        {citations && citations.length > 0 && (
-          <CitationList citations={citations} />
-        )}
       </SectionShell>
     );
   }
@@ -134,7 +130,6 @@ export function ReportSectionCard({
             <BulletGroup label="Notable Customers" items={d.notable_customers} />
           )}
           <BulletGroup label="Recent Milestones" items={d.recent_milestones} />
-          {citations && <CitationList citations={citations} />}
         </SectionShell>
       );
     }
@@ -179,7 +174,6 @@ export function ReportSectionCard({
           {d.culture_signals?.length > 0 && (
             <BulletGroup label="Culture Signals" items={d.culture_signals} />
           )}
-          {citations && <CitationList citations={citations} />}
         </SectionShell>
       );
     }
@@ -300,7 +294,6 @@ export function ReportSectionCard({
           <BulletGroup label="Momentum Signals" items={d.momentum_signals} />
           <BulletGroup label="Pressure Points" items={d.pressure_points} />
           <ProseBlock label="Competitive Context" value={d.competitive_context} />
-          {citations && <CitationList citations={citations} />}
         </SectionShell>
       );
     }
@@ -337,7 +330,6 @@ export function ReportSectionCard({
           <BulletGroup label="Key Stakeholders" items={d.key_stakeholders} />
           <BulletGroup label="Likely Challenges" items={d.likely_challenges} />
           <BulletGroup label="Year 1 Expectations" items={d.first_year_expectations} />
-          {citations && <CitationList citations={citations} />}
         </SectionShell>
       );
     }
@@ -375,7 +367,6 @@ export function ReportSectionCard({
             <span className="text-xs text-zinc-500">Inference confidence:</span>
             <ConfidencePill level={d.confidence} />
           </div>
-          {citations && <CitationList citations={citations} />}
         </SectionShell>
       );
     }
@@ -454,53 +445,6 @@ function MetaField({ label, value }: { label: string; value: string }) {
     <div>
       <dt className="text-xs font-semibold uppercase tracking-wider text-gray-400">{label}</dt>
       <dd className="text-sm text-gray-700 mt-0.5">{value}</dd>
-    </div>
-  );
-}
-
-function CitationList({ citations }: { citations: Citation[] }) {
-  const unique = Array.from(
-    new Map(citations.map((c) => [c.source_id, c])).values()
-  ).filter((c) => c.title && normalizeHttpUrl(c.url));
-  const fallbackCount = unique.filter((citation) => isFallbackThirdPartyCitation(citation)).length;
-
-  if (unique.length === 0) return null;
-
-  return (
-    <div className="pt-3 border-t border-gray-100">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-        Sources Used
-      </h3>
-      {fallbackCount ? (
-        <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-          Fallback third-party sources are labeled below and should be read as supporting evidence, not primary company evidence.
-        </p>
-      ) : null}
-      <ul className="space-y-1" role="list">
-        {unique.map((c, i) => (
-          <li key={i} className="space-y-1 text-xs">
-            {normalizeHttpUrl(c.url) ? (
-              <a
-                href={normalizeHttpUrl(c.url)!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-500 hover:text-gray-800 underline underline-offset-2 decoration-gray-300 hover:decoration-gray-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-gray-900 rounded transition-colors"
-              >
-                {c.title}
-              </a>
-            ) : (
-              <span className="text-gray-400">{c.title}</span>
-            )}
-            {c.evidence_label ? (
-              <div>
-                <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-amber-800">
-                  {c.evidence_label}
-                </span>
-              </div>
-            ) : null}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

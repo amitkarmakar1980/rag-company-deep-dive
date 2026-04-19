@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildRagSourceStrategy,
   buildPlannerCandidatePool,
   extractFirstPartyCandidatesFromHomepage,
   extractSearchResultLinks,
@@ -33,6 +34,45 @@ test("planner candidate pool keeps high-confidence official pages and drops spec
   assert.ok(!urls.has("https://microsoft.com/investor-relations"));
   assert.ok(!urls.has("https://microsoft.com/engineering"));
   assert.ok(!urls.has("https://microsoft.com/newsroom"));
+});
+
+test("planner candidate pool includes generic strategy-search seeds for deeper company analysis", () => {
+  const candidates = buildPlannerCandidatePool(
+    "Uber",
+    "Lead Product Manager, In-App Recording (Safety)",
+    "https://www.uber.com/"
+  );
+
+  const urls = new Set(candidates.map((candidate) => candidate.url));
+
+  assert.ok([...urls].some((url) => /investor relations annual report earnings shareholder letter/i.test(decodeURIComponent(url))));
+  assert.ok([...urls].some((url) => /site:sec\.gov uber 10-k annual report/i.test(decodeURIComponent(url))));
+  assert.ok([...urls].some((url) => /uber leadership interview podcast keynote strategy/i.test(decodeURIComponent(url))));
+  assert.ok([...urls].some((url) => /uber culture values operating principles/i.test(decodeURIComponent(url))));
+  assert.ok([...urls].some((url) => /uber strategy analysis stratechery reuters/i.test(decodeURIComponent(url))));
+});
+
+test("rag source strategy prioritizes investor, culture, and leadership evidence for uber", () => {
+  const candidatePool = buildPlannerCandidatePool(
+    "Uber",
+    "Lead Product Manager, In-App Recording (Safety)",
+    "https://www.uber.com/"
+  );
+
+  const strategy = buildRagSourceStrategy({
+    companyName: "Uber",
+    roleTitle: "Lead Product Manager, In-App Recording (Safety)",
+    companyUrl: "https://www.uber.com/",
+    jobDescription: "Lead product strategy and cross-functional delivery for a safety-sensitive recording experience.",
+    candidatePool,
+  });
+
+  assert.ok(strategy.requiredSourceClasses.includes("investor_materials"));
+  assert.ok(strategy.requiredSourceClasses.includes("leadership_strategy"));
+  assert.ok(strategy.recommendedSources.some((candidate) => /uber leadership interview podcast keynote strategy/i.test(decodeURIComponent(candidate.url)) || candidate.url === "https://www.uber.com/investors"));
+  assert.ok(strategy.recommendedSources.some((candidate) => /site:sec\.gov uber 10-k annual report/i.test(decodeURIComponent(candidate.url)) || /investor relations annual report earnings shareholder letter/i.test(decodeURIComponent(candidate.url))));
+  assert.ok(strategy.recommendedSources.some((candidate) => /uber culture values operating principles/i.test(decodeURIComponent(candidate.url)) || /glassdoor interview culture employee reviews/i.test(decodeURIComponent(candidate.url))));
+  assert.ok(strategy.notes.some((note) => /Build the source strategy before synthesis/i.test(note)));
 });
 
 test("homepage discovery extracts relevant first-party links instead of relying only on guessed paths", () => {

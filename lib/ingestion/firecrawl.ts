@@ -33,6 +33,7 @@ export interface PlannedSource {
   type: PlannedSourceType;
   priority: number;
   rationale?: string;
+  sourceClasses?: string[];
 }
 
 interface PlannerCandidate extends PlannedSource {
@@ -41,10 +42,19 @@ interface PlannerCandidate extends PlannedSource {
   signal: string;
 }
 
+export interface RagSourceStrategy {
+  goal: string;
+  requiredSourceClasses: string[];
+  priorityOrder: string[];
+  recommendedSources: PlannerCandidate[];
+  notes: string[];
+}
+
 export interface ResearchPlan {
   strategySummary: string;
   selectedSources: PlannedSource[];
   retrievalQueries: string[];
+  sourceStrategy: RagSourceStrategy;
 }
 
 export interface ResolvedPlannedSource {
@@ -81,6 +91,7 @@ const SOURCE_CLASS_TARGET_TERMS: Record<string, string[]> = {
   technical_context: ["engineering", "developer", "api", "platform", "blog"],
   engineering_docs: ["developer", "api", "docs", "platform"],
   governance_signals: ["leadership", "about", "team", "the org search"],
+  external_validation: ["stratechery", "the information", "cb insights", "reuters", "glassdoor", "analysis", "validation"],
 };
 
 const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
@@ -311,6 +322,14 @@ function slugifyCompanyName(companyName: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+}
+
+function dedupeStrings(values?: Array<string | null | undefined>): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values.filter((value): value is string => typeof value === "string").filter((value, index, array) => value.trim().length > 0 && array.indexOf(value) === index);
 }
 
 function normalizeResolvedUrl(url: string, baseUrl?: string): string | null {
@@ -862,6 +881,146 @@ function buildFallbackRetrievalQueries(
   return buildPersonaAwareRetrievalQueries(companyName, roleTitle, jobDescription, persona);
 }
 
+function buildGenericStrategySeedCandidates(companyName: string, roleTitle: string, companyUrl?: string): PlannerCandidate[] {
+  const companyHost = companyUrl ? getHostname(companyUrl) : null;
+  const normalizedCompanyHost = companyHost?.replace(/^www\./, "") ?? null;
+
+  const candidates: PlannerCandidate[] = [
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} investor relations annual report earnings shareholder letter`)}`,
+      type: "custom_url",
+      priority: 9,
+      label: "Investor relations strategy search",
+      domain: "google.com",
+      signal: "Finds investor relations, annual reports, earnings decks, and shareholder framing before generic web summaries.",
+      sourceClasses: ["leadership_strategy", "investor_materials"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`site:sec.gov ${companyName} 10-K annual report`)}`,
+      type: "custom_url",
+      priority: 9,
+      label: "SEC filings search",
+      domain: "google.com",
+      signal: "Finds SEC filings or filing coverage when the company appears public or investor materials are discoverable.",
+      sourceClasses: ["leadership_strategy", "investor_materials"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} leadership interview podcast keynote strategy`)}`,
+      type: "custom_url",
+      priority: 8,
+      label: "Leadership commentary search",
+      domain: "google.com",
+      signal: "Finds leadership interviews, podcasts, and talks that expose operating style and strategic intent.",
+      sourceClasses: ["leadership_commentary", "leadership_strategy"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} culture values operating principles`)}`,
+      type: "custom_url",
+      priority: 8,
+      label: "Culture and values search",
+      domain: "google.com",
+      signal: "Looks for company-authored culture, values, norms, and operating-principles material.",
+      sourceClasses: ["leadership_commentary", "governance_signals"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} engineering blog platform architecture`)}`,
+      type: "custom_url",
+      priority: 7,
+      label: "Engineering and product surface search",
+      domain: "google.com",
+      signal: "Finds engineering blogs, platform writeups, and product surfaces that ground technical or operational complexity.",
+      sourceClasses: ["product_surfaces", "technical_context", "engineering_docs"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} strategy analysis Stratechery Reuters \"The Information\" \"CB Insights\"`)}`,
+      type: "custom_url",
+      priority: 7,
+      label: "Independent strategy analysis search",
+      domain: "google.com",
+      signal: "Adds independent strategy coverage from analysts and reporters after primary evidence is covered.",
+      sourceClasses: ["leadership_strategy", "external_validation"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} capital allocation EBITDA free cash flow buybacks investor day`)}`,
+      type: "custom_url",
+      priority: 8,
+      label: "Capital allocation and margin search",
+      domain: "google.com",
+      signal: "Finds capital allocation framing, EBITDA and FCF commentary, and investor-day style strategic finance material.",
+      sourceClasses: ["leadership_strategy", "investor_materials", "external_validation"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} strategic priorities earnings call prepared remarks annual priorities`)}`,
+      type: "custom_url",
+      priority: 8,
+      label: "Strategic priorities search",
+      domain: "google.com",
+      signal: "Finds explicit strategic priority frameworks from earnings calls, prepared remarks, and annual commentary.",
+      sourceClasses: ["leadership_strategy", "investor_materials", "product_surfaces"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} segment revenue product portfolio membership advertising unit economics`)}`,
+      type: "custom_url",
+      priority: 7,
+      label: "Portfolio and segment economics search",
+      domain: "google.com",
+      signal: "Finds segment scorecards, product portfolio detail, membership flywheels, advertising monetization, and unit-economics context.",
+      sourceClasses: ["product_surfaces", "leadership_strategy", "external_validation"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} marketplace dynamics take rate network effects autonomous strategy`)}`,
+      type: "custom_url",
+      priority: 7,
+      label: "Marketplace dynamics search",
+      domain: "google.com",
+      signal: "Finds network-effects, take-rate, marketplace, and autonomous-platform analysis for operating-model depth.",
+      sourceClasses: ["leadership_strategy", "technical_context", "external_validation"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} Glassdoor interview culture employee reviews`)}`,
+      type: "custom_url",
+      priority: 6,
+      label: "Employee and interview sentiment search",
+      domain: "google.com",
+      signal: "Pressure-tests company narrative with employee sentiment and interview experience sources.",
+      sourceClasses: ["governance_signals", "external_validation"],
+    },
+  ];
+
+  if (normalizedCompanyHost) {
+    candidates.push({
+      url: `https://www.google.com/search?q=${encodeURIComponent(`site:${normalizedCompanyHost} ${companyName} newsroom launches announcements`)}`,
+      type: "custom_url",
+      priority: 8,
+      label: "Official newsroom and launches search",
+      domain: "google.com",
+      signal: "Uses site-constrained search to find official newsroom, launch, and product announcement pages.",
+      sourceClasses: ["product_surfaces", "leadership_strategy"],
+    });
+    candidates.push({
+      url: `https://www.google.com/search?q=${encodeURIComponent(`site:${normalizedCompanyHost} ${companyName} ${roleTitle} team leadership stakeholders`)}`,
+      type: "custom_url",
+      priority: 7,
+      label: "Role-context stakeholder search",
+      domain: "google.com",
+      signal: "Uses the company domain to find role-adjacent teams, leaders, and stakeholder pages.",
+      sourceClasses: ["job_description", "leadership_commentary"],
+    });
+  }
+
+  return candidates;
+}
+
+function plannedSourceMatchesClass(source: PlannedSource, sourceClass: string): boolean {
+  if (source.sourceClasses?.includes(sourceClass)) {
+    return true;
+  }
+
+  const haystack = `${source.rationale ?? ""} ${source.url}`.toLowerCase();
+  const targetTerms = SOURCE_CLASS_TARGET_TERMS[sourceClass] ?? [];
+  return targetTerms.some((term) => haystack.includes(term));
+}
+
 export function buildPlannerCandidatePool(
   companyName: string,
   roleTitle: string,
@@ -960,6 +1119,10 @@ export function buildPlannerCandidatePool(
   }
 
   for (const candidate of discoveredCandidates) {
+    pushCandidate(candidate);
+  }
+
+  for (const candidate of buildGenericStrategySeedCandidates(companyName, roleTitle, companyUrl)) {
     pushCandidate(candidate);
   }
 
@@ -1114,7 +1277,80 @@ export function buildPlannerCandidatePool(
   return candidates;
 }
 
+export function buildRagSourceStrategy(args: {
+  companyName: string;
+  roleTitle: string;
+  companyUrl?: string;
+  jobDescription?: string;
+  profileContext?: string;
+  candidatePool: PlannerCandidate[];
+}): RagSourceStrategy {
+  const persona = inferPremiumPersona(args.roleTitle, args.jobDescription, args.profileContext);
+  const requiredSourceClasses = dedupeStrings([
+    "job_description",
+    ...persona.retrievalProfile.mandatorySourceClasses,
+    ...persona.retrievalProfile.preferredSourceClasses,
+    "leadership_strategy",
+    "investor_materials",
+    "leadership_commentary",
+    "product_surfaces",
+    "external_validation",
+  ]);
+  const priorityOrder = [
+    "exact JD / careers evidence",
+    "investor relations / filings / earnings / shareholder documents",
+    "official launches / newsroom / product and engineering blogs",
+    "leadership commentary / culture / operating principles",
+    "role-context sources and stakeholder maps",
+    "independent strategic validation and culture checks",
+  ];
+  const prioritizedCandidates = [...args.candidatePool].sort((left, right) => right.priority - left.priority);
+  const selected: PlannerCandidate[] = [];
+  const seenUrls = new Set<string>();
+
+  const pushCandidate = (candidate: PlannerCandidate | undefined) => {
+    if (!candidate || seenUrls.has(candidate.url)) {
+      return;
+    }
+
+    seenUrls.add(candidate.url);
+    selected.push(candidate);
+  };
+
+  for (const sourceClass of requiredSourceClasses) {
+    const match = prioritizedCandidates.find((candidate) => candidateMatchesSourceClass(candidate, sourceClass));
+    pushCandidate(match);
+  }
+
+  for (const candidate of prioritizedCandidates) {
+    if (selected.length >= MAX_RESEARCH_SOURCES + 4) {
+      break;
+    }
+
+    pushCandidate(candidate);
+  }
+
+  return {
+    goal: `Create the strongest possible source list for a grounded company deep dive on ${args.companyName}, with enough primary strategy evidence to explain the company's operating model, capital engine, strategic priorities, product portfolio, and marketplace dynamics inside the company-context and company-role-strategy sections.`,
+    requiredSourceClasses,
+    priorityOrder,
+    recommendedSources: selected,
+    notes: [
+      "Build the source strategy before synthesis so company-strategy depth is earned rather than patched after the report fails a quality bar.",
+      "Prefer first-party strategy, investor, leadership, and culture sources before leaning on third-party explainers.",
+      "Target the evidence needed to explain capital allocation, unit economics, segment and product portfolio tradeoffs, and explicit strategic priorities rather than stopping at brand or mission summaries.",
+      "When possible, gather enough evidence to support interview-grade interpretation, not just company description: what management is optimizing for, what tradeoffs are live, and where the role plugs into that agenda.",
+      "Do not stop at generic homepage/newsroom coverage when company-strategy evidence is weak.",
+      "Expand into investor, leadership, culture, and external strategist sources before concluding the company strategy layer is shallow.",
+    ],
+  };
+}
+
 function candidateMatchesSourceClass(candidate: PlannerCandidate, sourceClass: string): boolean {
+  if (candidate.sourceClasses?.includes(sourceClass)) {
+    return true;
+  }
+
   const targetTerms = SOURCE_CLASS_TARGET_TERMS[sourceClass] ?? [];
   if (targetTerms.length === 0) {
     return false;
@@ -1135,7 +1371,15 @@ export async function buildTargetedSourceUrls(args: {
   const maxSources = args.maxSources ?? 6;
   const discoveredCandidates = args.enableHomepageDiscovery === false ? [] : await discoverFirstPartyCandidates(args.companyUrl);
   const candidatePool = buildPlannerCandidatePool(args.companyName, args.roleTitle, args.companyUrl, [], discoveredCandidates);
-  const prioritized = [...candidatePool].sort((left, right) => right.priority - left.priority);
+  const prioritized = [...candidatePool].sort((left, right) => {
+    const rightTagged = right.sourceClasses?.length ? 1 : 0;
+    const leftTagged = left.sourceClasses?.length ? 1 : 0;
+    if (rightTagged !== leftTagged) {
+      return rightTagged - leftTagged;
+    }
+
+    return right.priority - left.priority;
+  });
   const selected: string[] = [];
 
   const pushUrl = (url: string | undefined) => {
@@ -1146,9 +1390,17 @@ export async function buildTargetedSourceUrls(args: {
     selected.push(url);
   };
 
-  for (const sourceClass of args.missingSourceClasses) {
+  for (const sourceClass of dedupeStrings(args.missingSourceClasses)) {
+    const preferredCandidate = prioritized.find((candidate) => candidateMatchesSourceClass(candidate, sourceClass) && !selected.includes(candidate.url));
+    pushUrl(preferredCandidate?.url);
+    if (selected.length >= maxSources) {
+      return selected;
+    }
+  }
+
+  for (const sourceClass of dedupeStrings(args.missingSourceClasses)) {
     for (const candidate of prioritized) {
-      if (!candidateMatchesSourceClass(candidate, sourceClass)) {
+      if (!candidateMatchesSourceClass(candidate, sourceClass) || selected.includes(candidate.url)) {
         continue;
       }
 
@@ -1183,11 +1435,16 @@ async function planResearchTargets(
   const candidatePool = buildPlannerCandidatePool(companyName, roleTitle, companyUrl, customUrls, discoveredCandidates);
   const companyDomain = companyUrl ? getHostname(companyUrl) : null;
   const persona = inferPremiumPersona(roleTitle, jobDescription, profileContext);
+  const sourceStrategy = buildRagSourceStrategy({
+    companyName,
+    roleTitle,
+    companyUrl,
+    jobDescription,
+    profileContext,
+    candidatePool,
+  });
   const fallbackQueries = buildFallbackRetrievalQueries(companyName, roleTitle, jobDescription, profileContext);
-  const fallbackSources = [...candidatePool]
-    .sort((left, right) => right.priority - left.priority)
-    .filter((candidate, index, list) => index === list.findIndex((entry) => entry.url === candidate.url))
-    .filter((candidate) => candidate.domain === companyDomain || candidate.domain !== companyDomain)
+  const fallbackSources = sourceStrategy.recommendedSources
     .slice(0, MAX_RESEARCH_SOURCES)
     .map(({ label: _label, domain: _domain, signal: _signal, ...source }) => source);
 
@@ -1207,6 +1464,7 @@ Objectives:
 - Use at least ${MIN_EXTERNAL_SITES} websites on domains other than the company website when possible.
 - Keep total selected web sources to ${MAX_RESEARCH_SOURCES} or fewer.
 - Produce exactly 6 focused retrieval queries for the downstream RAG stage.
+- Treat strategic depth as mandatory: the final evidence set should try to support operating-model analysis, capital allocation, unit economics, product or segment portfolio logic, strategic priorities, and marketplace or industry dynamics when the company and role make those relevant.
 
 Company: ${companyName}
 Role: ${roleTitle}
@@ -1218,14 +1476,27 @@ ${formatPersonaForPrompt(persona)}
 Candidate source pool:
 ${candidatePool.map((candidate, index) => `${index + 1}. ${candidate.label}\n   url: ${candidate.url}\n   domain: ${candidate.domain}\n   type: ${candidate.type}\n   priority: ${candidate.priority}\n   signal: ${candidate.signal}`).join("\n")}
 
+Precomputed RAG source strategy:
+Goal: ${sourceStrategy.goal}
+Required source classes: ${sourceStrategy.requiredSourceClasses.join(", ")}
+Priority order:
+${sourceStrategy.priorityOrder.map((step, index) => `${index + 1}. ${step}`).join("\n")}
+Strategy notes:
+${sourceStrategy.notes.map((note) => `- ${note}`).join("\n")}
+Recommended strategy seeds:
+${sourceStrategy.recommendedSources.slice(0, 14).map((candidate, index) => `${index + 1}. ${candidate.label}\n   url: ${candidate.url}\n   classes: ${(candidate.sourceClasses ?? []).join(", ") || "none"}\n   priority: ${candidate.priority}\n   signal: ${candidate.signal}`).join("\n")}
+
 Rules:
 - Include company_homepage if present.
+- Treat the precomputed RAG source strategy as a required planning aid, not optional flavor.
 - If the company appears public or investor material is discoverable, include at least one investor-relations-oriented source before external validation.
 - Favor independent domains that add complementary evidence in the required order: investor context, official launches, leadership signal, role-context pages, then external validation.
 - Prefer official company sources before third-party summaries for strategy or why-now sections.
+- Prefer concrete pages over raw search-results pages. Search URLs are discovery seeds, not ideal final selected sources, unless you have no better concrete page for that evidence class.
 - Use custom URLs if they are relevant.
 - Selected source type must be one of: company_homepage, newsroom, blog, custom_url.
 - Retrieval queries must be optimized for vector retrieval and cover: strategy/business model, role charter, investor or monetization context, leadership/operating style, role-context/stakeholders, and why-now.
+- At least 3 of the 6 retrieval queries should aim at deeper strategy layers such as capital allocation, segment economics, strategic priorities, market structure, or management tradeoffs when evidence for those layers is plausibly available.
 - Retrieval queries and source selection must adapt to the inferred persona. For engineering, design, data/ML, GTM, operations, and executive roles, do not default to product-style priorities.
 
 Return only valid JSON in this shape:
@@ -1259,13 +1530,39 @@ Return only valid JSON in this shape:
       const type = source?.type;
       if (!normalizedUrl || seenUrls.has(normalizedUrl)) continue;
       if (!type || !["company_homepage", "newsroom", "blog", "custom_url"].includes(type)) continue;
+      const matchedCandidate = candidatePool.find((candidate) => candidate.url === normalizedUrl);
       seenUrls.add(normalizedUrl);
       chosen.push({
         url: normalizedUrl,
         type,
         priority: Math.max(1, Math.min(10, Number(source?.priority) || 5)),
         rationale: typeof source?.rationale === "string" ? source.rationale : undefined,
+        sourceClasses: matchedCandidate?.sourceClasses,
       });
+    }
+
+    for (const sourceClass of sourceStrategy.requiredSourceClasses) {
+      if (chosen.some((source) => plannedSourceMatchesClass(source, sourceClass))) {
+        continue;
+      }
+
+      const strategyCandidate = sourceStrategy.recommendedSources.find((candidate) => candidateMatchesSourceClass(candidate, sourceClass));
+      if (!strategyCandidate || seenUrls.has(strategyCandidate.url)) {
+        continue;
+      }
+
+      chosen.push({
+        url: strategyCandidate.url,
+        type: strategyCandidate.type,
+        priority: strategyCandidate.priority,
+        rationale: `Injected from precomputed RAG strategy to cover missing ${sourceClass} evidence.`,
+        sourceClasses: strategyCandidate.sourceClasses,
+      });
+      seenUrls.add(strategyCandidate.url);
+
+      if (chosen.length >= MAX_RESEARCH_SOURCES) {
+        break;
+      }
     }
 
     const externalDomains = new Set(
@@ -1283,6 +1580,7 @@ Return only valid JSON in this shape:
           type: candidate.type,
           priority: candidate.priority,
           rationale: `Fallback external source from ${candidate.domain} to increase independent evidence coverage.`,
+          sourceClasses: candidate.sourceClasses,
         });
         seenUrls.add(candidate.url);
         externalDomains.add(host);
@@ -1298,6 +1596,7 @@ Return only valid JSON in this shape:
           type: "company_homepage",
           priority: 10,
           rationale: "Primary official source.",
+          sourceClasses: ["leadership_strategy", "product_surfaces"],
         });
       }
     }
@@ -1312,16 +1611,18 @@ Return only valid JSON in this shape:
       strategySummary:
         typeof planned?.strategySummary === "string" && planned.strategySummary.trim()
           ? planned.strategySummary.trim()
-          : `Use the company site plus independent external domains to build diversified evidence for ${companyName}.`,
+          : `Use the precomputed RAG source strategy plus independent external domains to build diversified evidence for ${companyName}.`,
       selectedSources: chosen.slice(0, MAX_RESEARCH_SOURCES),
       retrievalQueries: retrievalQueries.length === 6 ? retrievalQueries : fallbackQueries,
+      sourceStrategy,
     };
   } catch (error) {
     console.error("[ResearchPlan] Planner failed:", error instanceof Error ? error.message : error);
     return {
-      strategySummary: `Fallback research plan for ${companyName}: company pages plus at least ${MIN_EXTERNAL_SITES} external websites when available.`,
+      strategySummary: `Fallback research plan for ${companyName}: follow the precomputed RAG strategy, then add at least ${MIN_EXTERNAL_SITES} external websites when available.`,
       selectedSources: fallbackSources,
       retrievalQueries: fallbackQueries,
+      sourceStrategy,
     };
   }
 }

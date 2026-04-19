@@ -23,6 +23,18 @@ export async function getOrCreateCompany(
     .single();
 
   if (existing) {
+    if (!existing.website_url && website_url) {
+      const { data: updated, error } = await supabaseAdmin
+        .from("companies")
+        .update({ website_url })
+        .eq("id", existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return updated;
+    }
+
     return existing;
   }
 
@@ -126,6 +138,44 @@ export async function updateDeepDiveStatus(
       .from("deep_dive_requests")
       .update({ status })
       .eq("id", requestId));
+  }
+
+  if (error) throw error;
+}
+
+export async function updateDeepDiveRequestMetadata(
+  requestId: string,
+  metadataPatch: Record<string, any>
+): Promise<void> {
+  const request = await getDeepDiveRequest(requestId);
+  if (!request) {
+    return;
+  }
+
+  const nextMetadata = {
+    ...(request.metadata_json ?? {}),
+    ...metadataPatch,
+  };
+  const timestamp = new Date().toISOString();
+
+  let { error } = await supabaseAdmin
+    .from("deep_dive_requests")
+    .update({
+      metadata_json: nextMetadata,
+      updated_at: timestamp,
+    })
+    .eq("id", requestId);
+
+  if (error && /updated_at/i.test(error.message)) {
+    ({ error } = await supabaseAdmin
+      .from("deep_dive_requests")
+      .update({ metadata_json: nextMetadata })
+      .eq("id", requestId));
+  }
+
+  if (error && /metadata_json/i.test(error.message)) {
+    console.warn("[DeepDiveRequest] metadata_json column unavailable; skipping request metadata persistence.");
+    return;
   }
 
   if (error) throw error;
@@ -644,7 +694,7 @@ export async function getReportSections(
 export async function submitFeedback(
   reportId: string,
   sectionKey: string,
-  feedbackType: "useful" | "not_useful"
+  feedbackType: "useful" | "not_useful" | "too_little" | "just_right" | "too_much"
 ): Promise<FeedbackEvent> {
   const { data, error } = await supabaseAdmin
     .from("feedback_events")
@@ -653,7 +703,12 @@ export async function submitFeedback(
         report_id: reportId,
         section_key: sectionKey,
         feedback_type: feedbackType,
-        feedback_value: feedbackType === "useful",
+        feedback_value:
+          feedbackType === "useful"
+            ? true
+            : feedbackType === "not_useful"
+            ? false
+            : null,
         created_at: new Date().toISOString(),
       },
     ])

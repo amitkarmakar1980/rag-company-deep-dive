@@ -26,12 +26,14 @@ CREATE TABLE IF NOT EXISTS deep_dive_requests (
   job_description TEXT,
   company_url VARCHAR(512),
   profile_context TEXT,
+  metadata_json JSONB,
   status VARCHAR(50) DEFAULT 'pending',
   error_message TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE deep_dive_requests ADD COLUMN IF NOT EXISTS metadata_json JSONB;
 ALTER TABLE deep_dive_requests ADD COLUMN IF NOT EXISTS error_message TEXT;
 ALTER TABLE deep_dive_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 

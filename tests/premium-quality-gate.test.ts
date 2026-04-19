@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { inferPremiumPersona } from "../lib/report/premiumPersona.ts";
-import { finalizePremiumQualityGate, type PremiumEvaluationModelOutput } from "../lib/report/premiumQualityGate.ts";
+import { applyQualityGateToSections, finalizePremiumQualityGate, type PremiumEvaluationModelOutput } from "../lib/report/premiumQualityGate.ts";
 import { ensureRequiredSectionsForPersistence, resolveQualityGateForPersistence } from "../lib/report/assemblePremiumReportV2.ts";
 import type { PremiumEvidenceQuality, PremiumPersonaQaSummary, PremiumSourceCoverageSummary } from "../lib/report/premiumTelemetry.ts";
 import type { PremiumSectionContent } from "../lib/report/premiumTypes.ts";
@@ -410,12 +410,13 @@ test("blocked quality-gate results stay blocked for premium persistence", () => 
 
   const resolved = resolveQualityGateForPersistence(blockedResult, makeSections());
 
-  assert.equal(resolved.release_decision, "blocked");
+  assert.equal(resolved.release_decision, "suppress_and_release");
   assert.ok(resolved.blocked_release_reasons.length > 0);
+  assert.ok(resolved.warning_flags.some((warning) => /still released with explicit low-confidence qualifiers/i.test(warning)));
 });
 
 test("blocked quality-gate results downgrade to a persisted partial draft when the briefing spine is still usable", () => {
-  const evaluation = {
+  const evaluation: PremiumEvaluationModelOutput = {
     ...baseEvaluation(),
     scores: {
       ...baseEvaluation().scores,
@@ -462,7 +463,7 @@ test("blocked quality-gate results downgrade to a persisted partial draft when t
 });
 
 test("blocked quality-gate results downgrade to suppress-and-release when one briefing section remains usable", () => {
-  const evaluation = {
+  const evaluation: PremiumEvaluationModelOutput = {
     ...baseEvaluation(),
     scores: {
       ...baseEvaluation().scores,
@@ -521,7 +522,7 @@ test("blocked quality-gate results downgrade to suppress-and-release when one br
 });
 
 test("blocked quality-gate results downgrade when only one critical strategy section stays weak but the briefing spine remains usable", () => {
-  const evaluation = {
+  const evaluation: PremiumEvaluationModelOutput = {
     ...baseEvaluation(),
     scores: {
       ...baseEvaluation().scores,
@@ -582,7 +583,7 @@ test("blocked quality-gate results downgrade when only one critical strategy sec
 });
 
 test("blocked quality-gate results downgrade when the decision memo is only serviceable under degraded evidence", () => {
-  const evaluation = {
+  const evaluation: PremiumEvaluationModelOutput = {
     ...baseEvaluation(),
     scores: {
       ...baseEvaluation().scores,
@@ -641,6 +642,106 @@ test("blocked quality-gate results downgrade when the decision memo is only serv
   assert.ok(resolved.warning_flags.some((warning) => /strongest available draft was persisted/i.test(warning)));
 });
 
+test("blocked quality-gate results downgrade when only the decision memo and strategic core remain usable", () => {
+  const evaluation: PremiumEvaluationModelOutput = {
+    ...baseEvaluation(),
+    scores: {
+      ...baseEvaluation().scores,
+      overall_quality: 58,
+      depth: 52,
+      readiness_to_release: 54,
+      evidence_quality: 52,
+      company_context: 58,
+      interview_prep: 54,
+    },
+    section_results: baseEvaluation().section_results.map((section) => {
+      if (section.section === "five_minute_brief") {
+        return {
+          ...section,
+          state: "rerun" as const,
+          score: 54,
+          problems: ["Brief stayed too weak under degraded evidence conditions."],
+          repair_actions: ["Tighten the brief around supported evidence only."],
+        };
+      }
+
+      if (section.section === "company_context") {
+        return {
+          ...section,
+          state: "suppress" as const,
+          score: 58,
+          problems: ["Company context stayed generic under degraded evidence conditions."],
+          repair_actions: ["Suppress company context if stronger evidence is unavailable."],
+        };
+      }
+
+      if (section.section === "why_role_exists_now") {
+        return {
+          ...section,
+          state: "weak" as const,
+          score: 54,
+          problems: ["Role timing stayed thin under degraded evidence conditions."],
+          repair_actions: ["Sharpen why-now reasoning with clearer role evidence."],
+        };
+      }
+
+      if (section.section === "candidate_fit") {
+        return {
+          ...section,
+          state: "suppress" as const,
+          score: 58,
+          problems: ["Candidate fit stayed generic under degraded evidence conditions."],
+          repair_actions: ["Suppress candidate fit if stronger evidence is unavailable."],
+        };
+      }
+
+      if (section.section === "interview_prep" || section.section === "how_to_win_this_process") {
+        return {
+          ...section,
+          state: "rerun" as const,
+          score: 54,
+          problems: ["Interview guidance remained below the premium threshold after repairs."],
+          repair_actions: ["Rewrite interview guidance around supported evidence only."],
+        };
+      }
+
+      if (section.section === "decision_memo" || section.section === "company_role_strategy" || section.section === "credibility_layer") {
+        return {
+          ...section,
+          state: "approved" as const,
+          score: 60,
+        };
+      }
+
+      return section;
+    }),
+    blocked_release_reasons: [
+      "Company_context lacks depth and critical analysis.",
+      "Critical sections remained below the premium threshold: interview_prep, how_to_win_this_process.",
+      "Depth remained below the premium minimum after evaluation.",
+      "Evidence quality remained below the premium minimum after evaluation.",
+    ],
+    release_decision: "blocked" as const,
+  };
+
+  const blockedResult = finalizePremiumQualityGate({
+    evaluation,
+    sections: makeSections(),
+    evidenceQuality: makeEvidenceQuality("weak"),
+    coverage: makeCoverage(),
+    personaQa: makePersonaQa(),
+    persona: inferPremiumPersona("Lead Product Manager, In-App Recording (Safety)", "Lead product strategy and cross-functional delivery for a safety-sensitive recording experience."),
+    hasRetry: true,
+  });
+
+  assert.equal(blockedResult.release_decision, "blocked");
+
+  const resolved = resolveQualityGateForPersistence(blockedResult, makeSections());
+
+  assert.equal(resolved.release_decision, "suppress_and_release");
+  assert.ok(resolved.warning_flags.some((warning) => /strongest available draft was persisted/i.test(warning)));
+});
+
 test("candidate fit is preserved for persistence when resume overlay is expected", () => {
   const sections = makeSections();
   delete sections.candidate_fit;
@@ -653,4 +754,57 @@ test("candidate fit is preserved for persistence when resume overlay is expected
 
   assert.ok(resolved.candidate_fit);
   assert.match(resolved.candidate_fit.evidence?.note ?? "", /Resume overlay refresh requires this section to remain persisted\./);
+});
+
+test("suppressed sections stay visible with low-confidence qualifiers after persistence resolution", () => {
+  const resolvedGate = resolveQualityGateForPersistence(
+    {
+      overall_quality_score: 54,
+      depth_score: 50,
+      company_context_score: 51,
+      evidence_score: 49,
+      persona_score: 72,
+      interview_prep_score: 52,
+      readiness_to_release_score: 51,
+      release_decision: "blocked",
+      warning_flags: ["Generic company context is a failure."],
+      blocked_release_reasons: ["Weak evidence cannot be hidden by good writing."],
+      section_scores: {
+        decision_memo: 62,
+        five_minute_brief: 60,
+        company_context: 48,
+        why_role_exists_now: 57,
+        company_role_strategy: 58,
+        candidate_fit: 56,
+        interview_prep: 52,
+        how_to_win_this_process: 54,
+        credibility_layer: 60,
+      },
+      section_states: {
+        decision_memo: "weak",
+        five_minute_brief: "weak",
+        company_context: "suppress",
+        why_role_exists_now: "weak",
+        company_role_strategy: "weak",
+        candidate_fit: "suppress",
+        interview_prep: "rerun",
+        how_to_win_this_process: "rerun",
+        credibility_layer: "approved",
+      },
+      prompt_improvement_recommendations: [],
+      reasoning_summary: "fixture",
+      repair_instructions: [],
+      suppressed_sections: ["company_context", "candidate_fit"],
+    },
+    makeSections(),
+  );
+
+  const gatedSections = applyQualityGateToSections(makeSections(), resolvedGate);
+
+  assert.equal(resolvedGate.release_decision, "suppress_and_release");
+  assert.ok(gatedSections.company_context);
+  assert.equal(gatedSections.company_context.evidence?.status, "insufficient");
+  assert.equal(gatedSections.company_context.evidence?.confidence, "suppressed");
+  assert.match(gatedSections.company_context.evidence?.note ?? "", /exploratory and low-confidence/i);
+  assert.ok(gatedSections.company_context.callouts?.some((callout) => /Confidence qualifier/i.test(callout.label)));
 });

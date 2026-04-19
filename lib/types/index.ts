@@ -33,6 +33,7 @@ export interface DeepDiveRequest {
   job_description?: string;
   company_url?: string;
   profile_context?: string;
+  metadata_json?: Record<string, any> | null;
   status: DeepDiveStatus;
   error_message?: string | null;
   created_at: string;
@@ -150,14 +151,14 @@ export interface ReportTokenUsage {
 }
 
 // Feedback types
-export type FeedbackType = "useful" | "not_useful";
+export type FeedbackType = "useful" | "not_useful" | "too_little" | "just_right" | "too_much";
 
 export interface FeedbackEvent {
   id: string;
   report_id: string;
   section_key: string;
   feedback_type: FeedbackType;
-  feedback_value: boolean;
+  feedback_value: boolean | null;
   created_at: string;
 }
 

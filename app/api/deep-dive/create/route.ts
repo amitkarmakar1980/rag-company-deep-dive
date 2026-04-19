@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
 
     // Get or create company
     const company = await getOrCreateCompany(safeCompanyName, safeCompanyUrl);
+    const effectiveCompanyUrl = safeCompanyUrl ?? company.website_url ?? undefined;
 
     // Create deep dive request
     const request = await createDeepDiveRequest(
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
       company.id,
       safeRoleTitle,
       safeJobDescription,
-      safeCompanyUrl,
+      effectiveCompanyUrl,
       safeResumeText
     );
 
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
         user.id,
         safeCompanyName,
         safeRoleTitle,
-        safeCompanyUrl,
+        effectiveCompanyUrl,
         undefined,
         safeJobDescription,
         safeResumeText,
@@ -136,7 +137,7 @@ async function runPipeline(
 
       const { assemblePremiumReportV2 } = await import("@/lib/report/assemblePremiumReportV2");
       console.log("[Pipeline] Calling assemblePremiumReportV2...");
-      await assemblePremiumReportV2(requestId, result.researchPlan.retrievalQueries);
+      await assemblePremiumReportV2(requestId, result.researchPlan);
       console.log("[Pipeline] assemblePremiumReportV2 complete");
 
       // If resume was provided, create the overlay record BEFORE marking completed.

@@ -99,9 +99,9 @@ function makeWeakEvidenceQualityGate(): PremiumQualityGateResult {
     prompt_improvement_recommendations: [],
     reasoning_summary: "weak-evidence fixture",
     repair_instructions: [
-      "Improve company-context coverage with stronger interpretation of company insights, history, mission, values, culture, and employee-review caveats where evidence supports it.",
+      "Improve company-context coverage by generating a comprehensive company read from enhanced RAG, integrating leadership intent, market pressure, external validation, operating signals, and role-relevant implications instead of leaning on company-site summary.",
       "Rewrite interview-prep content so it becomes role-family-specific, seniority-specific, and interviewer-proof-oriented rather than generic.",
-      "Increase second-order insight density. Explain implications and tradeoffs instead of summarizing facts.",
+      "Increase second-order insight density. Use deep-research synthesis to explain implications, gaps, tensions, and tradeoffs instead of summarizing extracted facts.",
     ],
     suppressed_sections: [],
   };
@@ -192,6 +192,7 @@ test("targeted reretrieval source urls pull deeper company-strategy artifacts fo
 
   assert.ok(urls.some((url) => /uber\.com\/investors|google\.com\/search\?q=.*site:sec\.gov.*uber.*10-k|google\.com\/search\?q=.*investor/i.test(url)));
   assert.ok(urls.some((url) => /strategic priorities|capital allocation|leadership interview|site:uber\.com.*newsroom/i.test(decodeURIComponent(url))));
+  assert.ok(urls.some((url) => /competitors|market share|gartner|forrester|industry report/i.test(decodeURIComponent(url))));
 });
 
 test("targeted reretrieval queries add company-strategy and interview-specific probes for weak-evidence partial releases", () => {
@@ -215,4 +216,6 @@ test("targeted reretrieval queries add company-strategy and interview-specific p
 
   assert.ok(queries.some((query) => /investor relations|shareholder letter|strategy product priorities/i.test(query)));
   assert.ok(queries.some((query) => /interview hiring manager expectations|product judgment|stakeholder management/i.test(query)));
+  assert.ok(queries.some((query) => /competitors|market share|gartner|forrester|customer segments/i.test(query)));
+  assert.ok(queries.some((query) => /industry report|market size|growth rate|analyst|reuters/i.test(query)));
 });

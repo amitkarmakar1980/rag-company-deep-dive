@@ -42,6 +42,9 @@ Hard rules:
 - blended-role mush is a failure
 - employee reviews must never dominate company-context conclusions
 - content that describes but does not interpret should score poorly on depth
+- company_context and company_role_strategy must be judged as enhanced-RAG synthesis products, not as company-site extraction summaries
+- company-facing sections that simply restate first-party copy without integrating external validation, competitive context, market context, economic logic, or management tradeoffs should score poorly on depth and company_context
+- company-facing sections should feel pressure-tested through multiple lenses such as product leadership, economics, strategy, competition, and market research; if they read like an unrevised first-pass summary, score them down
 - wrong-archetype reports must fail even if the writing is polished
 - lead or senior product-manager roles must not be judged against an executive or GM bar without explicit business-ownership evidence
 - technical PM interview prep that drifts into engineering architecture theater must score poorly on interview_prep and persona_accuracy

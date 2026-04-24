@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/auth-helpers-nextjs";
 import { ADMIN_EMAILS } from "@/lib/admin";
@@ -227,12 +228,26 @@ export default function AdminPage() {
             <p className="mt-1 text-xs text-stone-400">Times shown in {shortLabel}</p>
           </div>
         </div>
-        <button
-          onClick={() => fetchAll(page)}
-          className="text-xs text-[#6b5e52] border border-stone-200 rounded-full bg-white px-4 py-2 hover:bg-[#faf8f3] transition-colors shadow-[0_10px_20px_rgba(28,25,23,0.05)]"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/admin/diagnostics"
+            className="text-xs text-[#1a4a3a] border border-[#cfe1d8] rounded-full bg-[#edf6f0] px-4 py-2 hover:bg-[#e4f0e8] transition-colors shadow-[0_10px_20px_rgba(28,25,23,0.05)]"
+          >
+            Diagnostics
+          </Link>
+          <Link
+            href="/admin/prompt-feedback"
+            className="text-xs text-[#6b5e52] border border-stone-200 rounded-full bg-white px-4 py-2 hover:bg-[#faf8f3] transition-colors shadow-[0_10px_20px_rgba(28,25,23,0.05)]"
+          >
+            Prompt Feedback
+          </Link>
+          <button
+            onClick={() => fetchAll(page)}
+            className="text-xs text-[#6b5e52] border border-stone-200 rounded-full bg-white px-4 py-2 hover:bg-[#faf8f3] transition-colors shadow-[0_10px_20px_rgba(28,25,23,0.05)]"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (

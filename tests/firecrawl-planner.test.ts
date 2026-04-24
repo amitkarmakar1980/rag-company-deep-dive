@@ -50,6 +50,8 @@ test("planner candidate pool includes generic strategy-search seeds for deeper c
   assert.ok([...urls].some((url) => /uber leadership interview podcast keynote strategy/i.test(decodeURIComponent(url))));
   assert.ok([...urls].some((url) => /uber culture values operating principles/i.test(decodeURIComponent(url))));
   assert.ok([...urls].some((url) => /uber strategy analysis stratechery reuters/i.test(decodeURIComponent(url))));
+  assert.ok([...urls].some((url) => /uber competitors alternatives market share gartner forrester/i.test(decodeURIComponent(url))));
+  assert.ok([...urls].some((url) => /uber industry report market size growth rate.*analyst|uber industry report.*customer segments.*analyst/i.test(decodeURIComponent(url))));
 });
 
 test("rag source strategy prioritizes investor, culture, and leadership evidence for uber", () => {
@@ -69,9 +71,12 @@ test("rag source strategy prioritizes investor, culture, and leadership evidence
 
   assert.ok(strategy.requiredSourceClasses.includes("investor_materials"));
   assert.ok(strategy.requiredSourceClasses.includes("leadership_strategy"));
+  assert.ok(strategy.requiredSourceClasses.includes("competitor_positioning"));
   assert.ok(strategy.recommendedSources.some((candidate) => /uber leadership interview podcast keynote strategy/i.test(decodeURIComponent(candidate.url)) || candidate.url === "https://www.uber.com/investors"));
   assert.ok(strategy.recommendedSources.some((candidate) => /site:sec\.gov uber 10-k annual report/i.test(decodeURIComponent(candidate.url)) || /investor relations annual report earnings shareholder letter/i.test(decodeURIComponent(candidate.url))));
+  assert.ok(strategy.recommendedSources.some((candidate) => /uber competitors alternatives market share gartner forrester/i.test(decodeURIComponent(candidate.url)) || /competitive landscape search/i.test(candidate.label)));
   assert.ok(strategy.recommendedSources.some((candidate) => /uber culture values operating principles/i.test(decodeURIComponent(candidate.url)) || /glassdoor interview culture employee reviews/i.test(decodeURIComponent(candidate.url))));
+  assert.ok(strategy.notes.some((note) => /competitor, analyst, and market-structure evidence/i.test(note)));
   assert.ok(strategy.notes.some((note) => /Build the source strategy before synthesis/i.test(note)));
 });
 

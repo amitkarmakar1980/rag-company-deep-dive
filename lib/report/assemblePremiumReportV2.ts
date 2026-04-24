@@ -173,7 +173,7 @@ function buildWrappedSections(
   );
 }
 
-function buildOrderedDefinitions(
+export function buildOrderedDefinitions(
   presentationPlan: ReturnType<typeof getPremiumPresentationPlan>
 ): typeof PREMIUM_SECTION_DEFINITIONS {
   const sectionDefinitionsByKey = new Map(PREMIUM_SECTION_DEFINITIONS.map((definition) => [definition.key, definition]));
@@ -264,7 +264,9 @@ export function buildTargetedReretrievalQueries(args: {
       `${args.companyName} investor relations earnings shareholder letter strategy product priorities`,
       `${args.companyName} leadership interview strategy operating principles platform safety ${args.roleTitle}`,
       `${args.companyName} mission vision values culture operating principles leadership principles`,
-      `${args.companyName} annual report shareholder letter strategic priorities moat tradeoffs ${args.roleTitle}`
+      `${args.companyName} annual report shareholder letter strategic priorities moat tradeoffs ${args.roleTitle}`,
+      `${args.companyName} competitors market share Gartner Forrester alternatives customer segments`,
+      `${args.companyName} industry report market size growth rate analyst strategy Reuters`
     );
   }
 
@@ -359,7 +361,7 @@ export async function buildTargetedReretrievalSourceUrls(args: {
       ? ["product_surfaces", "competitor_positioning"]
       : []),
     ...(hasWeakEvidenceRecoveryRequest(args.qualityGate)
-      ? ["leadership_strategy", "investor_materials", "product_surfaces", "leadership_commentary"]
+      ? ["leadership_strategy", "investor_materials", "product_surfaces", "leadership_commentary", "competitor_positioning", "external_validation"]
       : []),
   ]);
 
@@ -415,6 +417,10 @@ async function buildPremiumRetrievalState(args: {
     retrievalDurationMs: Date.now() - retrievalStartedAt,
   };
 }
+
+export type PremiumRetrievalState = Awaited<ReturnType<typeof buildPremiumRetrievalState>>;
+
+export { buildPremiumRetrievalState };
 
 export function resolveQualityGateForPersistence(
   qualityGate: PremiumQualityGateResult,
@@ -570,6 +576,225 @@ async function evaluateDraft(args: {
   return { evaluation: data, usage };
 }
 
+export { evaluateDraft };
+
+export async function buildPremiumDraft(args: {
+  retrievalState: PremiumRetrievalState;
+  companyName: string;
+  roleTitle: string;
+  jobDescription?: string;
+  profileContext?: string;
+  persona: ReturnType<typeof inferPremiumPersona>;
+  qualityGate: PremiumQualityGateResult | null;
+}): Promise<{
+  data: PremiumReportModelOutput;
+  usage: ReportTokenUsage["calls"][number];
+  wrappedSections: Record<string, PremiumSectionContent>;
+  personaQa: ReturnType<typeof assessPremiumPersonaQa>;
+}> {
+  const prompt = await getPremiumReportPromptV2(
+    args.retrievalState.context,
+    args.companyName,
+    args.roleTitle,
+    args.jobDescription,
+    args.profileContext,
+    args.retrievalState.evidenceQuality,
+    args.retrievalState.coverage,
+    args.persona,
+    args.qualityGate?.repair_instructions
+  );
+
+  const { data, usage } = await generatePremiumReport(prompt);
+  const wrappedSections = buildWrappedSections(PREMIUM_SECTION_DEFINITIONS, data.sections);
+  const personaQa = assessPremiumPersonaQa(args.persona, wrappedSections);
+
+  return {
+    data,
+    usage,
+    wrappedSections,
+    personaQa,
+  };
+}
+
+export async function persistPremiumReportArtifacts(args: {
+  requestId: string;
+  request: Awaited<ReturnType<typeof getDeepDiveRequest>> extends infer RequestType
+    ? Exclude<RequestType, null>
+    : never;
+  companyName: string;
+  persona: ReturnType<typeof inferPremiumPersona>;
+  presentationPlan: ReturnType<typeof getPremiumPresentationPlan>;
+  orderedDefinitions: typeof PREMIUM_SECTION_DEFINITIONS;
+  retrievalState: PremiumRetrievalState;
+  latestResearchPlan: ResearchPlan | null;
+  totalRetrievalDurationMs: number;
+  totalSynthesisDurationMs: number;
+  llmCalls: ReportTokenUsage["calls"];
+  finalData: PremiumReportModelOutput;
+  wrappedSections: Record<string, PremiumSectionContent>;
+  personaQa: ReturnType<typeof assessPremiumPersonaQa>;
+  qualityGate: PremiumQualityGateResult;
+  targetedRetrievalLoops: number;
+  assemblyStartedAt: number;
+  runId?: string;
+}): Promise<Report> {
+  const runId = args.runId ?? randomUUID();
+  const resolvedQualityGate = resolveQualityGateForPersistence(args.qualityGate, args.wrappedSections);
+  const gatedSections = ensureRequiredSectionsForPersistence({
+    sections: applyQualityGateToSections(args.wrappedSections, resolvedQualityGate),
+    hasResumeOverlay: Boolean(args.request.profile_context?.trim()),
+    fallbackSections: args.wrappedSections,
+  });
+  const tokenUsage: ReportTokenUsage = {
+    calls: args.llmCalls,
+    total_tokens: args.llmCalls.reduce((sum, call) => sum + call.input_tokens + call.output_tokens, 0),
+    total_cost_usd: args.llmCalls.reduce((sum, call) => sum + call.estimated_cost_usd, 0),
+  };
+
+  const scores = {
+    company_momentum: clampScore(args.finalData.scorecard?.company_momentum, 6),
+    org_clarity: clampScore(args.finalData.scorecard?.org_clarity, 5),
+    role_leverage: clampScore(args.finalData.scorecard?.role_leverage, 6),
+    execution_risk: clampScore(args.finalData.scorecard?.execution_risk, 5),
+    candidate_fit: clampScore(args.finalData.scorecard?.candidate_fit, args.request.profile_context?.trim() ? 5 : 0),
+  };
+
+  const report = await createReport(
+    args.requestId,
+    toValidRecommendation(args.finalData.report_recommendation),
+    scores,
+    {
+      token_usage: tokenUsage,
+      report_format: "premium_v2",
+      report_family: "premium",
+      generator_version: "premium_v2_default",
+      evidence_quality: args.retrievalState.evidenceQuality,
+      source_coverage: args.retrievalState.coverage,
+      persona_qa: args.personaQa,
+      quality_gate: resolvedQualityGate,
+      persona_profile: args.persona,
+      presentation_plan: args.presentationPlan,
+      retrieval_queries: args.retrievalState.normalizedQueries,
+      research_plan: args.latestResearchPlan
+        ? {
+            strategy_summary: args.latestResearchPlan.strategySummary,
+            selected_sources: args.latestResearchPlan.selectedSources,
+            retrieval_queries: args.latestResearchPlan.retrievalQueries,
+            source_strategy: args.latestResearchPlan.sourceStrategy,
+          }
+        : null,
+    },
+    {
+      ai_query_count: tokenUsage.calls.length,
+      source_count: args.retrievalState.sources.length,
+      source_host_count: new Set(
+        args.retrievalState.sources.map((source) => getHostname(source.url)).filter((host): host is string => Boolean(host))
+      ).size,
+    },
+    {
+      report_format: "premium_v2",
+      report_family: "premium",
+    }
+  );
+
+  const persistenceStartedAt = Date.now();
+  const initialLedger = buildPremiumCostLedger({
+    reportId: report.id,
+    requestId: args.requestId,
+    runId,
+    companyName: args.companyName,
+    roleTitle: args.request.role_title,
+    persona: args.persona,
+    tokenUsage,
+    primaryUsage: args.llmCalls[0],
+    sources: args.retrievalState.sources,
+    retrievalQueries: args.retrievalState.normalizedQueries,
+    evidenceQuality: args.retrievalState.evidenceQuality,
+    coverage: args.retrievalState.coverage,
+    personaQa: args.personaQa,
+    qualityGate: resolvedQualityGate,
+    hasResumeOverlay: Boolean(args.request.profile_context?.trim()),
+    durations: {
+      retrieval_ms: args.totalRetrievalDurationMs,
+      synthesis_ms: args.totalSynthesisDurationMs,
+      persistence_ms: 0,
+      total_ms: Date.now() - args.assemblyStartedAt,
+    },
+    targetedRetrievalLoops: args.targetedRetrievalLoops,
+  });
+
+  const citations = buildReportCitations(args.retrievalState.context.chunks, args.request.company_url ?? undefined);
+
+  for (const [index, sectionDefinition] of args.orderedDefinitions.entries()) {
+    const displayTitle = args.presentationPlan.titleBySectionKey[sectionDefinition.key] ?? sectionDefinition.title;
+    const content = sectionDefinition.key === "operations_and_cost"
+      ? buildPremiumOperationsSection(tokenUsage, args.retrievalState.evidenceQuality, args.retrievalState.coverage, initialLedger)
+      : gatedSections[sectionDefinition.key];
+
+    if (!content) {
+      continue;
+    }
+
+    await createReportSection(
+      report.id,
+      sectionDefinition.key,
+      displayTitle,
+      JSON.stringify(content),
+      index,
+      sectionDefinition.key === "operations_and_cost" ? undefined : citations
+    );
+  }
+
+  const persistenceDurationMs = Date.now() - persistenceStartedAt;
+  await updateReportSummaryJson(report.id, {
+    token_usage: tokenUsage,
+    report_format: "premium_v2",
+    report_family: "premium",
+    generator_version: "premium_v2_default",
+    evidence_quality: args.retrievalState.evidenceQuality,
+    source_coverage: args.retrievalState.coverage,
+    persona_qa: args.personaQa,
+    quality_gate: resolvedQualityGate,
+    persona_profile: args.persona,
+    presentation_plan: args.presentationPlan,
+    retrieval_queries: args.retrievalState.normalizedQueries,
+    research_plan: args.latestResearchPlan
+      ? {
+          strategy_summary: args.latestResearchPlan.strategySummary,
+          selected_sources: args.latestResearchPlan.selectedSources,
+          retrieval_queries: args.latestResearchPlan.retrievalQueries,
+          source_strategy: args.latestResearchPlan.sourceStrategy,
+        }
+      : null,
+    cost_ledger: buildPremiumCostLedger({
+      reportId: report.id,
+      requestId: args.requestId,
+      runId,
+      companyName: args.companyName,
+      roleTitle: args.request.role_title,
+      persona: args.persona,
+      tokenUsage,
+      primaryUsage: args.llmCalls[0],
+      sources: args.retrievalState.sources,
+      retrievalQueries: args.retrievalState.normalizedQueries,
+      evidenceQuality: args.retrievalState.evidenceQuality,
+      coverage: args.retrievalState.coverage,
+      personaQa: args.personaQa,
+      qualityGate: resolvedQualityGate,
+      hasResumeOverlay: Boolean(args.request.profile_context?.trim()),
+      durations: {
+        retrieval_ms: args.totalRetrievalDurationMs,
+        synthesis_ms: args.totalSynthesisDurationMs,
+        persistence_ms: persistenceDurationMs,
+        total_ms: Date.now() - args.assemblyStartedAt,
+      },
+      targetedRetrievalLoops: args.targetedRetrievalLoops,
+    }),
+  });
+
+  return report;
+}
+
 export async function assemblePremiumReportV2(
   requestId: string,
   researchPlanOrQueries?: ResearchPlan | string[]
@@ -628,25 +853,21 @@ export async function assemblePremiumReportV2(
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const synthesisStartedAt = Date.now();
-    const prompt = await getPremiumReportPromptV2(
-      retrievalState.context,
+    const draft = await buildPremiumDraft({
+      retrievalState,
       companyName,
-      request.role_title,
-      request.job_description ?? undefined,
-      request.profile_context ?? undefined,
-      retrievalState.evidenceQuality,
-      retrievalState.coverage,
+      roleTitle: request.role_title,
+      jobDescription: request.job_description ?? undefined,
+      profileContext: request.profile_context ?? undefined,
       persona,
-      qualityGate?.repair_instructions
-    );
-
-    const { data, usage } = await generatePremiumReport(prompt);
-    llmCalls.push(usage);
+      qualityGate,
+    });
+    llmCalls.push(draft.usage);
     totalSynthesisDurationMs += Date.now() - synthesisStartedAt;
 
-    finalData = data;
-    wrappedSections = buildWrappedSections(PREMIUM_SECTION_DEFINITIONS, data.sections);
-    personaQa = assessPremiumPersonaQa(persona, wrappedSections);
+    finalData = draft.data;
+    wrappedSections = draft.wrappedSections;
+    personaQa = draft.personaQa;
 
     const { evaluation, usage: evaluationUsage } = await evaluateDraft({
       companyName,
@@ -740,158 +961,24 @@ export async function assemblePremiumReportV2(
     throw new Error("Premium report generation did not produce a final draft.");
   }
 
-  const resolvedQualityGate = resolveQualityGateForPersistence(qualityGate, wrappedSections);
-  const gatedSections = ensureRequiredSectionsForPersistence({
-    sections: applyQualityGateToSections(wrappedSections, resolvedQualityGate),
-    hasResumeOverlay: Boolean(request.profile_context?.trim()),
-    fallbackSections: wrappedSections,
-  });
-  const tokenUsage: ReportTokenUsage = {
-    calls: llmCalls,
-    total_tokens: llmCalls.reduce((sum, call) => sum + call.input_tokens + call.output_tokens, 0),
-    total_cost_usd: llmCalls.reduce((sum, call) => sum + call.estimated_cost_usd, 0),
-  };
-
-  const scores = {
-    company_momentum: clampScore(finalData.scorecard?.company_momentum, 6),
-    org_clarity: clampScore(finalData.scorecard?.org_clarity, 5),
-    role_leverage: clampScore(finalData.scorecard?.role_leverage, 6),
-    execution_risk: clampScore(finalData.scorecard?.execution_risk, 5),
-    candidate_fit: clampScore(finalData.scorecard?.candidate_fit, request.profile_context?.trim() ? 5 : 0),
-  };
-
-  const report = await createReport(
+  return await persistPremiumReportArtifacts({
     requestId,
-    toValidRecommendation(finalData.report_recommendation),
-    scores,
-    {
-      token_usage: tokenUsage,
-      report_format: "premium_v2",
-      report_family: "premium",
-      generator_version: "premium_v2_default",
-      evidence_quality: retrievalState.evidenceQuality,
-      source_coverage: retrievalState.coverage,
-      persona_qa: personaQa,
-      quality_gate: resolvedQualityGate,
-      persona_profile: persona,
-      presentation_plan: presentationPlan,
-      retrieval_queries: retrievalState.normalizedQueries,
-      research_plan: latestResearchPlan
-        ? {
-            strategy_summary: latestResearchPlan.strategySummary,
-            selected_sources: latestResearchPlan.selectedSources,
-            retrieval_queries: latestResearchPlan.retrievalQueries,
-            source_strategy: latestResearchPlan.sourceStrategy,
-          }
-        : null,
-    },
-    {
-      ai_query_count: tokenUsage.calls.length,
-      source_count: retrievalState.sources.length,
-      source_host_count: new Set(
-        retrievalState.sources.map((source) => getHostname(source.url)).filter((host): host is string => Boolean(host))
-      ).size,
-    },
-    {
-      report_format: "premium_v2",
-      report_family: "premium",
-    }
-  );
-
-  const persistenceStartedAt = Date.now();
-  const initialLedger = buildPremiumCostLedger({
-    reportId: report.id,
-    requestId,
-    runId,
+    request,
     companyName,
-    roleTitle: request.role_title,
     persona,
-    tokenUsage,
-    primaryUsage: llmCalls[0],
-    sources: retrievalState.sources,
-    retrievalQueries: retrievalState.normalizedQueries,
-    evidenceQuality: retrievalState.evidenceQuality,
-    coverage: retrievalState.coverage,
+    presentationPlan,
+    orderedDefinitions,
+    retrievalState,
+    latestResearchPlan,
+    totalRetrievalDurationMs,
+    totalSynthesisDurationMs,
+    llmCalls,
+    finalData,
+    wrappedSections,
     personaQa,
-    qualityGate: resolvedQualityGate,
-    hasResumeOverlay: Boolean(request.profile_context?.trim()),
-    durations: {
-      retrieval_ms: totalRetrievalDurationMs,
-      synthesis_ms: totalSynthesisDurationMs,
-      persistence_ms: 0,
-      total_ms: Date.now() - assemblyStartedAt,
-    },
+    qualityGate,
     targetedRetrievalLoops,
+    assemblyStartedAt,
+    runId,
   });
-
-  const citations = buildReportCitations(retrievalState.context.chunks, request.company_url ?? undefined);
-
-  for (const [index, sectionDefinition] of orderedDefinitions.entries()) {
-    const displayTitle = presentationPlan.titleBySectionKey[sectionDefinition.key] ?? sectionDefinition.title;
-    const content = sectionDefinition.key === "operations_and_cost"
-      ? buildPremiumOperationsSection(tokenUsage, retrievalState.evidenceQuality, retrievalState.coverage, initialLedger)
-      : gatedSections[sectionDefinition.key];
-
-    if (!content) {
-      continue;
-    }
-
-    await createReportSection(
-      report.id,
-      sectionDefinition.key,
-      displayTitle,
-      JSON.stringify(content),
-      index,
-      sectionDefinition.key === "operations_and_cost" ? undefined : citations
-    );
-  }
-
-  const persistenceDurationMs = Date.now() - persistenceStartedAt;
-  await updateReportSummaryJson(report.id, {
-    token_usage: tokenUsage,
-    report_format: "premium_v2",
-    report_family: "premium",
-    generator_version: "premium_v2_default",
-    evidence_quality: retrievalState.evidenceQuality,
-    source_coverage: retrievalState.coverage,
-    persona_qa: personaQa,
-    quality_gate: resolvedQualityGate,
-    persona_profile: persona,
-    presentation_plan: presentationPlan,
-    retrieval_queries: retrievalState.normalizedQueries,
-    research_plan: latestResearchPlan
-      ? {
-          strategy_summary: latestResearchPlan.strategySummary,
-          selected_sources: latestResearchPlan.selectedSources,
-          retrieval_queries: latestResearchPlan.retrievalQueries,
-          source_strategy: latestResearchPlan.sourceStrategy,
-        }
-      : null,
-    cost_ledger: buildPremiumCostLedger({
-      reportId: report.id,
-      requestId,
-      runId,
-      companyName,
-      roleTitle: request.role_title,
-      persona,
-      tokenUsage,
-      primaryUsage: llmCalls[0],
-      sources: retrievalState.sources,
-      retrievalQueries: retrievalState.normalizedQueries,
-      evidenceQuality: retrievalState.evidenceQuality,
-      coverage: retrievalState.coverage,
-      personaQa,
-      qualityGate: resolvedQualityGate,
-      hasResumeOverlay: Boolean(request.profile_context?.trim()),
-      durations: {
-        retrieval_ms: totalRetrievalDurationMs,
-        synthesis_ms: totalSynthesisDurationMs,
-        persistence_ms: persistenceDurationMs,
-        total_ms: Date.now() - assemblyStartedAt,
-      },
-      targetedRetrievalLoops,
-    }),
-  });
-
-  return report;
 }

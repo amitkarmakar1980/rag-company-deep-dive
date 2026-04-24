@@ -75,40 +75,44 @@ function makeSections(): Record<string, PremiumSectionContent> {
     decision_memo: makeSection("Clear evidence-backed recommendation with upside, downside, and decision pivots."),
     five_minute_brief: makeSection("Fast briefing tailored to the role and level.", { surface: "both", group: "Decision" }),
     company_context: makeSection(
-      "The company context connects the firm's history, operating model, and leadership priorities to the candidate's preparation burden. It explains how the company frames its mission, how leadership describes the long-term vision, and what day-to-day culture signals imply about decision velocity, accountability, collaboration norms, hiring standards, and tolerance for strategic risk across teams. A premium version of this section should help the candidate infer how leaders want people to think, collaborate, and escalate rather than just describing employer-brand language.",
+      "The company context connects the firm's history, operating model, leadership priorities, customer pressures, and market position to the candidate's preparation burden. It explains how leadership frames the long-term strategy, what external signals imply about competitive pressure and customer expectations, and what culture and operating cadence suggest about decision velocity, accountability, collaboration norms, escalation behavior, and tolerance for strategic risk. A premium version of this section should help the candidate infer how leaders want people to think, collaborate, and trade off speed, rigor, and market responsiveness rather than just repeating employer-brand language.",
       {
         blocks: [
           {
             title: "Company Snapshot",
-            body: "The company appears to be operating through a mix of platform leverage, ecosystem coordination, and leadership-priority concentration rather than through a single narrow product line. That matters because the candidate will likely be interviewed for judgment about tradeoffs, not just execution mechanics. A strong candidate should be able to explain how the business is trying to compound strategic advantage while still controlling operating complexity and coordination cost.",
+            body: "The company appears to be operating through a mix of platform leverage, ecosystem coordination, customer retention pressure, and leadership-priority concentration rather than through a single narrow product line. That matters because the candidate will likely be interviewed for judgment about tradeoffs, not just execution mechanics. A strong candidate should be able to explain how the business is trying to compound strategic advantage, defend market position, and control operating complexity while still meeting customer expectations and category pressure.",
           },
           {
             title: "Vision And Mission",
-            body: "The mission and vision language matter because they indicate whether leadership is optimizing for platform scale, category expansion, operational discipline, or customer trust. Premium prep should translate those statements into likely strategic priorities rather than repeating branded slogans. The useful interpretation is which promises leadership is making to the market and what operating behavior the interview loop will expect a senior hire to reinforce over time.",
+            body: "The mission and vision language matter because they indicate whether leadership is optimizing for platform scale, category expansion, operational discipline, customer trust, or stronger economic performance. Premium prep should translate those statements into likely strategic priorities rather than repeating branded slogans. The useful interpretation is which promises leadership is making to the market, where external validation supports or challenges those promises, and what operating behavior the interview loop will expect a senior hire to reinforce over time.",
           },
           {
             title: "Culture Signals",
-            body: "Culture should be read through leadership principles, operating principles, hiring signals, and execution habits. The useful interpretation is whether the company rewards speed, debate, rigor, ownership, or controlled experimentation, because those norms change how the candidate should position stories and decision-making style. This section should help the candidate infer whether the company prizes independent judgment, stakeholder diplomacy, customer obsession, or disciplined execution under ambiguity.",
+            body: "Culture should be read through leadership principles, operating principles, hiring signals, execution cadence, and how the company appears to make decisions under pressure. The useful interpretation is whether the company rewards speed, debate, rigor, ownership, controlled experimentation, or tight stakeholder coordination, because those norms change how the candidate should position stories and decision-making style. This section should help the candidate infer whether the company prizes independent judgment, stakeholder diplomacy, customer obsession, disciplined execution under ambiguity, and how leaders likely balance tradeoffs when market or operating pressure rises.",
           },
         ],
       }
     ),
     why_role_exists_now: makeSection("Explains the current company and role inflection clearly.", { surface: "both", group: "Decision" }),
     company_role_strategy: makeSection(
-      "The company and role strategy section interprets the current business model, current strategic posture, market pressures, and execution constraints in a way that helps the candidate sound like an operator rather than a summarizer. It should explain what the company is trying to win, what tensions leadership is balancing, how those tensions shape the real mandate for this role, and why the interview loop is likely to reward certain kinds of strategic judgment more than generic enthusiasm. It should also connect the strategy to stakeholder expectations, execution risk, and mandate credibility.",
+      "The company and role strategy section interprets the current business model, current strategic posture, market pressures, competitor moves, customer dynamics, economic logic, and execution constraints in a way that helps the candidate sound like an operator rather than a summarizer. It should explain what the company is trying to win, what tensions leadership is balancing, how growth and margin logic appear to work, how those tensions shape the real mandate for this role, and why the interview loop is likely to reward certain kinds of strategic judgment more than generic enthusiasm. It should also connect the strategy to stakeholder expectations, execution risk, mandate credibility, and the most relevant blind spots visible in the broader market context.",
       {
         blocks: [
           {
             title: "Current Strategy",
-            body: "The current strategy should identify the operating bets leadership seems to be prioritizing now, why those bets exist, and how they create demand for this role. It should also explain whether the strategy is about expansion, monetization, efficiency, trust, platform leverage, or portfolio defense and what that means for interview positioning. Premium strategy content should tell the candidate where management is likely optimistic, where management is likely constrained, and how the role is expected to convert strategy into operating progress.",
+            body: "The current strategy should identify the operating bets leadership seems to be prioritizing now, why those bets exist, how growth appears to be generated, and how those choices create demand for this role. It should also explain whether the strategy is about expansion, monetization, efficiency, trust, platform leverage, or portfolio defense and what that means for interview positioning. Premium strategy content should tell the candidate where management is likely optimistic, where management is likely constrained, what customer and market signals matter most, and how the role is expected to convert strategy into operating progress.",
           },
           {
             title: "Strategic Tensions",
-            body: "A useful company strategy read has to name tensions explicitly: growth versus discipline, platform standardization versus local optimization, customer experience versus operational complexity, and innovation speed versus governance. Those tensions matter because they are often the subtext behind why the role exists and what interviewers are actually testing when they probe judgment, prioritization, and cross-functional influence.",
+            body: "A useful company strategy read has to name tensions explicitly: growth versus discipline, platform standardization versus local optimization, customer experience versus operational complexity, innovation speed versus governance, and margin protection versus long-term market investment. Those tensions matter because they are often the subtext behind why the role exists and what interviewers are actually testing when they probe judgment, prioritization, and cross-functional influence. The section should also make clear how management appears to be optimizing across economic, competitive, and operating constraints rather than treating strategy as a slogan.",
+          },
+          {
+            title: "Market And Competitive Context",
+            body: "The strategy section should show how market structure, competitor behavior, category pressure, customer expectations, and external validation change the likely mandate for this role. A strong candidate should be able to explain where the company may have a real moat, where differentiation looks fragile, what competitor moves are likely shaping management tradeoffs, and how market pressure may change tolerance for experimentation, pricing, roadmap pacing, or operational discipline.",
           },
           {
             title: "Role Implications",
-            body: "The strategy section should connect the business posture back to the role. A strong candidate should be able to say which strategic bets need better execution, where stakeholder friction is likely to show up, and why this mandate requires a specific kind of product, technical, or operating judgment rather than generic leadership language.",
+            body: "The strategy section should connect the business posture back to the role. A strong candidate should be able to say which strategic bets need better execution, where stakeholder friction is likely to show up, where economic or competitive pressure may narrow room for error, and why this mandate requires a specific kind of product, technical, or operating judgment rather than generic leadership language.",
           },
           {
             title: "SWOT - Strengths",
@@ -269,7 +273,11 @@ test("quality gate forces depth repair when company sections miss minimum depth 
   assert.ok(result.warning_flags.some((warning) => /150-word premium minimum/i.test(warning)));
   assert.ok(result.warning_flags.some((warning) => /300-word premium minimum/i.test(warning)));
   assert.ok(result.warning_flags.some((warning) => /swot weaknesses bullets/i.test(warning)));
-  assert.ok(result.repair_instructions.some((instruction) => /current-strategy block/i.test(instruction)));
+  assert.ok(
+    result.repair_instructions.some(
+      (instruction) => /current strategy|strategic tensions|swot|comprehensive rag-backed strategy report/i.test(instruction)
+    )
+  );
 });
 
 test("quality gate requests repair on a shallow first pass and blocks after retry if critical sections stay weak", () => {
@@ -437,7 +445,7 @@ test("blocked quality-gate results downgrade to a persisted partial draft when t
         : section
     ),
     blocked_release_reasons: [
-      "Company strategy section did not meet the premium depth contract.",
+      "Company strategy section did not meet the premium enhanced-RAG synthesis depth contract.",
       "Depth remained below the premium minimum after evaluation.",
       "Evidence quality remained below the premium minimum after evaluation.",
     ],
@@ -496,7 +504,7 @@ test("blocked quality-gate results downgrade to suppress-and-release when one br
       return section;
     }),
     blocked_release_reasons: [
-      "Company strategy section did not meet the premium depth contract.",
+      "Company strategy section did not meet the premium enhanced-RAG synthesis depth contract.",
       "Depth remained below the premium minimum after evaluation.",
       "Evidence quality remained below the premium minimum after evaluation.",
     ],

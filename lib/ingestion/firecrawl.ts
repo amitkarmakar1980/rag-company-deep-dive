@@ -28,12 +28,31 @@ export interface FirecrawlResponse {
 
 export type PlannedSourceType = "company_homepage" | "newsroom" | "blog" | "custom_url";
 
+export type SourceParty = "first_party" | "regulator" | "analyst" | "press" | "aggregator" | "search";
+export type SourceTrustTier = "highest" | "high" | "medium" | "low";
+export type SourceOrigin = "company_url" | "homepage_discovery" | "custom_input" | "heuristic_seed" | "llm_selected" | "coverage_gap_fill";
+
+export interface SourceScoreBreakdown {
+  authority: number;
+  specificity: number;
+  coverage: number;
+  independence: number;
+  intentFit: number;
+}
+
 export interface PlannedSource {
   url: string;
   type: PlannedSourceType;
   priority: number;
   rationale?: string;
   sourceClasses?: string[];
+  party?: SourceParty;
+  trustTier?: SourceTrustTier;
+  origin?: SourceOrigin;
+  selectionReason?: string;
+  score?: number;
+  scoreBreakdown?: SourceScoreBreakdown;
+  gapCoverage?: string[];
 }
 
 interface PlannerCandidate extends PlannedSource {
@@ -42,11 +61,19 @@ interface PlannerCandidate extends PlannedSource {
   signal: string;
 }
 
+interface ScoredPlannerCandidate extends PlannerCandidate {
+  party: SourceParty;
+  trustTier: SourceTrustTier;
+  origin: SourceOrigin;
+  score: number;
+  scoreBreakdown: SourceScoreBreakdown;
+}
+
 export interface RagSourceStrategy {
   goal: string;
   requiredSourceClasses: string[];
   priorityOrder: string[];
-  recommendedSources: PlannerCandidate[];
+  recommendedSources: ScoredPlannerCandidate[];
   notes: string[];
 }
 
@@ -55,6 +82,14 @@ export interface ResearchPlan {
   selectedSources: PlannedSource[];
   retrievalQueries: string[];
   sourceStrategy: RagSourceStrategy;
+  coverageSummary?: {
+    requiredSourceClasses: string[];
+    coveredSourceClasses: string[];
+    missingSourceClasses: string[];
+    independentDomainsTarget: number;
+    independentDomainsActual: number;
+    secondPassAddedCount: number;
+  };
 }
 
 export interface ResolvedPlannedSource {
@@ -79,6 +114,7 @@ interface FirstPartyDiscoveryRule {
   priority: number;
   label: string;
   signal: string;
+  sourceClasses?: string[];
 }
 
 const SOURCE_CLASS_TARGET_TERMS: Record<string, string[]> = {
@@ -87,11 +123,11 @@ const SOURCE_CLASS_TARGET_TERMS: Record<string, string[]> = {
   leadership_strategy: ["investor", "leadership", "about", "strategy", "shareholder", "leadership interview"],
   leadership_commentary: ["leadership", "leadership interview", "about", "team", "the org search"],
   investor_materials: ["investor", "shareholder", "earnings", "finance", "crunchbase", "yahoo finance"],
-  competitor_positioning: ["competitive", "competitor", "g2", "capterra", "competitive landscape search"],
+  competitor_positioning: ["competitive", "competitor", "g2", "capterra", "competitive landscape search", "market share", "gartner", "forrester", "peer"],
   technical_context: ["engineering", "developer", "api", "platform", "blog"],
   engineering_docs: ["developer", "api", "docs", "platform"],
   governance_signals: ["leadership", "about", "team", "the org search"],
-  external_validation: ["stratechery", "the information", "cb insights", "reuters", "glassdoor", "analysis", "validation"],
+  external_validation: ["stratechery", "the information", "cb insights", "reuters", "glassdoor", "analysis", "validation", "gartner", "forrester", "market research", "industry report"],
 };
 
 const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
@@ -101,6 +137,7 @@ const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
     priority: 10,
     label: "Discovered careers page",
     signal: "Homepage-linked careers or job-search page for exact role-context discovery.",
+    sourceClasses: ["job_description"],
   },
   {
     keywords: ["investor", "shareholder", "earnings", "financial", "annual-report"],
@@ -108,6 +145,7 @@ const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
     priority: 10,
     label: "Discovered investor page",
     signal: "Homepage-linked investor or earnings page for strategy and business-model evidence.",
+    sourceClasses: ["investor_materials", "leadership_strategy"],
   },
   {
     keywords: ["press", "news", "newsroom", "media"],
@@ -115,6 +153,7 @@ const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
     priority: 9,
     label: "Discovered newsroom",
     signal: "Homepage-linked newsroom or press page for launches and company updates.",
+    sourceClasses: ["product_surfaces"],
   },
   {
     keywords: ["blog", "stories", "insights"],
@@ -122,6 +161,7 @@ const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
     priority: 8,
     label: "Discovered blog",
     signal: "Homepage-linked blog or stories page for product and operating context.",
+    sourceClasses: ["product_surfaces", "technical_context"],
   },
   {
     keywords: ["leadership", "leaders", "team", "management", "executives"],
@@ -129,6 +169,7 @@ const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
     priority: 8,
     label: "Discovered leadership page",
     signal: "Homepage-linked leadership page for stakeholder and operating-style context.",
+    sourceClasses: ["leadership_commentary", "governance_signals"],
   },
   {
     keywords: ["about", "company", "mission", "values"],
@@ -136,6 +177,7 @@ const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
     priority: 7,
     label: "Discovered about page",
     signal: "Homepage-linked about page for company narrative and cultural framing.",
+    sourceClasses: ["leadership_strategy", "governance_signals"],
   },
   {
     keywords: ["product", "platform", "pricing", "features", "solutions", "safety", "trust", "privacy"],
@@ -143,6 +185,7 @@ const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
     priority: 8,
     label: "Discovered product surface",
     signal: "Homepage-linked product or domain page for role-adjacent product evidence.",
+    sourceClasses: ["product_surfaces", "competitor_positioning"],
   },
   {
     keywords: ["developer", "docs", "api", "engineering"],
@@ -150,6 +193,7 @@ const FIRST_PARTY_DISCOVERY_RULES: FirstPartyDiscoveryRule[] = [
     priority: 7,
     label: "Discovered technical docs",
     signal: "Homepage-linked developer or documentation page for technical context.",
+    sourceClasses: ["technical_context", "engineering_docs"],
   },
 ];
 
@@ -745,6 +789,8 @@ export function extractFirstPartyCandidatesFromHomepage(args: {
       label: classification.label,
       domain: getHostname(normalizedUrl) ?? "company-site",
       signal: classification.signal,
+      origin: "homepage_discovery",
+      sourceClasses: classification.sourceClasses,
     });
 
     if (discovered.length >= maxCandidates) {
@@ -941,6 +987,24 @@ function buildGenericStrategySeedCandidates(companyName: string, roleTitle: stri
       sourceClasses: ["leadership_strategy", "external_validation"],
     },
     {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} competitors alternatives market share Gartner Forrester G2 Capterra`)}`,
+      type: "custom_url",
+      priority: 8,
+      label: "Competitor and analyst landscape search",
+      domain: "google.com",
+      signal: "Finds competitor sets, analyst framing, market-share context, and alternatives before strategy synthesis.",
+      sourceClasses: ["competitor_positioning", "external_validation"],
+    },
+    {
+      url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} industry report market size growth rate customer segments analyst`)}`,
+      type: "custom_url",
+      priority: 7,
+      label: "Market research search",
+      domain: "google.com",
+      signal: "Finds market-structure, category-growth, and customer-segmentation evidence for company-context synthesis.",
+      sourceClasses: ["competitor_positioning", "external_validation", "leadership_strategy"],
+    },
+    {
       url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} capital allocation EBITDA free cash flow buybacks investor day`)}`,
       type: "custom_url",
       priority: 8,
@@ -1055,6 +1119,8 @@ export function buildPlannerCandidatePool(
         label: "Company homepage",
         domain: companyHost ?? "company-site",
         signal: "Official messaging, product framing, and core positioning.",
+        origin: "company_url",
+        sourceClasses: ["leadership_strategy", "product_surfaces"],
       });
 
       if (companyHost && companyOrigin) {
@@ -1065,6 +1131,8 @@ export function buildPlannerCandidatePool(
           label: "Company careers",
           domain: companyHost,
           signal: "Exact job description and role-context source discovery.",
+          origin: "company_url",
+          sourceClasses: ["job_description"],
         });
         pushCandidate({
           url: `${companyOrigin}/investors`,
@@ -1073,6 +1141,8 @@ export function buildPlannerCandidatePool(
           label: "Investor relations",
           domain: companyHost,
           signal: "Primary source for earnings, shareholder letters, and strategic priorities.",
+          origin: "company_url",
+          sourceClasses: ["investor_materials", "leadership_strategy"],
         });
         pushCandidate({
           url: `${companyOrigin}/press`,
@@ -1081,6 +1151,8 @@ export function buildPlannerCandidatePool(
           label: "Company press",
           domain: companyHost,
           signal: "Official press releases and launch announcements.",
+          origin: "company_url",
+          sourceClasses: ["product_surfaces"],
         });
         pushCandidate({
           url: `${companyOrigin}/blog`,
@@ -1089,6 +1161,8 @@ export function buildPlannerCandidatePool(
           label: "Company blog",
           domain: companyHost,
           signal: "Long-form product, engineering, and leadership content.",
+          origin: "company_url",
+          sourceClasses: ["product_surfaces", "technical_context"],
         });
         pushCandidate({
           url: `${companyOrigin}/leadership`,
@@ -1097,6 +1171,8 @@ export function buildPlannerCandidatePool(
           label: "Leadership page",
           domain: companyHost,
           signal: "Leadership bios and executive context for stakeholder mapping.",
+          origin: "company_url",
+          sourceClasses: ["leadership_commentary", "governance_signals"],
         });
         pushCandidate({
           url: `${companyOrigin}/team`,
@@ -1105,6 +1181,8 @@ export function buildPlannerCandidatePool(
           label: "Team page",
           domain: companyHost,
           signal: "Role-context and team topology evidence.",
+          origin: "company_url",
+          sourceClasses: ["leadership_commentary"],
         });
         pushCandidate({
           url: `${companyOrigin}/about`,
@@ -1113,6 +1191,8 @@ export function buildPlannerCandidatePool(
           label: "About page",
           domain: companyHost,
           signal: "Company narrative, leadership framing, and operating context.",
+          origin: "company_url",
+          sourceClasses: ["leadership_strategy", "governance_signals"],
         });
       }
     }
@@ -1136,6 +1216,7 @@ export function buildPlannerCandidatePool(
       label: `Custom URL: ${domain}`,
       domain,
       signal: "User-supplied URL considered highly relevant.",
+      origin: "custom_input",
     });
   }
 
@@ -1147,6 +1228,8 @@ export function buildPlannerCandidatePool(
       label: "Investor relations search",
       domain: "google.com",
       signal: "Primary-source discovery for filings, earnings, and investor day materials.",
+      origin: "heuristic_seed",
+      sourceClasses: ["investor_materials", "leadership_strategy"],
     },
     {
       url: `https://news.google.com/search?q=${encodedRole}`,
@@ -1155,6 +1238,8 @@ export function buildPlannerCandidatePool(
       label: "Google News search",
       domain: "news.google.com",
       signal: "Recent press and independent reporting.",
+      origin: "heuristic_seed",
+      sourceClasses: ["external_validation"],
     },
     {
       url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} leadership interview podcast keynote`)}`,
@@ -1163,6 +1248,8 @@ export function buildPlannerCandidatePool(
       label: "Leadership interview search",
       domain: "google.com",
       signal: "Leadership talks, podcasts, and interviews for executive intent and operating style.",
+      origin: "heuristic_seed",
+      sourceClasses: ["leadership_commentary", "leadership_strategy"],
     },
     {
       url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} ${roleTitle} related roles team page leadership bios`)}`,
@@ -1171,6 +1258,8 @@ export function buildPlannerCandidatePool(
       label: "Role-context search",
       domain: "google.com",
       signal: "Related roles, team pages, and bios that clarify scope and stakeholder context.",
+      origin: "heuristic_seed",
+      sourceClasses: ["leadership_commentary"],
     },
     {
       url: `https://www.bing.com/news/search?q=${encodedRole}`,
@@ -1179,6 +1268,8 @@ export function buildPlannerCandidatePool(
       label: "Bing News search",
       domain: "bing.com",
       signal: "Alternative news ranking for diversity.",
+      origin: "heuristic_seed",
+      sourceClasses: ["external_validation"],
     },
     {
       url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} investor relations earnings strategy`)}`,
@@ -1187,6 +1278,8 @@ export function buildPlannerCandidatePool(
       label: "Investor and strategy search",
       domain: "google.com",
       signal: "Investor relations, earnings, and strategic positioning sources.",
+      origin: "heuristic_seed",
+      sourceClasses: ["investor_materials", "leadership_strategy"],
     },
     {
       url: `https://www.crunchbase.com/textsearch?q=${encodedCompany}`,
@@ -1195,6 +1288,8 @@ export function buildPlannerCandidatePool(
       label: "Crunchbase search",
       domain: "crunchbase.com",
       signal: "Funding, acquisitions, and company-stage context.",
+      origin: "heuristic_seed",
+      sourceClasses: ["external_validation", "investor_materials"],
     },
     {
       url: `https://www.theorg.com/search?query=${encodedCompany}`,
@@ -1203,6 +1298,8 @@ export function buildPlannerCandidatePool(
       label: "The Org search",
       domain: "theorg.com",
       signal: "Org-chart and leadership-structure context.",
+      origin: "heuristic_seed",
+      sourceClasses: ["leadership_commentary", "governance_signals"],
     },
     {
       url: `https://www.g2.com/search?query=${encodedCompany}`,
@@ -1211,6 +1308,8 @@ export function buildPlannerCandidatePool(
       label: "G2 search",
       domain: "g2.com",
       signal: "Product sentiment and competitive alternatives.",
+      origin: "heuristic_seed",
+      sourceClasses: ["competitor_positioning", "external_validation"],
     },
     {
       url: `https://www.capterra.com/search/?query=${encodedCompany}`,
@@ -1219,6 +1318,8 @@ export function buildPlannerCandidatePool(
       label: "Capterra search",
       domain: "capterra.com",
       signal: "Category positioning and customer-review context.",
+      origin: "heuristic_seed",
+      sourceClasses: ["competitor_positioning", "external_validation"],
     },
     {
       url: `https://www.glassdoor.com/Search/results.htm?keyword=${encodedCompany}`,
@@ -1227,6 +1328,8 @@ export function buildPlannerCandidatePool(
       label: "Glassdoor search",
       domain: "glassdoor.com",
       signal: "Employee sentiment and hiring/culture checks.",
+      origin: "heuristic_seed",
+      sourceClasses: ["external_validation", "governance_signals"],
     },
     {
       url: `https://en.wikipedia.org/w/index.php?search=${encodedCompany}`,
@@ -1235,6 +1338,8 @@ export function buildPlannerCandidatePool(
       label: "Wikipedia search",
       domain: "wikipedia.org",
       signal: "High-level company timeline and history.",
+      origin: "heuristic_seed",
+      sourceClasses: ["external_validation"],
     },
     {
       url: `https://techcrunch.com/search/${encodedCompany}`,
@@ -1243,6 +1348,8 @@ export function buildPlannerCandidatePool(
       label: "TechCrunch search",
       domain: "techcrunch.com",
       signal: "Startup, product, and financing coverage.",
+      origin: "heuristic_seed",
+      sourceClasses: ["external_validation", "product_surfaces"],
     },
     {
       url: `https://finance.yahoo.com/lookup?s=${encodedCompany}`,
@@ -1251,6 +1358,8 @@ export function buildPlannerCandidatePool(
       label: "Yahoo Finance lookup",
       domain: "finance.yahoo.com",
       signal: "Public-market and ticker context.",
+      origin: "heuristic_seed",
+      sourceClasses: ["investor_materials", "external_validation"],
     },
     {
       url: `https://www.google.com/search?q=${encodeURIComponent(`${companyName} ${roleTitle} org structure strategy`)}`,
@@ -1259,6 +1368,8 @@ export function buildPlannerCandidatePool(
       label: "Role-specific web search",
       domain: "google.com",
       signal: "Role-specific signals tied to organization changes or hiring urgency.",
+      origin: "heuristic_seed",
+      sourceClasses: ["leadership_commentary", "external_validation"],
     },
     {
       url: `https://www.google.com/search?q=${encodeURIComponent(`${companySlug} competitors market share`)}`,
@@ -1267,6 +1378,8 @@ export function buildPlannerCandidatePool(
       label: "Competitive landscape search",
       domain: "google.com",
       signal: "Competitor and market-share coverage.",
+      origin: "heuristic_seed",
+      sourceClasses: ["competitor_positioning", "external_validation"],
     },
   ];
 
@@ -1275,6 +1388,189 @@ export function buildPlannerCandidatePool(
   }
 
   return candidates;
+}
+
+function resolveCandidateSourceClasses(candidate: PlannerCandidate): string[] {
+  const matchedClasses = Object.keys(SOURCE_CLASS_TARGET_TERMS).filter((sourceClass) => candidateMatchesSourceClass(candidate, sourceClass));
+  return dedupeStrings([...(candidate.sourceClasses ?? []), ...matchedClasses]);
+}
+
+function deriveSourceParty(candidate: PlannerCandidate, companyHost?: string | null): SourceParty {
+  const host = getHostname(candidate.url) ?? candidate.domain;
+  if (!host) {
+    return "aggregator";
+  }
+
+  if (isSearchResultsUrl(candidate.url) || host === "google.com" || host === "bing.com" || host === "news.google.com") {
+    return "search";
+  }
+
+  if (host === "sec.gov") {
+    return "regulator";
+  }
+
+  if (companyHost && (host === companyHost || host.endsWith(`.${companyHost}`))) {
+    return "first_party";
+  }
+
+  if (["srgresearch.com", "gartner.com", "forrester.com", "canalys.com", "omdia.com"].some((domain) => host === domain || host.endsWith(`.${domain}`))) {
+    return "analyst";
+  }
+
+  if (["reuters.com", "techcrunch.com", "theinformation.com", "stratatechery.com", "wsj.com", "ft.com", "bloomberg.com"].some((domain) => host === domain || host.endsWith(`.${domain}`))) {
+    return "press";
+  }
+
+  return "aggregator";
+}
+
+function deriveTrustTier(candidate: PlannerCandidate, party: SourceParty): SourceTrustTier {
+  if (candidate.sourceClasses?.includes("job_description")) {
+    return "highest";
+  }
+
+  switch (party) {
+    case "regulator":
+      return "highest";
+    case "first_party":
+    case "analyst":
+      return "high";
+    case "press":
+      return "medium";
+    case "search":
+    case "aggregator":
+    default:
+      return "low";
+  }
+}
+
+function isConcreteSourceUrl(url: string): boolean {
+  return !isSearchResultsUrl(url);
+}
+
+function scorePlannerCandidate(args: {
+  candidate: PlannerCandidate;
+  requiredSourceClasses: string[];
+  companyHost?: string | null;
+}): ScoredPlannerCandidate {
+  const sourceClasses = resolveCandidateSourceClasses(args.candidate);
+  const party = deriveSourceParty(args.candidate, args.companyHost);
+  const trustTier = deriveTrustTier(args.candidate, party);
+  const authority = trustTier === "highest" ? 12 : trustTier === "high" ? 9 : trustTier === "medium" ? 6 : 3;
+  const specificity = isConcreteSourceUrl(args.candidate.url) ? 6 : 2;
+  const coverage = Math.min(sourceClasses.length * 2, 8);
+  const independence = party === "first_party" ? 2 : party === "search" ? 1 : 5;
+  const intentFit = args.requiredSourceClasses.reduce((total, sourceClass) => total + (sourceClasses.includes(sourceClass) ? 2 : 0), 0);
+  const scoreBreakdown: SourceScoreBreakdown = {
+    authority,
+    specificity,
+    coverage,
+    independence,
+    intentFit,
+  };
+
+  return {
+    ...args.candidate,
+    sourceClasses,
+    party,
+    trustTier,
+    origin: args.candidate.origin ?? "heuristic_seed",
+    score: args.candidate.priority * 2 + authority + specificity + coverage + independence + intentFit,
+    scoreBreakdown,
+  };
+}
+
+function sourceCoverageForPlanning(source: PlannedSource): string[] {
+  return dedupeStrings(source.sourceClasses ?? []);
+}
+
+function computeCoverageSummary(args: {
+  requiredSourceClasses: string[];
+  selectedSources: PlannedSource[];
+  companyHost?: string | null;
+  secondPassAddedCount: number;
+}) {
+  const coveredSourceClasses = dedupeStrings(args.selectedSources.flatMap((source) => sourceCoverageForPlanning(source)));
+  const missingSourceClasses = args.requiredSourceClasses.filter((sourceClass) => !coveredSourceClasses.includes(sourceClass));
+  const independentDomains = new Set(
+    args.selectedSources
+      .map((source) => getHostname(source.url))
+      .filter((host): host is string => Boolean(host) && host !== args.companyHost)
+  );
+
+  return {
+    requiredSourceClasses: args.requiredSourceClasses,
+    coveredSourceClasses,
+    missingSourceClasses,
+    independentDomainsTarget: MIN_EXTERNAL_SITES,
+    independentDomainsActual: independentDomains.size,
+    secondPassAddedCount: args.secondPassAddedCount,
+  };
+}
+
+function applyCoverageGapSecondPass(args: {
+  chosen: PlannedSource[];
+  recommendedSources: ScoredPlannerCandidate[];
+  requiredSourceClasses: string[];
+  seenUrls: Set<string>;
+}): { chosen: PlannedSource[]; addedCount: number } {
+  let addedCount = 0;
+  const nextChosen = [...args.chosen];
+
+  for (const sourceClass of args.requiredSourceClasses) {
+    if (nextChosen.some((source) => sourceCoverageForPlanning(source).includes(sourceClass))) {
+      continue;
+    }
+
+    const candidate = args.recommendedSources.find(
+      (option) => !args.seenUrls.has(option.url) && option.sourceClasses?.includes(sourceClass)
+    );
+    if (!candidate) {
+      continue;
+    }
+
+    const nextSource: PlannedSource = {
+      url: candidate.url,
+      type: candidate.type,
+      priority: candidate.priority,
+      rationale: candidate.rationale ?? `Coverage-gap fill for ${sourceClass}.`,
+      sourceClasses: candidate.sourceClasses,
+      party: candidate.party,
+      trustTier: candidate.trustTier,
+      origin: "coverage_gap_fill",
+      selectionReason: `Added in second pass to cover missing ${sourceClass} evidence.`,
+      score: candidate.score,
+      scoreBreakdown: candidate.scoreBreakdown,
+      gapCoverage: [sourceClass],
+    };
+
+    if (nextChosen.length < MAX_RESEARCH_SOURCES) {
+      nextChosen.push(nextSource);
+      args.seenUrls.add(candidate.url);
+      addedCount += 1;
+      continue;
+    }
+
+    const replaceIndex = nextChosen
+      .map((source, index) => ({
+        index,
+        source,
+        score: source.score ?? 0,
+      }))
+      .filter(({ source }) => source.origin !== "coverage_gap_fill" && (source.party === "search" || source.trustTier === "low" || sourceCoverageForPlanning(source).length === 0))
+      .sort((left, right) => left.score - right.score)[0]?.index;
+
+    if (replaceIndex == null) {
+      continue;
+    }
+
+    args.seenUrls.delete(nextChosen[replaceIndex].url);
+    nextChosen[replaceIndex] = nextSource;
+    args.seenUrls.add(candidate.url);
+    addedCount += 1;
+  }
+
+  return { chosen: nextChosen, addedCount };
 }
 
 export function buildRagSourceStrategy(args: {
@@ -1286,6 +1582,7 @@ export function buildRagSourceStrategy(args: {
   candidatePool: PlannerCandidate[];
 }): RagSourceStrategy {
   const persona = inferPremiumPersona(args.roleTitle, args.jobDescription, args.profileContext);
+  const companyHost = args.companyUrl ? getHostname(args.companyUrl) : null;
   const requiredSourceClasses = dedupeStrings([
     "job_description",
     ...persona.retrievalProfile.mandatorySourceClasses,
@@ -1294,6 +1591,7 @@ export function buildRagSourceStrategy(args: {
     "investor_materials",
     "leadership_commentary",
     "product_surfaces",
+    "competitor_positioning",
     "external_validation",
   ]);
   const priorityOrder = [
@@ -1301,14 +1599,17 @@ export function buildRagSourceStrategy(args: {
     "investor relations / filings / earnings / shareholder documents",
     "official launches / newsroom / product and engineering blogs",
     "leadership commentary / culture / operating principles",
+    "competitors / analyst views / market-structure evidence",
     "role-context sources and stakeholder maps",
     "independent strategic validation and culture checks",
   ];
-  const prioritizedCandidates = [...args.candidatePool].sort((left, right) => right.priority - left.priority);
-  const selected: PlannerCandidate[] = [];
+  const prioritizedCandidates = args.candidatePool
+    .map((candidate) => scorePlannerCandidate({ candidate, requiredSourceClasses, companyHost }))
+    .sort((left, right) => right.score - left.score || right.priority - left.priority);
+  const selected: ScoredPlannerCandidate[] = [];
   const seenUrls = new Set<string>();
 
-  const pushCandidate = (candidate: PlannerCandidate | undefined) => {
+  const pushCandidate = (candidate: ScoredPlannerCandidate | undefined) => {
     if (!candidate || seenUrls.has(candidate.url)) {
       return;
     }
@@ -1341,6 +1642,7 @@ export function buildRagSourceStrategy(args: {
       "Target the evidence needed to explain capital allocation, unit economics, segment and product portfolio tradeoffs, and explicit strategic priorities rather than stopping at brand or mission summaries.",
       "When possible, gather enough evidence to support interview-grade interpretation, not just company description: what management is optimizing for, what tradeoffs are live, and where the role plugs into that agenda.",
       "Do not stop at generic homepage/newsroom coverage when company-strategy evidence is weak.",
+      "Pull competitor, analyst, and market-structure evidence early enough that company_context and company_role_strategy can explain external pressure, not just internal messaging.",
       "Expand into investor, leadership, culture, and external strategist sources before concluding the company strategy layer is shallow.",
     ],
   };
@@ -1371,15 +1673,13 @@ export async function buildTargetedSourceUrls(args: {
   const maxSources = args.maxSources ?? 6;
   const discoveredCandidates = args.enableHomepageDiscovery === false ? [] : await discoverFirstPartyCandidates(args.companyUrl);
   const candidatePool = buildPlannerCandidatePool(args.companyName, args.roleTitle, args.companyUrl, [], discoveredCandidates);
-  const prioritized = [...candidatePool].sort((left, right) => {
-    const rightTagged = right.sourceClasses?.length ? 1 : 0;
-    const leftTagged = left.sourceClasses?.length ? 1 : 0;
-    if (rightTagged !== leftTagged) {
-      return rightTagged - leftTagged;
-    }
-
-    return right.priority - left.priority;
-  });
+  const prioritized = candidatePool
+    .map((candidate) => scorePlannerCandidate({
+      candidate,
+      requiredSourceClasses: dedupeStrings(args.missingSourceClasses),
+      companyHost: args.companyUrl ? getHostname(args.companyUrl) : null,
+    }))
+    .sort((left, right) => right.score - left.score || right.priority - left.priority);
   const selected: string[] = [];
 
   const pushUrl = (url: string | undefined) => {
@@ -1474,7 +1774,7 @@ Job description excerpt: ${(jobDescription ?? "").slice(0, 1200) || "NONE"}
 ${formatPersonaForPrompt(persona)}
 
 Candidate source pool:
-${candidatePool.map((candidate, index) => `${index + 1}. ${candidate.label}\n   url: ${candidate.url}\n   domain: ${candidate.domain}\n   type: ${candidate.type}\n   priority: ${candidate.priority}\n   signal: ${candidate.signal}`).join("\n")}
+${candidatePool.map((candidate, index) => `${index + 1}. ${candidate.label}\n   url: ${candidate.url}\n   domain: ${candidate.domain}\n   type: ${candidate.type}\n   origin: ${candidate.origin ?? "heuristic_seed"}\n   classes: ${(candidate.sourceClasses ?? []).join(", ") || "none"}\n   priority: ${candidate.priority}\n   signal: ${candidate.signal}`).join("\n")}
 
 Precomputed RAG source strategy:
 Goal: ${sourceStrategy.goal}
@@ -1484,7 +1784,7 @@ ${sourceStrategy.priorityOrder.map((step, index) => `${index + 1}. ${step}`).joi
 Strategy notes:
 ${sourceStrategy.notes.map((note) => `- ${note}`).join("\n")}
 Recommended strategy seeds:
-${sourceStrategy.recommendedSources.slice(0, 14).map((candidate, index) => `${index + 1}. ${candidate.label}\n   url: ${candidate.url}\n   classes: ${(candidate.sourceClasses ?? []).join(", ") || "none"}\n   priority: ${candidate.priority}\n   signal: ${candidate.signal}`).join("\n")}
+${sourceStrategy.recommendedSources.slice(0, 14).map((candidate, index) => `${index + 1}. ${candidate.label}\n   url: ${candidate.url}\n   classes: ${(candidate.sourceClasses ?? []).join(", ") || "none"}\n   party: ${candidate.party}\n   trust: ${candidate.trustTier}\n   origin: ${candidate.origin}\n   score: ${candidate.score}\n   signal: ${candidate.signal}`).join("\n")}
 
 Rules:
 - Include company_homepage if present.
@@ -1524,13 +1824,14 @@ Return only valid JSON in this shape:
     const selectedSources = Array.isArray(planned?.selectedSources) ? planned.selectedSources : [];
     const chosen: PlannedSource[] = [];
     const seenUrls = new Set<string>();
+    const scoredCandidatesByUrl = new Map(sourceStrategy.recommendedSources.map((candidate) => [candidate.url, candidate]));
 
     for (const source of selectedSources) {
       const normalizedUrl = normalizeUrl(source?.url);
       const type = source?.type;
       if (!normalizedUrl || seenUrls.has(normalizedUrl)) continue;
       if (!type || !["company_homepage", "newsroom", "blog", "custom_url"].includes(type)) continue;
-      const matchedCandidate = candidatePool.find((candidate) => candidate.url === normalizedUrl);
+      const matchedCandidate = scoredCandidatesByUrl.get(normalizedUrl);
       seenUrls.add(normalizedUrl);
       chosen.push({
         url: normalizedUrl,
@@ -1538,6 +1839,12 @@ Return only valid JSON in this shape:
         priority: Math.max(1, Math.min(10, Number(source?.priority) || 5)),
         rationale: typeof source?.rationale === "string" ? source.rationale : undefined,
         sourceClasses: matchedCandidate?.sourceClasses,
+        party: matchedCandidate?.party,
+        trustTier: matchedCandidate?.trustTier,
+        origin: "llm_selected",
+        selectionReason: typeof source?.rationale === "string" ? source.rationale : matchedCandidate?.signal,
+        score: matchedCandidate?.score,
+        scoreBreakdown: matchedCandidate?.scoreBreakdown,
       });
     }
 
@@ -1557,6 +1864,13 @@ Return only valid JSON in this shape:
         priority: strategyCandidate.priority,
         rationale: `Injected from precomputed RAG strategy to cover missing ${sourceClass} evidence.`,
         sourceClasses: strategyCandidate.sourceClasses,
+        party: strategyCandidate.party,
+        trustTier: strategyCandidate.trustTier,
+        origin: "coverage_gap_fill",
+        selectionReason: `Injected from precomputed RAG strategy to cover missing ${sourceClass} evidence.`,
+        score: strategyCandidate.score,
+        scoreBreakdown: strategyCandidate.scoreBreakdown,
+        gapCoverage: [sourceClass],
       });
       seenUrls.add(strategyCandidate.url);
 
@@ -1579,8 +1893,14 @@ Return only valid JSON in this shape:
           url: candidate.url,
           type: candidate.type,
           priority: candidate.priority,
-          rationale: `Fallback external source from ${candidate.domain} to increase independent evidence coverage.`,
+          rationale: `Added ${candidate.domain} to improve independent evidence coverage and reduce over-reliance on first-party sources.`,
           sourceClasses: candidate.sourceClasses,
+          party: candidate.party,
+          trustTier: candidate.trustTier,
+          origin: candidate.origin,
+          selectionReason: `Added ${candidate.domain} to improve independent evidence coverage.`,
+          score: candidate.score,
+          scoreBreakdown: candidate.scoreBreakdown,
         });
         seenUrls.add(candidate.url);
         externalDomains.add(host);
@@ -1597,9 +1917,28 @@ Return only valid JSON in this shape:
           priority: 10,
           rationale: "Primary official source.",
           sourceClasses: ["leadership_strategy", "product_surfaces"],
+          party: "first_party",
+          trustTier: "high",
+          origin: "company_url",
+          selectionReason: "Inserted as the official corporate homepage for first-party positioning context.",
+          score: 32,
+          scoreBreakdown: {
+            authority: 9,
+            specificity: 6,
+            coverage: 4,
+            independence: 2,
+            intentFit: 1,
+          },
         });
       }
     }
+
+    const secondPass = applyCoverageGapSecondPass({
+      chosen,
+      recommendedSources: sourceStrategy.recommendedSources,
+      requiredSourceClasses: sourceStrategy.requiredSourceClasses,
+      seenUrls,
+    });
 
     const retrievalQueries = Array.isArray(planned?.retrievalQueries)
       ? planned.retrievalQueries
@@ -1612,17 +1951,30 @@ Return only valid JSON in this shape:
         typeof planned?.strategySummary === "string" && planned.strategySummary.trim()
           ? planned.strategySummary.trim()
           : `Use the precomputed RAG source strategy plus independent external domains to build diversified evidence for ${companyName}.`,
-      selectedSources: chosen.slice(0, MAX_RESEARCH_SOURCES),
+      selectedSources: secondPass.chosen.slice(0, MAX_RESEARCH_SOURCES),
       retrievalQueries: retrievalQueries.length === 6 ? retrievalQueries : fallbackQueries,
       sourceStrategy,
+      coverageSummary: computeCoverageSummary({
+        requiredSourceClasses: sourceStrategy.requiredSourceClasses,
+        selectedSources: secondPass.chosen.slice(0, MAX_RESEARCH_SOURCES),
+        companyHost: companyDomain,
+        secondPassAddedCount: secondPass.addedCount,
+      }),
     };
   } catch (error) {
     console.error("[ResearchPlan] Planner failed:", error instanceof Error ? error.message : error);
+    const fallbackSelectedSources = fallbackSources;
     return {
       strategySummary: `Fallback research plan for ${companyName}: follow the precomputed RAG strategy, then add at least ${MIN_EXTERNAL_SITES} external websites when available.`,
-      selectedSources: fallbackSources,
+      selectedSources: fallbackSelectedSources,
       retrievalQueries: fallbackQueries,
       sourceStrategy,
+      coverageSummary: computeCoverageSummary({
+        requiredSourceClasses: sourceStrategy.requiredSourceClasses,
+        selectedSources: fallbackSelectedSources,
+        companyHost: companyDomain,
+        secondPassAddedCount: 0,
+      }),
     };
   }
 }

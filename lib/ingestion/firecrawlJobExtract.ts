@@ -5,6 +5,7 @@ import { cleanContent } from "./clean";
 interface ExtractedJobPostingSchema {
   companyName?: string;
   roleTitle?: string;
+  companyUrl?: string;
   department?: string;
   employmentType?: string;
   locations: string[];
@@ -102,6 +103,7 @@ If you cannot determine a field, omit it.`)
 
     const companyName = structuredPosting?.companyName || extracted?.companyName || inferCompanyNameFromUrl(url);
     const roleTitle = structuredPosting?.roleTitle || extracted?.roleTitle || inferRoleTitleFromUrl(url) || inferRoleTitleFromMetadata(metadata?.title);
+    const companyUrl = deriveCompanyHomepageUrl(url, structuredPosting?.companyUrl);
 
     console.log(`[JD Extraction] Extracted JD length: ${canonicalJobDescription.length} chars`);
 
@@ -109,15 +111,16 @@ If you cannot determine a field, omit it.`)
       companyName: companyName || undefined,
       roleTitle: roleTitle || undefined,
       jobDescription: canonicalJobDescription || undefined,
-      companyUrl: safeOrigin(url),
+      companyUrl,
       extractionWarning: undefined,
     };
   } catch (e) {
     console.error("[JD Extraction] LLM call failed:", e);
+    const fallbackCompanyName = structuredPosting?.companyName || inferCompanyNameFromUrl(url);
     return {
-      companyName: structuredPosting?.companyName || inferCompanyNameFromUrl(url),
+      companyName: fallbackCompanyName,
       roleTitle: structuredPosting?.roleTitle || inferRoleTitleFromUrl(url) || inferRoleTitleFromMetadata(metadata?.title),
-      companyUrl: safeOrigin(url),
+      companyUrl: deriveCompanyHomepageUrl(url, structuredPosting?.companyUrl),
       jobDescription: canonicalJobDescription || undefined,
       extractionWarning: "The page loaded, but structured extraction failed. Review the fallback details before generating the report.",
     };
@@ -319,6 +322,10 @@ export function extractJobPostingSchemaFromHtml(html: string, pageUrl = "https:/
 
     return {
       companyName: typeof hiringOrganization?.name === "string" ? hiringOrganization.name.trim() : undefined,
+      companyUrl: firstValidUrl([
+        ...collectStringValues(hiringOrganization?.sameAs),
+        ...collectStringValues(hiringOrganization?.url),
+      ]),
       roleTitle: typeof jobPosting.title === "string" ? jobPosting.title.trim() : undefined,
       department: normalizeDepartment(jobPosting),
       employmentType: normalizeEmploymentType(jobPosting.employmentType),
@@ -401,13 +408,94 @@ function removeLeadingBoilerplate(text: string): string {
 }
 
 function fallbackResult(url: string, rawText?: string, extractionWarning?: string) {
+  const companyName = inferCompanyNameFromUrl(url);
   return {
-    companyName: inferCompanyNameFromUrl(url),
+    companyName,
     roleTitle: inferRoleTitleFromUrl(url),
-    companyUrl: safeOrigin(url),
+    companyUrl: deriveCompanyHomepageUrl(url, undefined),
     jobDescription: rawText?.slice(0, 20000) || undefined,
     extractionWarning,
   };
+}
+
+function firstValidUrl(candidates: string[]): string | undefined {
+  for (const candidate of candidates) {
+    try {
+      return new URL(candidate).toString();
+    } catch {
+      continue;
+    }
+  }
+
+  return undefined;
+}
+
+function deriveCompanyHomepageUrl(jobUrl: string, structuredCompanyUrl?: string): string | undefined {
+  const normalizedStructured = firstValidUrl(structuredCompanyUrl ? [structuredCompanyUrl] : []);
+  if (normalizedStructured && !isRecruitingHost(normalizedStructured)) {
+    return normalizedStructured;
+  }
+
+  try {
+    const parsed = new URL(jobUrl);
+    const inferredHomepage = deriveHomepageFromJobHost(parsed);
+    if (inferredHomepage) {
+      return inferredHomepage;
+    }
+  } catch {
+    return normalizedStructured ?? undefined;
+  }
+
+  return normalizedStructured ?? undefined;
+}
+
+function deriveHomepageFromJobHost(parsedJobUrl: URL): string | undefined {
+  const hostname = parsedJobUrl.hostname.toLowerCase().replace(/^www\./, "");
+  const labels = hostname.split(".").filter(Boolean);
+
+  if (labels.length < 3) {
+    return undefined;
+  }
+
+  const recruitingPrefixes = new Set(["careers", "career", "jobs", "job", "apply", "join", "talent", "work", "workwithus"]);
+  if (!recruitingPrefixes.has(labels[0])) {
+    return undefined;
+  }
+
+  const apexDomain = labels.slice(-2).join(".");
+  const blockedApexDomains = new Set([
+    "greenhouse.io",
+    "greenhouse-job-boards.com",
+    "lever.co",
+    "myworkdayjobs.com",
+    "ashbyhq.com",
+    "smartrecruiters.com",
+    "jobvite.com",
+    "breezy.hr",
+  ]);
+
+  if (blockedApexDomains.has(apexDomain)) {
+    return undefined;
+  }
+
+  return `https://${apexDomain}/`;
+}
+
+function isRecruitingHost(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    return (
+      hostname === "careers.microsoft.com" ||
+      hostname.endsWith(".careers.microsoft.com") ||
+      hostname.endsWith("greenhouse.io") ||
+      hostname.endsWith("greenhouse-job-boards.com") ||
+      hostname.endsWith("lever.co") ||
+      hostname.endsWith("myworkdayjobs.com") ||
+      hostname.endsWith("ashbyhq.com")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function inferRoleTitleFromMetadata(title: string | undefined): string | undefined {
@@ -466,6 +554,3 @@ function inferRoleTitleFromUrl(url: string): string | undefined {
   }
 }
 
-function safeOrigin(url: string): string | undefined {
-  try { return new URL(url).origin; } catch { return undefined; }
-}

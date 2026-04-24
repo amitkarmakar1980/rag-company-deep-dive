@@ -130,6 +130,10 @@ function countBullets(section: PremiumSectionContent | undefined, titlePattern: 
   return findBlocks(section, titlePattern).reduce((count, block) => count + (block.bullets?.length ?? 0), 0);
 }
 
+function countCoverageMatches(text: string, patterns: string[]): number {
+  return patterns.filter((pattern) => text.includes(pattern)).length;
+}
+
 function auditCompanyContextDepth(section: PremiumSectionContent | undefined): string[] {
   if (!section) {
     return ["Company context section is missing."];
@@ -143,20 +147,24 @@ function auditCompanyContextDepth(section: PremiumSectionContent | undefined): s
     issues.push("Company context stays below the 150-word premium minimum.");
   }
 
-  if (!findBlocks(section, /vision\s+and\s+mission|mission|vision/i).length) {
-    issues.push("Company context does not highlight vision and mission in a dedicated block.");
+  if (!findBlocks(section, /company snapshot/i).length) {
+    issues.push("Company context does not provide a dedicated Company Snapshot block.");
   }
 
-  if (!findBlocks(section, /culture|values|operating principles|leadership principles/i).length) {
-    issues.push("Company context does not highlight culture in a dedicated block.");
+  if (!findBlocks(section, /vision\s+and\s+mission|mission|vision|leadership intent|strategy intent/i).length) {
+    issues.push("Company context does not explain leadership intent, mission, or strategic direction in a dedicated block.");
   }
 
-  if (!/mission/.test(flattened) || !/vision/.test(flattened)) {
-    issues.push("Company context does not interpret both mission and vision explicitly.");
+  if (!findBlocks(section, /culture|values|operating principles|leadership principles|operating cadence|decision style/i).length) {
+    issues.push("Company context does not interpret culture, decision style, or operating signals in a dedicated block.");
   }
 
-  if (!/culture|values|operating principles|leadership principles/.test(flattened)) {
-    issues.push("Company context does not interpret culture or operating principles explicitly.");
+  if (countCoverageMatches(flattened, ["leadership", "strategy", "market", "compet", "customer", "culture", "operator", "tradeoff", "pressure"]) < 4) {
+    issues.push("Company context does not show enough multi-source strategic interpretation across leadership, market, customer, culture, or pressure signals.");
+  }
+
+  if (!/optimiz|tradeoff|pressure|constraint|decision|operating/.test(flattened)) {
+    issues.push("Company context describes the company but does not explain what leadership appears to be optimizing for or how the company likely operates.");
   }
 
   return issues;
@@ -185,11 +193,23 @@ function auditCompanyRoleStrategyDepth(section: PremiumSectionContent | undefine
     issues.push("Company strategy does not include a clearly labeled current-strategy block.");
   }
 
+  if (!findBlocks(section, /strategic tensions|tradeoffs|constraints|market pressure/i).length) {
+    issues.push("Company strategy does not include a clearly labeled strategic-tensions or tradeoffs block.");
+  }
+
   for (const threshold of swotThresholds) {
     const bulletCount = countBullets(section, threshold.pattern);
     if (bulletCount < 3) {
       issues.push(`Company strategy does not provide at least 3 substantive SWOT ${threshold.label} bullets.`);
     }
+  }
+
+  if (countCoverageMatches(flattened, ["compet", "market", "segment", "portfolio", "econom", "margin", "monetiz", "capital allocation", "growth", "customer", "moat"]) < 4) {
+    issues.push("Company strategy does not show enough comprehensive RAG-backed coverage across competition, market structure, economic logic, portfolio dynamics, or growth drivers.");
+  }
+
+  if (!/tradeoff|tension|pressure|constraint|optimiz/.test(flattened)) {
+    issues.push("Company strategy does not make management tradeoffs, tensions, or optimization logic explicit.");
   }
 
   return issues;
@@ -373,12 +393,12 @@ export function finalizePremiumQualityGate(args: {
 
   if (companyContextAuditIssues.length > 0) {
     warningFlags.push(...companyContextAuditIssues);
-    blockedReasons.push("Company context section did not meet the premium depth contract.");
+    blockedReasons.push("Company context section did not meet the premium enhanced-RAG synthesis depth contract.");
   }
 
   if (companyStrategyAuditIssues.length > 0) {
     warningFlags.push(...companyStrategyAuditIssues);
-    blockedReasons.push("Company strategy section did not meet the premium depth contract.");
+    blockedReasons.push("Company strategy section did not meet the premium enhanced-RAG synthesis depth contract.");
   }
 
   if (args.evidenceQuality.rating === "insufficient") {
@@ -454,7 +474,7 @@ export function finalizePremiumQualityGate(args: {
       ? criticalFailures.map((section) => `Repair the ${section} section to remove unsupported claims, increase evidence clarity, and improve depth.`)
       : []),
     ...(companyContextScore < 70
-      ? ["Improve company-context coverage with stronger interpretation of company insights, history, mission, values, culture, and employee-review caveats where evidence supports it."]
+      ? ["Improve company-context coverage by generating a comprehensive company read from enhanced RAG, integrating leadership intent, market pressure, external validation, operating signals, and role-relevant implications instead of leaning on company-site summary."]
       : []),
     ...companyContextAuditIssues,
     ...companyStrategyAuditIssues,
@@ -462,7 +482,7 @@ export function finalizePremiumQualityGate(args: {
       ? ["Rewrite interview-prep content so it becomes role-family-specific, seniority-specific, and interviewer-proof-oriented rather than generic."]
       : []),
     ...(companyStrategyAuditIssues.length > 0
-      ? ["Deepen company strategy with a clearly labeled current-strategy block and SWOT blocks for strengths, weaknesses, opportunities, and threats, each with at least 3 substantive bullets."]
+      ? ["Deepen company strategy as a comprehensive RAG-backed strategy report with explicit current strategy, strategic tensions, economic logic, competitor and market analysis, and SWOT blocks for strengths, weaknesses, opportunities, and threats, each with at least 3 substantive bullets."]
       : []),
     ...(hasExecutiveScopeOverread
       ? ["Correct the archetype: remove executive-scope assumptions unless the JD explicitly shows business-unit, portfolio, org-design, or P&L authority."]
@@ -477,7 +497,7 @@ export function finalizePremiumQualityGate(args: {
       ? ["Rescore candidate fit dimension by dimension and explain transferability explicitly instead of over-weighting narrow domain purity."]
       : []),
     ...(depthScore < 72
-      ? ["Increase second-order insight density. Explain implications and tradeoffs instead of summarizing facts."]
+      ? ["Increase second-order insight density. Use deep-research synthesis to explain implications, gaps, tensions, and tradeoffs instead of summarizing extracted facts."]
       : []),
   ]).slice(0, 14);
 

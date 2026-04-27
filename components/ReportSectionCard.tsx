@@ -277,7 +277,6 @@ export function ReportSectionCard({
 
     case "company_snapshot": {
       const d = data as StructuredReport["company_snapshot"];
-      const evidenceBacked = d.evidence_basis === "strong" || d.evidence_basis === "partial";
       return (
         <SectionShell
           id={sectionKey}
@@ -285,7 +284,6 @@ export function ReportSectionCard({
           subtitle="Business model, strategic priorities, and current operating context"
           provenance={provenance}
           onProvenanceClick={onProvenanceClick}
-          evidenceBacked={evidenceBacked}
           feedback={feedback}
           collapsible
         >
@@ -359,7 +357,6 @@ export function ReportSectionCard({
           provenance={provenance}
           onProvenanceClick={onProvenanceClick}
           feedback={feedback}
-          evidenceBacked={d.confidence === "high" || d.confidence === "medium"}
         >
           <ProseBlock value={d.primary_driver} />
           <BulletGroup label="Supporting Signals" items={d.supporting_signals} />

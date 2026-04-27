@@ -134,24 +134,16 @@ test("premium prompt assembly includes anti-generic quality guardrails", async (
     inferPremiumPersona("Senior Director, AI Product", "Lead AI platform and monetization strategy.")
   );
 
-  assert.match(prompt, /Generic PM coaching is a failure\./);
-  assert.match(prompt, /Generic competitor bullets are a failure\./);
-  assert.match(prompt, /Restating the JD as role strategy is a failure\./);
-  assert.match(prompt, /Reject any output that could apply unchanged to a different role family or seniority band\./);
-  assert.match(prompt, /Interview prep must be interviewer-specific, theme-specific, and proof-oriented\./);
-  assert.match(prompt, /Do not flatten interview prep into generic product, engineering, design, marketing, sales, operations, or executive advice\./);
-  assert.match(prompt, /Do not produce competitor bullets without strategic implications\./);
-  assert.match(prompt, /Make story guidance concrete enough that a real candidate could rehearse from it\./);
-  assert.match(prompt, /Do not classify lead, senior, group, or principal product-manager titles as executive unless the JD explicitly shows business-unit, portfolio, org-design, or P&L authority\./);
-  assert.match(prompt, /Do not turn senior technical PM interview prep into engineering architecture theater unless the JD explicitly centers engineering-system interviews\./);
-  assert.match(prompt, /company_context must usually deliver at least 150 words of net-new interpretation/i);
-  assert.match(prompt, /company_role_strategy must usually deliver at least 300 words of net-new strategic analysis/i);
-  assert.match(prompt, /highlight vision, mission, and culture explicitly/i);
-  assert.match(prompt, /SWOT with 3 to 5 substantive bullets each/i);
-  assert.match(prompt, /Hard structural contract for company-facing sections:/i);
-  assert.match(prompt, /explicit blocks titled Company Snapshot, Vision And Mission, and Culture Signals/i);
-  assert.match(prompt, /explicit blocks titled Current Strategy, Strategic Tensions, SWOT - Strengths, SWOT - Weaknesses, SWOT - Opportunities, and SWOT - Threats/i);
-  assert.match(prompt, /If evidence is too weak for one of these required blocks, keep the block title and begin the body with INSUFFICIENT_EVIDENCE:/i);
+  assert.match(prompt, /The product has exactly 4 broad categories:/);
+  assert.match(prompt, /generic writing/i);
+  assert.match(prompt, /Do not invent facts\./);
+  assert.match(prompt, /If the role is ambiguous, separate what is known from what is inferred\./);
+  assert.match(prompt, /Do not write generic interview advice that could apply to another company or role\./);
+  assert.match(prompt, /Do not write employee sentiment unless there is actual evidence for it\./);
+  assert.match(prompt, /Company Snapshot, Mission And Values, and Employee Sentiment/i);
+  assert.match(prompt, /Product Lines, Strategic Bets, Market Position, SWOT - Strengths, SWOT - Weaknesses, SWOT - Opportunities, and SWOT - Threats/i);
+  assert.match(prompt, /Final Decision must be one of: Pursue Aggressively, Pursue Cautiously, Borderline, Do Not Pursue\./);
+  assert.match(prompt, /For each likely question include why this question is likely, what resume evidence is relevant, what story to prepare, and what weak point may get probed\./i);
 });
 
 test("premium prompt assembly hardens repair passes for weak company depth", async () => {
@@ -213,10 +205,7 @@ test("premium prompt assembly hardens repair passes for weak company depth", asy
   );
 
   assert.match(prompt, /REPAIR PRIORITIES/);
-  assert.match(prompt, /fully rewrite the weak sections instead of making cosmetic edits/i);
-  assert.match(prompt, /On a repair pass, company_context, company_role_strategy, and interview_prep must be expanded/i);
-  assert.match(prompt, /On a repair pass, treat company-facing depth misses as hard failures/i);
-  assert.match(prompt, /on a repair pass, do not return this section with fewer than 6 blocks unless the evidence object explicitly says the section is insufficient/i);
+  assert.match(prompt, /Rewrite weak sections from scratch instead of padding or lightly editing them\./i);
 });
 
 test("premium prompt assembly injects inferred persona guidance", async () => {
@@ -274,7 +263,7 @@ test("premium prompt assembly injects inferred persona guidance", async () => {
   assert.match(prompt, /primary role family: Engineering/);
   assert.match(prompt, /role family: Engineering/);
   assert.match(prompt, /seniority: Staff \/ Principal \/ Architect/);
-  assert.match(prompt, /Generic Product-centric framing for clearly non-Product roles is a failure\./);
+  assert.match(prompt, /What bad output looks like:/);
 });
 
 test("premium prompt assembly caps evidence and artifact payloads to stay within prompt budget", async () => {

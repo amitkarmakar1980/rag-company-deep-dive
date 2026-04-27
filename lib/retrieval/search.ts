@@ -15,18 +15,22 @@ export interface RetrievalResult {
  * dominates the embedding space of a broad query.
  */
 const DEFAULT_TOPIC_QUERIES = [
-  // 1. Company strategy, business model, and competitive position
-  "company strategy business model revenue growth market position competitive advantage core products platform",
-  // 2. Role scope, charter, and success criteria
-  "role responsibilities success metrics deliverables expectations hiring mandate what this role does ownership",
-  // 3. Leadership, org structure, and culture
-  "CEO leadership team executive vision org structure culture values operating principles decision making",
-  // 4. Business momentum, recent signals, and milestones
-  "recent launch product announcement funding partnership acquisition growth milestone momentum quarterly results",
-  // 5. Risks, headwinds, and pressure points
-  "risks challenges headwinds layoffs restructuring competition pressure financial constraints execution risk",
-  // 6. Why this role exists now — change catalyst
-  "why now strategic inflection new initiative expansion priority shift hiring urgency org change catalyst",
+  // 1. Company snapshot — factual foundation for Company Deep Dive
+  "company history founding mission vision values employee count revenue valuation business model overview",
+  // 2. Product lines, segments, and how the company makes money
+  "product lines business segments revenue streams pricing customers markets how company makes money segment breakdown",
+  // 3. Strategic bets and transformation — what leadership is investing in now
+  "strategic priorities investment growth initiatives transformation programs roadmap AI platform expansion named bets",
+  // 4. Market position, competitors, and competitive advantage
+  "market position competitors competitive landscape market share differentiation moat strengths weaknesses industry dynamics",
+  // 5. Investor, earnings, and financial signals
+  "investor relations earnings shareholder letter annual report 10-K financial results guidance capital allocation strategic priorities",
+  // 6. Leadership intent, culture, and operating style
+  "CEO leadership team executive vision culture values operating principles decision making org structure management style",
+  // 7. Role scope, charter, and hiring rationale
+  "role responsibilities success metrics deliverables expectations hiring mandate what this role does ownership stakeholders",
+  // 8. Risks, headwinds, and pressure points
+  "risks challenges headwinds layoffs restructuring competition pressure financial constraints execution risk regulatory",
 ];
 
 const STRATEGIC_KEYWORDS = [
@@ -153,17 +157,25 @@ export function rerank(
     else if (daysSincePublish < 180) score += 0.05;
 
     // Boost high-signal source types
+    // custom_url covers investor relations, annual reports, earnings, careers — give it significant weight
     const sourceWeights: Record<SourceType, number> = {
       newsroom: 0.2,
       blog: 0.15,
       job_description: 0.25,
-      company_homepage: 0.1,
-      custom_url: 0.05,
+      company_homepage: 0.05,
+      custom_url: 0.2,
       profile_text: 0.02,
     };
 
     score +=
       (sourceWeights[result.source.source_type as SourceType] || 0) * 0.3;
+
+    // Extra boost for investor/earnings content regardless of source type
+    const titleLower = (result.source.title ?? "").toLowerCase();
+    const urlLower = (result.source.url ?? "").toLowerCase();
+    if (/investor|earnings|annual.report|10-k|shareholder|ir\./.test(titleLower + urlLower)) {
+      score += 0.12;
+    }
 
     // Boost if content contains strategic language
     const contentLower = result.chunk.text.toLowerCase();

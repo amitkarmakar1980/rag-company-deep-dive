@@ -79,11 +79,10 @@ interface PremiumReportViewProps {
 }
 
 const GROUP_DESCRIPTIONS: Record<string, string> = {
-  Decision: "Start with the core recommendation, top-line judgment, and the fastest version of the story.",
-  "Candidate Positioning": "How your background maps to the role, where friction will show up, and how to address it.",
-  "Interview Prep": "Use this layer to rehearse the likely agenda, shape your questions, and pressure-test risk areas.",
-  "Strategic Context": "Expanded company and role context for deeper prep and better calibration before final-round conversations.",
-  Credibility: "Review the evidence model, citations, and model workflow after reading the report body.",
+  "Company Deep Dive": "Use this section to understand the company, its products, its strategic bets, and the real market pressure around the role.",
+  "About the Role": "Use this section to understand what the role likely owns, why it exists now, and what problem the company is trying to solve through it.",
+  "Candidate-Skill Match": "Use this section to judge whether your background truly fits the role and whether you should pursue the process.",
+  "Interview Preparation": "Use this section to rehearse likely questions, choose the right stories, and prepare for the risks interviewers are likely to test.",
   Overview: "Decision-critical orientation points and quick jumps for the report.",
   Appendix: "Reference material preserved with the report for later review.",
 };
@@ -103,97 +102,29 @@ const PROVENANCE_EXPLAINERS: Record<ProvenanceType, { description: string }> = {
   },
 };
 
-function countWords(value: string | undefined): number {
-  return (value ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean).length;
-}
 
-function buildCompanyDepthWarnings(args: {
-  companyContextSection?: ParsedPremiumSection["parsed"];
-  strategySection?: ParsedPremiumSection["parsed"];
-  releaseWarnings: string[];
-}): string[] {
-  const warnings = [...args.releaseWarnings.filter((warning) => /company context|company-context|company strategy|swot|mission|vision|culture/i.test(warning))];
-  const companyContext = args.companyContextSection;
-  const strategy = args.strategySection;
-
-  if (!companyContext) {
-    warnings.push("Company context is missing from this report, so vision, mission, and culture are underrepresented.");
-  } else {
-    const contextText = [
-      companyContext.summary,
-      ...(companyContext.blocks ?? []).flatMap((block) => [block.title, block.body ?? "", ...(block.bullets ?? [])]),
-    ].filter(Boolean).join(" ");
-
-    if (countWords(contextText) < 150) {
-      warnings.push("Company context is below the current 150-word production minimum.");
-    }
-
-    if (!(companyContext.blocks ?? []).some((block) => /vision|mission/i.test(block.title))) {
-      warnings.push("Company context does not surface vision and mission as a distinct subsection.");
-    }
-
-    if (!(companyContext.blocks ?? []).some((block) => /culture|values|operating principles|leadership principles/i.test(block.title))) {
-      warnings.push("Company context does not surface culture as a distinct subsection.");
-    }
-  }
-
-  if (!strategy) {
-    warnings.push("Company strategy is missing from this report.");
-  } else {
-    const strategyText = [
-      strategy.summary,
-      ...(strategy.blocks ?? []).flatMap((block) => [block.title, block.body ?? "", ...(block.bullets ?? [])]),
-    ].filter(Boolean).join(" ");
-
-    if (countWords(strategyText) < 300) {
-      warnings.push("Company strategy is below the current 300-word production minimum.");
-    }
-
-    if (!(strategy.blocks ?? []).some((block) => /current strategy|strategic priorities|strategy/i.test(block.title))) {
-      warnings.push("Company strategy does not include a clearly labeled current-strategy subsection.");
-    }
-
-    const swotTitles = ["Strengths", "Weaknesses", "Opportunities", "Threats"];
-    for (const title of swotTitles) {
-      const block = (strategy.blocks ?? []).find((item) => new RegExp(`swot\\s*-?\\s*${title}|${title}`, "i").test(item.title));
-      if (!block) {
-        warnings.push(`Company strategy is missing a SWOT ${title.toLowerCase()} subsection.`);
-        continue;
-      }
-
-      if ((block.bullets ?? []).length < 3) {
-        warnings.push(`SWOT ${title.toLowerCase()} has fewer than 3 substantive points.`);
-      }
-    }
-  }
-
-  return warnings.filter((warning, index, list) => list.indexOf(warning) === index);
-}
 
 const RECOMMENDATION_META: Record<RecommendationType, { label: string; icon: string; tone: string; pill: string }> = {
   pursue: {
-    label: "Pursue",
+    label: "Pursue Aggressively",
     icon: "^",
     tone: "border-[#cfe1d8] bg-[#edf6f0] text-[#1a4a3a]",
     pill: "bg-[#1a4a3a] text-white",
   },
   pursue_cautiously: {
-    label: "Cautious Pursue",
+    label: "Pursue Cautiously",
     icon: "~",
     tone: "border-[#eadfbf] bg-[#fff6e7] text-[#8a5a14]",
     pill: "bg-[#b66a00] text-white",
   },
   avoid: {
-    label: "Avoid",
+    label: "Do Not Pursue",
     icon: "!",
     tone: "border-[#ead7d2] bg-[#fbefeb] text-[#8a3d2f]",
     pill: "bg-[#8a3d2f] text-white",
   },
   need_more_signal: {
-    label: "Need More Signal",
+    label: "Borderline",
     icon: "!",
     tone: "border-[#ddd4c8] bg-[#f5f1e8] text-[#6b5e52]",
     pill: "bg-[#6b5e52] text-white",
@@ -790,11 +721,8 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
   const companyHref = report.companyUrl ?? report.company.websiteUrl;
   const companyLogoUrl = getFaviconUrl(companyHref);
   const [personaFamilyLabel, personaSeniorityLabel, personaSubspecialization] = presentationViewModel.personaBadges;
-  const releaseDecision = report.qualityGate?.release_decision ?? null;
-  const releaseWarnings = report.qualityGate?.warning_flags ?? [];
-  const blockedReasons = report.qualityGate?.blocked_release_reasons ?? [];
+
   const decisionSection = sectionMap.decision_memo?.parsed;
-  const companyContextSection = sectionMap.company_context?.parsed;
   const strategySection = sectionMap.company_role_strategy?.parsed;
   const roleSection = sectionMap.why_role_exists_now?.parsed;
   const candidateFitSection = sectionMap.candidate_fit?.parsed;
@@ -809,10 +737,6 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
       .filter((host): host is string => Boolean(host))
   ).size;
   const hasResumePersonalization = Boolean(report.resumeProvided) || report.scores.candidate_fit > 0;
-  const companyDepthWarnings = useMemo(
-    () => buildCompanyDepthWarnings({ companyContextSection, strategySection, releaseWarnings }),
-    [companyContextSection, strategySection, releaseWarnings]
-  );
 
   const freshestMeaningfulSource = report.sources
     .filter((source) => source.type !== "job_description" && !!source.publishedAt)
@@ -1061,7 +985,7 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h1 className="text-[2.08rem] font-semibold tracking-[-0.055em] leading-[0.93] text-[#1c1713] sm:text-[2.56rem] whitespace-nowrap">
-                        Interview Intelligence Report
+                        Company Deep Dive And Interview Prep
                       </h1>
                       <p className="mt-1.5 text-[0.76rem] text-[#9c8d81]">
                         {completedAtParts
@@ -1147,58 +1071,6 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
                     </div>
                   </div>
 
-                  {releaseDecision && releaseDecision !== "approved" ? (
-                    <div className="mt-5 rounded-[24px] border border-[#eadfbf] bg-[#fff6e7] px-5 py-4 text-[#6b531d] shadow-[0_10px_28px_rgba(28,23,19,0.05)] sm:px-6">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#b66a00] text-sm font-semibold text-white">
-                          !
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-[#9b6a16]">Quality Gate</p>
-                          <p className="mt-1 text-sm font-semibold text-[#6b531d]">
-                            {releaseDecision === "partial"
-                              ? "This report was released as partial because some premium sections did not clear the quality gate."
-                              : releaseDecision === "suppress_and_release"
-                              ? "Weak sections were suppressed before release."
-                              : releaseDecision === "approved_with_warnings"
-                              ? "This report cleared the gate with explicit warnings."
-                              : `Release state: ${releaseDecision.replace(/_/g, " ")}.`}
-                          </p>
-                          {releaseWarnings.length > 0 ? (
-                            <ul className="mt-2 space-y-1 text-[0.82rem] leading-6 text-[#7a6440]">
-                              {releaseWarnings.slice(0, 4).map((warning) => (
-                                <li key={warning}>• {warning}</li>
-                              ))}
-                            </ul>
-                          ) : null}
-                          {blockedReasons.length > 0 ? (
-                            <p className="mt-2 text-[0.82rem] leading-6 text-[#7a6440]">Blocked reasons captured for QA: {blockedReasons.join(" ")}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {companyDepthWarnings.length > 0 ? (
-                    <div className="mt-5 rounded-[24px] border border-[#ead7d2] bg-[#fbefeb] px-5 py-4 text-[#6b3f35] shadow-[0_10px_28px_rgba(28,23,19,0.05)] sm:px-6">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#8a3d2f] text-sm font-semibold text-white">
-                          !
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-[#9b4b3b]">Company Strategy Standard</p>
-                          <p className="mt-1 text-sm font-semibold text-[#6b3f35]">
-                            This report is below the current production bar for company research depth and should be treated as an older or underbuilt draft.
-                          </p>
-                          <ul className="mt-2 space-y-1 text-[0.82rem] leading-6 text-[#7a5147]">
-                            {companyDepthWarnings.slice(0, 6).map((warning) => (
-                              <li key={warning}>• {warning}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
 
                   <div className="mt-7 grid grid-cols-1 gap-3 sm:mt-8 sm:grid-cols-2 xl:grid-cols-4">
                     {overviewCards.map((card) => (

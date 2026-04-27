@@ -1,0 +1,527 @@
+import { writeFileSync } from "fs";
+
+const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Company Deep Dive — System Design Document</title>
+<style>
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #333; margin: 2.5cm; line-height: 1.5; }
+  h1 { font-size: 22pt; color: #1E1E2E; border-bottom: 3px solid #5B6EE1; padding-bottom: 6px; margin-top: 40px; page-break-before: always; }
+  h1.no-break { page-break-before: avoid; }
+  h2 { font-size: 15pt; color: #5B6EE1; margin-top: 28px; }
+  h3 { font-size: 12pt; color: #555; margin-top: 20px; }
+  p { margin: 6px 0 10px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 9.5pt; }
+  th { background: #5B6EE1; color: #fff; padding: 7px 10px; text-align: left; }
+  td { border: 1px solid #dde; padding: 6px 10px; vertical-align: top; }
+  tr:nth-child(even) td { background: #F0F2FF; }
+  pre { background: #F4F4F8; border-left: 4px solid #5B6EE1; padding: 12px 16px; font-size: 8pt; font-family: Courier New, monospace; overflow-x: auto; white-space: pre; line-height: 1.4; }
+  ul { margin: 6px 0; padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  .cover { text-align: center; margin-top: 120px; page-break-after: always; }
+  .cover h0 { font-size: 36pt; color: #5B6EE1; font-weight: bold; }
+  .cover .sub { font-size: 18pt; color: #666; margin-top: 12px; }
+  .cover .meta { font-size: 11pt; color: #999; margin-top: 30px; font-style: italic; }
+  .badge { display: inline-block; background: #E8EAFE; color: #5B6EE1; border-radius: 4px; padding: 2px 8px; font-size: 9pt; font-weight: bold; }
+  .note { background: #FFF8E1; border-left: 4px solid #FFC107; padding: 8px 12px; margin: 10px 0; font-size: 9.5pt; }
+  .rule { display: block; border: none; border-top: 2px solid #E8EAFE; margin: 10px 0 20px 0; }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <p style="font-size:36pt;color:#5B6EE1;font-weight:bold;margin:0">Company Deep Dive Engine</p>
+  <p class="sub">System Design Document</p>
+  <p class="meta">Logical Diagram &nbsp;·&nbsp; Sequence Diagrams &nbsp;·&nbsp; Architecture &nbsp;·&nbsp; AI Prompts</p>
+  <p class="meta">Version 2.0 &nbsp;|&nbsp; April 2026</p>
+</div>
+
+<!-- ─────────────────────────────────────────────────── -->
+<h1 class="no-break">1. Executive Summary</h1>
+<hr class="rule">
+<p>
+  <b>Company Deep Dive Engine</b> is an AI-powered interview decision-support tool for senior product, strategy, and GM candidates (Director / VP+ level). Rather than generic research, it answers a single question:
+</p>
+<p style="text-align:center;font-size:13pt;color:#5B6EE1;font-style:italic;margin:20px 0">
+  "Should you pursue this role — and if so, how do you win the interview?"
+</p>
+<p>
+  The system combines multi-tier LLM reasoning, retrieval-augmented generation (RAG), persona-aware report construction, and explicit quality gates to produce deeply contextualized, evidence-backed interview preparation briefs.
+</p>
+
+<h2>1.1 Technology Stack</h2>
+<table>
+  <tr><th>Layer</th><th>Technology</th><th>Notes</th></tr>
+  <tr><td>Framework</td><td>Next.js 16 (App Router)</td><td>Full-stack TypeScript</td></tr>
+  <tr><td>Database</td><td>Supabase PostgreSQL + pgvector</td><td>Vector embeddings (1536-dim)</td></tr>
+  <tr><td>Auth</td><td>Supabase Auth</td><td>Email/password + Google OAuth</td></tr>
+  <tr><td>LLM</td><td>OpenAI-compatible (primary + fallback)</td><td>o3, o4-mini, gpt-4o, gpt-4o-mini</td></tr>
+  <tr><td>Embeddings</td><td>text-embedding-3-small</td><td>Batch generation via OpenAI API</td></tr>
+  <tr><td>Web Scraping</td><td>Firecrawl v2 API (axios fallback)</td><td>Markdown + HTML extraction</td></tr>
+  <tr><td>File Parsing</td><td>pdf-parse + mammoth</td><td>PDF, DOCX, DOC, TXT resume support</td></tr>
+  <tr><td>Resume State</td><td>localStorage via useResumeStore</td><td>Client-side persistence</td></tr>
+  <tr><td>Styling</td><td>Tailwind CSS v4</td><td>Mobile-first, component-driven</td></tr>
+</table>
+
+<!-- ─────────────────────────────────────────────────── -->
+<h1>2. Logical Architecture Diagram</h1>
+<hr class="rule">
+<p>The system is divided into six logical layers. Data flows top-down from the browser through the API gateway, ingestion, retrieval + synthesis, data layer, and external services.</p>
+<pre>
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          PRESENTATION LAYER                             │
+│   Next.js App Router  ·  React 19  ·  Tailwind CSS v4                 │
+│                                                                         │
+│   Pages: Homepage · DeepDive Form · Report View · History · Admin     │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │ HTTP (REST / polling)
+┌────────────────────────────────▼────────────────────────────────────────┐
+│                            API GATEWAY LAYER                            │
+│   /api/deep-dive/create      /api/deep-dive/status                     │
+│   /api/report/[id]           /api/overlay/[id]                         │
+│   /api/resume/upload         /api/feedback                             │
+│   /api/history               /api/admin/*                              │
+│   /api/cron/retry-queue                                                 │
+└───────┬──────────────────────────┬─────────────────────────────────────┘
+        │                          │
+┌───────▼──────────────┐  ┌────────▼────────────────────────────────────┐
+│   INGESTION LAYER    │  │        RETRIEVAL & SYNTHESIS LAYER          │
+│                      │  │                                              │
+│  buildSourceUrls()   │  │  inferPremiumPersona()                       │
+│  Firecrawl fetch     │  │  buildPersonaAwareRetrievalQueries()         │
+│  cleanContent()      │  │  multiTopicSearch() → semanticSearch()      │
+│  chunkContent()      │  │  rerank() → deduplicateChunks()             │
+│  generateEmbed.      │  │  assemblePremiumReportV2()                   │
+│  Bulk insert         │  │  generatePremiumEvaluation()                 │
+└───────┬──────────────┘  │  applyQualityGateToSections()               │
+        │                 └────────────────────┬────────────────────────┘
+        │                                      │
+┌───────▼──────────────────────────────────────▼────────────────────────┐
+│                            DATA LAYER                                  │
+│   Supabase PostgreSQL (RLS-enforced)                                   │
+│                                                                        │
+│   users · companies · deep_dive_requests · sources · chunks           │
+│   embeddings(pgvector) · reports · report_sections                    │
+│   candidate_overlays · feedback_events                                │
+└────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┐
+│                       EXTERNAL SERVICES LAYER                         │
+│   OpenAI API  (o3, o4-mini, gpt-4o, gpt-4o-mini, text-embedding)     │
+│   Firecrawl v2 API  (web scraping + markdown extraction)              │
+│   Supabase Auth  (session management + JWT)                           │
+└────────────────────────────────────────────────────────────────────────┘
+</pre>
+
+<!-- ─────────────────────────────────────────────────── -->
+<h1>3. Sequence Diagrams</h1>
+<hr class="rule">
+
+<h2>3.1 End-to-End Deep Dive Creation & Async Pipeline</h2>
+<pre>
+  Browser            API Route           Async Pipeline           Supabase / OpenAI
+    │                    │                     │                         │
+    │──POST /create─────►│                     │                         │
+    │  {company, role,   │                     │                         │
+    │   JD, resume}      │                     │                         │
+    │                    │──sanitize inputs     │                         │
+    │                    │──getOrCreateUser()   │                         │
+    │                    │──createDeepDive()───────────────────────────►│
+    │                    │◄──── requestId ──────────────────────────────│
+    │◄──200 {requestId}──│                     │                         │
+    │                    │                     │                         │
+    │   [server.after() fires async — non-blocking]                      │
+    │                    │──runPipeline()─────►│                         │
+    │                    │                     │                         │
+    │                    │             ┌───────┴──── PHASE 1: INGESTION ───────────┐
+    │                    │             │  updateStatus("fetching_sources")         │
+    │                    │             │  buildSourceUrls(LLM) → 10 sources        │
+    │                    │             │  Firecrawl × 8-15 sources (concurrency=3) │
+    │                    │             │  cleanContent() + chunkContent()          │
+    │                    │             │  generateEmbeddings() ──────────────────►OpenAI
+    │                    │             │  bulkInsertChunks() ────────────────────►│
+    │                    │             └───────────────────────────────────────────┘
+    │                    │             ┌───────┴──── PHASE 2: SYNTHESIS ──────────┐
+    │                    │             │  updateStatus("generating_report")        │
+    │                    │             │  inferPersona()                           │
+    │                    │             │  multiTopicSearch() ────────────────────►│
+    │                    │             │  generatePremiumReport() ──────────────►OpenAI (o3)
+    │                    │             │  generateEvaluation() ─────────────────►OpenAI (gpt-4o-mini)
+    │                    │             │  applyQualityGate()                       │
+    │                    │             │  createReportSections() ───────────────►│
+    │                    │             └───────────────────────────────────────────┘
+    │                    │             ┌───────┴──── PHASE 3: OVERLAY (if resume) ┐
+    │                    │             │  getCandidateOverlayPrompt() ───────────►OpenAI (gpt-4o)
+    │                    │             │  updateCandidateOverlay() ─────────────►│
+    │                    │             └───────────────────────────────────────────┘
+    │                    │             updateStatus("completed") ─────────────────►│
+    │                    │                     │                         │
+    │  [frontend polls]  │                     │                         │
+    │──GET /status?id=──►│                     │                         │
+    │◄──{status}─────────│  (repeat every 3s)  │                         │
+    │──GET /report/[id]─►│                     │                         │
+    │◄──{14 sections}────│                     │                         │
+    │──GET /overlay/[id]►│                     │                         │
+    │◄──{overlay_json}───│                     │                         │
+</pre>
+
+<h2>3.2 Retrieval & Reranking Sequence</h2>
+<pre>
+  assemblePremiumReportV2()       semanticSearch()         Supabase pgvector RPC
+          │                             │                         │
+          │──inferPremiumPersona()      │                         │
+          │   → role_family, seniority  │                         │
+          │                             │                         │
+          │──buildPersonaAwareQueries() │                         │
+          │   → 6+ topic queries        │                         │
+          │                             │                         │
+          │──multiTopicSearch(queries[])│                         │
+          │   for each query:           │                         │
+          │   ──generateEmbedding()────►│                         │
+          │             │◄──vector(1536)│                         │
+          │   ──search_embeddings()─────────────────────────────►│
+          │             │◄──top-15 chunks──────────────────────── │
+          │                             │                         │
+          │──merge all results          │                         │
+          │──deduplicateChunks() (Jaccard > 60% = duplicate)     │
+          │──rerank()                                             │
+          │    freshness boost:   <30d → +0.15 / <90d → +0.10   │
+          │    source_type weight: job_description → +0.25        │
+          │                        newsroom        → +0.20        │
+          │                        blog            → +0.15        │
+          │    keyword density:   strategic keywords +0.02/match  │
+          │    company/role match: title match → +0.10            │
+          │    diversity cap:     max 3 chunks per source         │
+          │                                                       │
+          │◄──18 ranked chunks [1]…[18] with citation metadata   │
+</pre>
+
+<h2>3.3 Quality Gate Sequence</h2>
+<pre>
+  assemblePremiumReportV2()    generatePremiumEvaluation()    LLM (gpt-4o-mini)
+          │                              │                          │
+          │──[Parallel LLM calls]        │                          │
+          │                              │                          │
+          │─────────────────────────────►│                          │
+          │  (pass report sections)      │──getPremiumEvalPrompt()─►│
+          │                              │◄──{section_verdicts}─────│
+          │                              │   met / partial /        │
+          │                              │   insufficient /         │
+          │                              │   suppressed             │
+          │◄──── evaluation_result ──────│                          │
+          │                              │                          │
+          │──applyQualityGateToSections()│                          │
+          │    suppress insufficient     │                          │
+          │    mark partial sections     │                          │
+          │                              │                          │
+          │──finalizePremiumQualityGate()│                          │
+          │    → approve / conditional / hold                       │
+          │                              │                          │
+          │──createReportSections()                                 │
+          │    (only gate-passed sections stored + shown)           │
+</pre>
+
+<h2>3.4 Candidate Overlay Sequence</h2>
+<pre>
+  Browser         API /resume/upload      generateOverlay()       LLM (gpt-4o)
+    │                    │                      │                      │
+    │──POST {file}──────►│                      │                      │
+    │                    │──extractText()        │                      │
+    │                    │──createCandidateResume│                      │
+    │◄──200 {resumeText}─│                      │                      │
+    │                    │──generateOverlay()───►│                      │
+    │                    │                      │──getCandidateOverlay──►│
+    │                    │                      │   Prompt()            │
+    │                    │                      │◄──overlay_json────────│
+    │                    │                      │   candidate_role_match│
+    │                    │                      │   strengths           │
+    │                    │                      │   interviewer_concerns│
+    │                    │                      │   gap_management      │
+    │                    │                      │   story_recommendations│
+    │                    │                      │   positioning_strategy│
+    │                    │                      │   objection_handling  │
+    │                    │                      │──updateOverlay()──────►DB
+    │                    │◄──status=completed───│                      │
+    │──GET /overlay/[id]►│                      │                      │
+    │◄──{overlay_json}───│                      │                      │
+</pre>
+
+<!-- ─────────────────────────────────────────────────── -->
+<h1>4. Pipeline Phases & Data Flow</h1>
+<hr class="rule">
+
+<h2>4.1 Phase Overview</h2>
+<table>
+  <tr><th>Phase</th><th>Status Shown</th><th>Duration</th><th>Key Operations</th></tr>
+  <tr><td>Validation</td><td>pending</td><td>&lt;100ms</td><td>Input sanitization, auth, company lookup/create</td></tr>
+  <tr><td>Source Planning</td><td>fetching_sources</td><td>2–5s</td><td>LLM research planner → selects 10 sources</td></tr>
+  <tr><td>Web Fetch</td><td>fetching_sources</td><td>20–40s</td><td>Firecrawl × 8-15 sources (concurrency = 3)</td></tr>
+  <tr><td>Clean &amp; Chunk</td><td>fetching_sources</td><td>2–5s</td><td>HTML strip, semantic chunking (~500 tokens), dedup</td></tr>
+  <tr><td>Embedding</td><td>fetching_sources</td><td>5–10s</td><td>OpenAI text-embedding-3-small (1536 dims, batched)</td></tr>
+  <tr><td>Vector Storage</td><td>fetching_sources</td><td>1–2s</td><td>Bulk insert to Supabase pgvector</td></tr>
+  <tr><td>Report Synthesis</td><td>generating_report</td><td>30–60s</td><td>Parallel: o3 synthesis + gpt-4o-mini quality gate</td></tr>
+  <tr><td>Overlay (optional)</td><td>completed</td><td>10–20s</td><td>gpt-4o personalization from resume</td></tr>
+</table>
+<p><b>Total end-to-end:</b> 60–120 seconds from form submission to "completed" status.</p>
+
+<h2>4.2 Ingestion Sub-Pipeline Detail</h2>
+<ul>
+  <li><b>Stage 1 — Source Planning:</b> LLM planner selects ≤10 URLs — careers, newsroom, blog, investor, press, leadership, about, product, developer, custom pages. Targets ≥5 external sources beyond company domain.</li>
+  <li><b>Stage 2 — Web Fetch:</b> Firecrawl v2 scrape API (axios fallback). Extracts markdown + HTML; resolves redirects; classifies source type; stores raw content.</li>
+  <li><b>Stage 3 — Cleaning:</b> Strip HTML tags, boilerplate, and navigation elements; normalize whitespace; compute SHA256 content hash for deduplication.</li>
+  <li><b>Stage 4 — Chunking:</b> ~500-token semantic chunks with 50-token overlap; token count calculated per chunk.</li>
+  <li><b>Stage 5 — Embedding:</b> OpenAI text-embedding-3-small, 1536 dimensions; batched for cost efficiency.</li>
+  <li><b>Stage 6 — Storage:</b> Bulk insert to sources → chunks → embeddings tables; IVFFlat pgvector index enables fast cosine search.</li>
+</ul>
+<p>Typical result: 30–100 chunks across 8–15 sources per request.</p>
+
+<!-- ─────────────────────────────────────────────────── -->
+<h1>5. Component Architecture</h1>
+<hr class="rule">
+
+<h2>5.1 API Routes</h2>
+<table>
+  <tr><th>Route</th><th>Method</th><th>Purpose</th></tr>
+  <tr><td>/api/deep-dive/create</td><td>POST</td><td>Create request; fire async pipeline via server.after()</td></tr>
+  <tr><td>/api/deep-dive/status</td><td>GET</td><td>Poll pipeline status (pending → fetching_sources → generating_report → completed)</td></tr>
+  <tr><td>/api/deep-dive/[id]/regenerate</td><td>POST</td><td>Re-run full pipeline for existing request</td></tr>
+  <tr><td>/api/deep-dive/extract-jd</td><td>POST</td><td>Extract JD fields from a URL via Firecrawl</td></tr>
+  <tr><td>/api/report/[id]</td><td>GET</td><td>Fetch full report + all 14 sections + token usage</td></tr>
+  <tr><td>/api/overlay/[requestId]</td><td>GET</td><td>Poll candidate overlay status + overlay_json</td></tr>
+  <tr><td>/api/resume/upload</td><td>POST</td><td>Upload resume; extract text; trigger overlay</td></tr>
+  <tr><td>/api/resume/parse</td><td>POST</td><td>Client-side text extraction from PDF/DOCX/DOC</td></tr>
+  <tr><td>/api/feedback</td><td>POST</td><td>Log useful/not_useful per section for QA</td></tr>
+  <tr><td>/api/history</td><td>GET</td><td>User's last 20 deep dives (paginated)</td></tr>
+  <tr><td>/api/admin/*</td><td>GET</td><td>Activity, stats, usage, users, diagnostics, prompt-feedback</td></tr>
+  <tr><td>/api/cron/retry-queue</td><td>POST</td><td>Vercel Cron (every 5 min): retry stuck requests</td></tr>
+</table>
+
+<h2>5.2 AI & LLM Modules</h2>
+<table>
+  <tr><th>File</th><th>Key Function</th><th>Purpose</th></tr>
+  <tr><td>lib/ai/openai.ts</td><td>generatePremiumReport()</td><td>Model routing + cost accounting</td></tr>
+  <tr><td>lib/ai/openaiClient.ts</td><td>executeWithOpenAIProviders()</td><td>Primary + fallback provider abstraction + auto-retry</td></tr>
+  <tr><td>lib/ai/prompts.ts</td><td>getDeepAnalysisPrompt()</td><td>Legacy SWOT + strategy prompt (o4-mini)</td></tr>
+  <tr><td>lib/ai/prompts.ts</td><td>getInterviewLayerPrompt()</td><td>Interview prep + decision prompt (gpt-4o-mini)</td></tr>
+  <tr><td>lib/ai/premiumPromptsV2.ts</td><td>getPremiumReportPromptV2()</td><td>Premium synthesis prompt (o3) with governance artifacts</td></tr>
+  <tr><td>lib/ai/premiumEvaluationPrompt.ts</td><td>getPremiumEvaluationPrompt()</td><td>Quality gate evaluation (gpt-4o-mini)</td></tr>
+  <tr><td>lib/ai/overlayPrompt.ts</td><td>getCandidateOverlayPrompt()</td><td>Candidate personalization (gpt-4o)</td></tr>
+  <tr><td>lib/ai/embeddings.ts</td><td>generateEmbeddings()</td><td>Batch vector generation (text-embedding-3-small)</td></tr>
+  <tr><td>lib/ai/untrustedInput.ts</td><td>sanitize*() / formatUntrustedTextBlock()</td><td>Prompt injection hardening for all user inputs</td></tr>
+</table>
+
+<h2>5.3 Database Schema</h2>
+<table>
+  <tr><th>Table</th><th>Key Columns</th><th>Purpose</th></tr>
+  <tr><td>users</td><td>id, email, created_at</td><td>User identity (Supabase Auth)</td></tr>
+  <tr><td>companies</td><td>id, name, normalized_name, website_url</td><td>Company deduplication</td></tr>
+  <tr><td>deep_dive_requests</td><td>id, user_id, company_id, role_title, job_description, status, error_message, metadata_json</td><td>Per-request state machine</td></tr>
+  <tr><td>sources</td><td>id, request_id, source_type, url, cleaned_content, content_hash, trust_score</td><td>Fetched web sources</td></tr>
+  <tr><td>chunks</td><td>id, source_id, chunk_index, text, token_count</td><td>Semantic text chunks</td></tr>
+  <tr><td>embeddings</td><td>id, chunk_id, embedding vector(1536)</td><td>pgvector embeddings for cosine search</td></tr>
+  <tr><td>reports</td><td>id, request_id, recommendation, [5 scores], ai_query_count, summary_json</td><td>Aggregated report metadata</td></tr>
+  <tr><td>report_sections</td><td>id, report_id, section_key, content_markdown, citations_json, display_order</td><td>Individual report sections (14 per report)</td></tr>
+  <tr><td>candidate_overlays</td><td>id, request_id, resume_id, overlay_json, status</td><td>Resume-personalized overlay data</td></tr>
+  <tr><td>feedback_events</td><td>id, report_id, section_key, feedback_type</td><td>Section-level usefulness feedback</td></tr>
+</table>
+
+<!-- ─────────────────────────────────────────────────── -->
+<h1>6. AI Prompts — All Phases</h1>
+<hr class="rule">
+<p>Every LLM call in the system is documented below with its file, model, inputs, output schema, and the reasoning framework enforced by the prompt.</p>
+
+<h2>6.1 Source Planning Prompt</h2>
+<table>
+  <tr><th>Attribute</th><th>Value</th></tr>
+  <tr><td>File</td><td>lib/ingestion/firecrawl.ts → buildSourceUrls()</td></tr>
+  <tr><td>Model</td><td>gpt-4o-mini</td></tr>
+  <tr><td>Phase</td><td>Phase 1 — Ingestion (Source Planning)</td></tr>
+  <tr><td>Purpose</td><td>Generate a research plan: select up to 10 URLs to scrape and produce retrieval queries for semantic search</td></tr>
+  <tr><td>Input</td><td>company name, role title, job description (optional), company URL (optional)</td></tr>
+  <tr><td>Output Schema</td><td>{ sources: [{url, source_type, rationale}], retrieval_queries: string[] }</td></tr>
+  <tr><td>Key Rules</td><td>Target ≥5 external sources beyond company domain; prioritize careers, newsroom, blog, investor pages; avoid login-walled pages; return only fetchable public URLs</td></tr>
+</table>
+
+<h2>6.2 Deep Analysis Prompt (Legacy / Baseline)</h2>
+<table>
+  <tr><th>Attribute</th><th>Value</th></tr>
+  <tr><td>File</td><td>lib/ai/prompts.ts → getDeepAnalysisPrompt()</td></tr>
+  <tr><td>Model</td><td>o4-mini (deep reasoning)</td></tr>
+  <tr><td>Phase</td><td>Phase 2 — Report Synthesis (legacy route)</td></tr>
+  <tr><td>Purpose</td><td>Generate SWOT analysis, strategic positioning, and risk assessment</td></tr>
+  <tr><td>Input</td><td>Retrieved evidence chunks [1]…[N], company metadata, role metadata, optional profile context</td></tr>
+  <tr><td>Output Schema</td><td>JSON: { company_swot, role_swot, strategic_bet_analysis, why_role_exists_now, risks_red_flags }</td></tr>
+  <tr><td>Tone / Persona</td><td>Senior strategy firm engagement manager (McKinsey/Bain equivalent)</td></tr>
+</table>
+<h3>Reasoning Framework (6 Layers)</h3>
+<ul>
+  <li><b>Layer 1 — Source Reliability Audit:</b> classify each source as company-authored, third-party, or user-supplied</li>
+  <li><b>Layer 2 — Competitive Position Mapping:</b> Porter's Five Forces + value chain analysis</li>
+  <li><b>Layer 3 — Org Health Signals:</b> leadership changes, hiring patterns, reorg signals</li>
+  <li><b>Layer 4 — Strategic Inflection Point Detection:</b> what changed in the last 12–18 months?</li>
+  <li><b>Layer 5 — Fact / Inference / Hypothesis Tracing:</b> every claim explicitly labeled</li>
+  <li><b>Layer 6 — Stress Test:</b> specificity check, named-signal check, circularity check</li>
+</ul>
+<p><b>Quality Standards:</b> Specificity over completeness. No category-level risks. Anti-hallucination. Prefer omission over invention.</p>
+
+<h2>6.3 Interview Layer Prompt (Legacy / Baseline)</h2>
+<table>
+  <tr><th>Attribute</th><th>Value</th></tr>
+  <tr><td>File</td><td>lib/ai/prompts.ts → getInterviewLayerPrompt()</td></tr>
+  <tr><td>Model</td><td>gpt-4o-mini</td></tr>
+  <tr><td>Phase</td><td>Phase 2 — Report Synthesis (legacy route)</td></tr>
+  <tr><td>Purpose</td><td>Generate interview preparation framework: agenda, questions, decision recommendation</td></tr>
+  <tr><td>Input</td><td>Company overview, role context, deep analysis output, candidate profile (optional)</td></tr>
+  <tr><td>Output Schema</td><td>12 sections: company_overview, mission_vision_leadership, executive_summary, assessment_snapshot, likely_interview_agenda, questions_to_ask, unknowns_to_validate, company_snapshot, role_snapshot, interview_decision_summary, five_minute_brief, evidence_contract</td></tr>
+  <tr><td>Tone / Persona</td><td>Executive coach + former VP (100+ Director/VP interview experience)</td></tr>
+</table>
+<h3>Reasoning Framework (5 Layers)</h3>
+<ul>
+  <li><b>Layer 1 — Hiring Criteria Reconstruction:</b> infer 5 key hiring dimensions from JD + context</li>
+  <li><b>Layer 2 — Interviewer Concern Mapping:</b> per interviewer type and interview themes</li>
+  <li><b>Layer 3 — Candidate Positioning:</b> only if resume provided; omitted otherwise</li>
+  <li><b>Layer 4 — Question Quality Bar:</b> diagnostic, signal-sending, hard to deflect</li>
+  <li><b>Layer 5 — Stress Test:</b> role-specific, company-specific, usable in 5 minutes</li>
+</ul>
+<h3>Pursue Decision Thresholds (embedded in prompt)</h3>
+<table>
+  <tr><th>Verdict</th><th>Score</th><th>Criteria</th></tr>
+  <tr><td>Aggressive Pursue</td><td>4</td><td>Strong evidence, high-leverage role, low execution risk, no unresolved red flags</td></tr>
+  <tr><td>Selective Pursue</td><td>3</td><td>Clear upside, ≥1 meaningful concern; highest allowed without resume present</td></tr>
+  <tr><td>Cautious Pursue</td><td>2</td><td>Plausible but uncertain; multiple ambiguities, meaningful risk, unclear charter</td></tr>
+  <tr><td>Pass</td><td>0</td><td>Downside ≥ upside, unresolved core red flag, insufficient leverage or evidence</td></tr>
+</table>
+
+<h2>6.4 Premium Synthesis Prompt</h2>
+<table>
+  <tr><th>Attribute</th><th>Value</th></tr>
+  <tr><td>File</td><td>lib/ai/premiumPromptsV2.ts → getPremiumReportPromptV2()</td></tr>
+  <tr><td>Model</td><td>o3 (fallback: o4-mini)</td></tr>
+  <tr><td>Phase</td><td>Phase 2 — Report Synthesis (premium pipeline)</td></tr>
+  <tr><td>Purpose</td><td>High-fidelity, persona-aware, quality-gated full report generation</td></tr>
+  <tr><td>Input</td><td>18 ranked evidence chunks with citations, inferred persona, source coverage summary, user profile, JD, resume (optional)</td></tr>
+  <tr><td>Output Schema</td><td>JSON: { decision_memo, five_minute_brief, company_context, why_role_exists_now, company_role_strategy, candidate_fit, interview_prep, credibility_layer }</td></tr>
+  <tr><td>Governance Artifacts</td><td>Loads external files: report_generation_spec.md, pipeline_architecture.md, cost_ledger_schema.json</td></tr>
+</table>
+<h3>Non-Negotiable Prompt Rules</h3>
+<ul>
+  <li>No fabricated metrics, org structures, reporting lines, stakeholder maps, timelines, or KPIs</li>
+  <li>Use <code>INSUFFICIENT_EVIDENCE</code> escape string when evidence bar is not met</li>
+  <li>Hide weak specificity rather than invent certainty</li>
+  <li>Separate: verified facts | cited synthesis | informed inference | unknowns</li>
+  <li>No cross-section repetition allowed</li>
+  <li>Generic PM coaching language = failure (must be role-and-company-specific)</li>
+  <li>Restating JD as role strategy = failure</li>
+  <li>Generic competitor bullets = failure</li>
+</ul>
+<h3>Section-Level Minimum Requirements</h3>
+<table>
+  <tr><th>Section</th><th>Minimum Requirement</th></tr>
+  <tr><td>company_context</td><td>≥150 words; blocks: Company Snapshot, Vision &amp; Mission, Culture Signals</td></tr>
+  <tr><td>company_role_strategy</td><td>≥300 words; SWOT (×4 quadrants), Current Strategy, Strategic Tensions</td></tr>
+  <tr><td>interview_prep</td><td>Interviewer-specific + theme-specific questions; not generic coaching</td></tr>
+  <tr><td>credibility_layer</td><td>Verified facts, cited synthesis, informed inference, conflicts, unknowns</td></tr>
+  <tr><td>decision_memo</td><td>Pursue recommendation with explicit rationale and evidence citations</td></tr>
+</table>
+
+<h2>6.5 Quality Gate Evaluation Prompt</h2>
+<table>
+  <tr><th>Attribute</th><th>Value</th></tr>
+  <tr><td>File</td><td>lib/ai/premiumEvaluationPrompt.ts → getPremiumEvaluationPrompt()</td></tr>
+  <tr><td>Model</td><td>gpt-4o-mini</td></tr>
+  <tr><td>Phase</td><td>Phase 2 — Quality Gate (runs in parallel with synthesis)</td></tr>
+  <tr><td>Purpose</td><td>Independently assess section strength; identify repair targets; gate final release</td></tr>
+  <tr><td>Input</td><td>Generated report sections from the synthesis step</td></tr>
+  <tr><td>Output Schema</td><td>JSON: { sections: [{key, verdict, confidence, repair_instructions}], release_decision: approve | conditional | hold }</td></tr>
+</table>
+<h3>Verdict Definitions</h3>
+<ul>
+  <li><b>met</b> — section meets specificity, evidence grounding, and actionability bar</li>
+  <li><b>partial</b> — section present but has named weaknesses requiring repair</li>
+  <li><b>insufficient</b> — section must be suppressed; not shown to user</li>
+  <li><b>suppressed</b> — evidence below floor; section hidden with placeholder message</li>
+</ul>
+
+<h2>6.6 Candidate Overlay Prompt</h2>
+<table>
+  <tr><th>Attribute</th><th>Value</th></tr>
+  <tr><td>File</td><td>lib/ai/overlayPrompt.ts → getCandidateOverlayPrompt()</td></tr>
+  <tr><td>Model</td><td>gpt-4o</td></tr>
+  <tr><td>Phase</td><td>Phase 3 — Candidate Personalization (post-report)</td></tr>
+  <tr><td>Purpose</td><td>Generate resume-grounded personalization: fit assessment, stories, positioning, objection handling</td></tr>
+  <tr><td>Input</td><td>Resume text, job description, base report context (company_context + role_snapshot + positioning summary)</td></tr>
+  <tr><td>Output Schema</td><td>JSON: { candidate_role_match, strengths_to_emphasize, interviewer_concerns, gap_management, story_recommendations, positioning_strategy, objection_handling }</td></tr>
+  <tr><td>Tone / Persona</td><td>Career coach + interview strategist</td></tr>
+</table>
+<h3>Reasoning Framework (5 Steps)</h3>
+<ul>
+  <li><b>Step 1 — Input Classification:</b> classify resume, JD, and base positioning by reliability</li>
+  <li><b>Step 2 — Coverage Map:</b> expertise, scope, leadership, metrics, trajectory, gaps</li>
+  <li><b>Step 3 — Missingness Retrieval:</b> what JD requires but resume lacks?</li>
+  <li><b>Step 4 — Fact / Inference / Hypothesis Separation:</b> explicit labeling</li>
+  <li><b>Step 5 — Stress Test:</b> grounding check, gap honesty check, candidate-specificity check</li>
+</ul>
+<h3>Hard Rules</h3>
+<ul>
+  <li>Every insight must be grounded in actual resume evidence — no invented claims</li>
+  <li>Be direct about genuine gaps; do not minimize or ignore them</li>
+  <li>Empty proof_points acceptable; fabricated proof points are NOT acceptable</li>
+  <li>objection_handling.what_not_to_say is required for every objection entry</li>
+</ul>
+
+<h2>6.7 Prompt Injection Hardening</h2>
+<p>All user-supplied inputs pass through sanitization before any LLM call:</p>
+<table>
+  <tr><th>Input</th><th>Function</th><th>Constraints</th></tr>
+  <tr><td>Company Name</td><td>sanitizeSingleLineText()</td><td>Max 140 chars; strip newlines, control chars</td></tr>
+  <tr><td>Role Title</td><td>sanitizeSingleLineText()</td><td>Max 180 chars</td></tr>
+  <tr><td>Job Description</td><td>sanitizeMultiLineText()</td><td>Max 20,000 chars; block injection patterns</td></tr>
+  <tr><td>Profile Context</td><td>sanitizeMultiLineText()</td><td>Max 24,000 chars</td></tr>
+  <tr><td>Resume Text</td><td>sanitizeMultiLineText()</td><td>Max 50,000 chars</td></tr>
+  <tr><td>Company URL</td><td>sanitizeHttpUrl()</td><td>Validate + normalize URL format</td></tr>
+  <tr><td>All untrusted blocks</td><td>formatUntrustedTextBlock()</td><td>Wrap in &lt;&lt;&lt;BEGIN_*&gt;&gt;&gt; / &lt;&lt;&lt;END_*&gt;&gt;&gt; delimiters</td></tr>
+</table>
+<p>System prompts explicitly instruct models to treat wrapped user content as <b>evidence</b>, never as directives.</p>
+
+<!-- ─────────────────────────────────────────────────── -->
+<h1>7. Quality &amp; Safety Architecture</h1>
+<hr class="rule">
+
+<h2>7.1 Hallucination Prevention</h2>
+<ul>
+  <li>All LLM synthesis grounded in ranked evidence chunks (max ~18, all cited)</li>
+  <li>INSUFFICIENT_EVIDENCE escape hatch: model omits rather than invents weak sections</li>
+  <li>Specificity over completeness: no category-level risks, no generic bullets</li>
+  <li>Fact/inference/hypothesis tracing: every claim labeled with epistemic confidence</li>
+  <li>Parallel quality-gate evaluator independently assesses section strength before release</li>
+</ul>
+
+<h2>7.2 Provider Failover &amp; Resilience</h2>
+<ul>
+  <li>Primary + fallback OpenAI-compatible API providers (configured via env vars)</li>
+  <li>executeWithOpenAIProviders() retries across all provider combinations on transient errors</li>
+  <li>Per-provider model name mapping (fallback may alias o3 to a different model ID)</li>
+  <li>Vercel Cron retry queue: every 5 minutes, re-runs stuck or failed requests</li>
+</ul>
+
+<h2>7.3 Data Isolation</h2>
+<ul>
+  <li>Supabase Row-Level Security (RLS) enforces user-to-report isolation at the database layer</li>
+  <li>All semantic searches filtered by request_id — no cross-user data leakage possible</li>
+  <li>Auth middleware validates Supabase JWT on all routes</li>
+</ul>
+
+<h2>7.4 Graceful Degradation</h2>
+<ul>
+  <li>Overlay failure does not fail the report — logged, surfaced as 'pending' only</li>
+  <li>Quality-gate partial sections shown with confidence indicator rather than suppressed entirely</li>
+  <li>If Firecrawl is unavailable, falls back to axios for direct web fetching</li>
+</ul>
+
+</body>
+</html>`;
+
+writeFileSync("Company-Deep-Dive-System-Design.html", html);
+console.log("✓ Generated: Company-Deep-Dive-System-Design.html");

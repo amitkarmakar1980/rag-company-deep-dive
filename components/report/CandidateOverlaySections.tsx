@@ -71,6 +71,24 @@ export function CandidateRoleMatchSection({
 }: {
   data: CandidateOverlayData["candidate_role_match"];
 }) {
+  type ScoreDimension = {
+    label: string;
+    dimension: {
+      score: number;
+      rationale: string;
+    };
+  };
+
+  const scoreDimensions: ScoreDimension[] = data.score_dimensions
+    ? [
+        { label: "Relevant Domain Experience", dimension: data.score_dimensions.relevant_domain_experience },
+        { label: "Scope And Seniority Match", dimension: data.score_dimensions.scope_and_seniority_match },
+        { label: "Functional Skill Match", dimension: data.score_dimensions.functional_skill_match },
+        { label: "Strategic Context Match", dimension: data.score_dimensions.strategic_context_match },
+        { label: "Risks And Gaps", dimension: data.score_dimensions.risks_and_gaps },
+      ]
+    : [];
+
   return (
     <div className="space-y-5">
       <div className="flex items-start gap-4 flex-wrap">
@@ -79,6 +97,30 @@ export function CandidateRoleMatchSection({
           {data.rationale}
         </p>
       </div>
+
+      {data.final_decision ? (
+        <div className="rounded-lg border border-[#e4ddd4] bg-[#faf6ef] px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#9c8d81]">Final Decision</p>
+          <p className="mt-1 text-sm font-semibold text-[#1c1713]">{data.final_decision}</p>
+        </div>
+      ) : null}
+
+      {scoreDimensions.length > 0 && (
+        <div>
+          <OverlayLabel color="text-[#4a3f36]">Score Breakdown</OverlayLabel>
+          <ul className="mt-2 space-y-2">
+            {scoreDimensions.map(({ label, dimension }) => (
+              <li key={label} className="rounded-lg border border-[#e4ddd4] bg-white p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-medium text-[#1c1713]">{label}</p>
+                  <span className="rounded-full bg-[#f5f1e8] px-2 py-0.5 text-xs font-semibold text-[#4a3f36]">{dimension.score}/10</span>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-[#6b5e52]">{dimension.rationale}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {data.key_alignments.length > 0 && (
         <div>

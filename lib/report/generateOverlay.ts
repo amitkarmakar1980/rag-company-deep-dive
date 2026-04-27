@@ -23,11 +23,51 @@ function titleCaseFit(value: CandidateOverlayData["candidate_role_match"]["overa
   }
 }
 
-function buildPremiumCandidateFitSection(overlayData: CandidateOverlayData): PremiumSectionContent {
+function getOverlayFinalDecision(match: CandidateOverlayData["candidate_role_match"]): string {
+  if (match.final_decision) {
+    return match.final_decision;
+  }
+
+  if (match.match_score >= 8) return "Pursue Aggressively";
+  if (match.match_score >= 6) return "Pursue Cautiously";
+  if (match.match_score >= 4) return "Borderline";
+  return "Do Not Pursue";
+}
+
+function buildScoreDimensionFacts(match: CandidateOverlayData["candidate_role_match"]): NonNullable<PremiumSectionContent["facts"]> {
+  const dimensions = match.score_dimensions;
+
+  return [
+    { label: "Relevant Domain Experience", value: dimensions ? `${dimensions.relevant_domain_experience.score}/10` : "INSUFFICIENT_EVIDENCE" },
+    { label: "Scope And Seniority Match", value: dimensions ? `${dimensions.scope_and_seniority_match.score}/10` : "INSUFFICIENT_EVIDENCE" },
+    { label: "Functional Skill Match", value: dimensions ? `${dimensions.functional_skill_match.score}/10` : "INSUFFICIENT_EVIDENCE" },
+    { label: "Strategic Context Match", value: dimensions ? `${dimensions.strategic_context_match.score}/10` : "INSUFFICIENT_EVIDENCE" },
+    { label: "Risks And Gaps", value: dimensions ? `${dimensions.risks_and_gaps.score}/10` : "INSUFFICIENT_EVIDENCE" },
+    { label: "Match Score", value: `${match.match_score}/10` },
+    { label: "Final Decision", value: getOverlayFinalDecision(match) },
+  ];
+}
+
+export function buildPremiumCandidateFitSection(overlayData: CandidateOverlayData): PremiumSectionContent {
   const match = overlayData.candidate_role_match;
   const topStrengths = overlayData.strengths_to_emphasize.strengths.slice(0, 3);
   const topStories = overlayData.story_recommendations.stories.slice(0, 3);
   const topObjections = overlayData.objection_handling.objections.slice(0, 2);
+  const topGaps = overlayData.gap_management.gaps.slice(0, 3);
+  const dimensionBlocks = match.score_dimensions
+    ? [
+        {
+          title: "Score Breakdown",
+          bullets: [
+            `Relevant Domain Experience: ${match.score_dimensions.relevant_domain_experience.score}/10 - ${match.score_dimensions.relevant_domain_experience.rationale}`,
+            `Scope And Seniority Match: ${match.score_dimensions.scope_and_seniority_match.score}/10 - ${match.score_dimensions.scope_and_seniority_match.rationale}`,
+            `Functional Skill Match: ${match.score_dimensions.functional_skill_match.score}/10 - ${match.score_dimensions.functional_skill_match.rationale}`,
+            `Strategic Context Match: ${match.score_dimensions.strategic_context_match.score}/10 - ${match.score_dimensions.strategic_context_match.rationale}`,
+            `Risks And Gaps: ${match.score_dimensions.risks_and_gaps.score}/10 - ${match.score_dimensions.risks_and_gaps.rationale}`,
+          ],
+        },
+      ]
+    : [];
 
   return {
     schema: "premium_section_v1",
@@ -38,7 +78,7 @@ function buildPremiumCandidateFitSection(overlayData: CandidateOverlayData): Pre
     facts: [
       { label: "Resume provided?", value: "true" },
       { label: "Overall fit", value: titleCaseFit(match.overall_fit) },
-      { label: "Match score", value: `${match.match_score}/10` },
+      ...buildScoreDimensionFacts(match),
     ],
     callouts: topStrengths.map((strength) => ({
       label: strength.strength,
@@ -49,10 +89,17 @@ function buildPremiumCandidateFitSection(overlayData: CandidateOverlayData): Pre
       ? match.key_gaps.map((gap) => `Gap to manage: ${gap}`)
       : ["No major gaps were called out in the resume overlay."],
     blocks: [
+      ...dimensionBlocks,
+      ...(topGaps.length
+        ? [{
+            title: "Gap Management",
+            bullets: topGaps.map((gap) => `${gap.gap}: ${gap.talking_point}`),
+          }]
+        : []),
       ...(topStories.length
         ? [{
             title: "Stories to lead with",
-            bullets: topStories.map((story) => `${story.theme}: ${story.suggested_story}`),
+            bullets: topStories.map((story) => `${story.theme}: ${story.suggested_story} Maps to: ${story.maps_to_requirement}`),
           }]
         : []),
       ...(topObjections.length

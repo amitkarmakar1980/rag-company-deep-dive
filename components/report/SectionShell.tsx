@@ -181,7 +181,6 @@ interface SectionShellProps {
   defaultCollapsed?: boolean;
   badge?: React.ReactNode;
   feedback?: React.ReactNode;
-  evidenceBacked?: boolean;
   provenance?: ProvenanceType;
   onProvenanceClick?: (type: ProvenanceType) => void;
 }
@@ -224,7 +223,6 @@ export function SectionShell({
   defaultCollapsed = false,
   badge,
   feedback,
-  evidenceBacked,
   provenance,
   onProvenanceClick,
 }: SectionShellProps) {
@@ -259,17 +257,6 @@ export function SectionShell({
             </h2>
             {provenance && <ProvenancePill type={provenance} onClick={onProvenanceClick ? () => onProvenanceClick(provenance) : undefined} />}
             {badge}
-            {evidenceBacked !== undefined && (
-              <span
-                className={`text-[0.68rem] px-2.5 py-1 rounded-full font-semibold uppercase tracking-[0.18em] ${
-                  evidenceBacked
-                    ? "bg-[#1a4a3a]/8 text-[#1a4a3a] border border-[#1a4a3a]/20"
-                    : "bg-[#f0ece4] text-[#7a6d63] border border-[#d4cdc4]"
-                }`}
-              >
-                {evidenceBacked ? "Evidence-backed" : "Inferred"}
-              </span>
-            )}
           </div>
           {subtitle && (
             <p className="mt-1.5 max-w-3xl text-[0.88rem] leading-5 text-[#7a6d63] sm:text-sm">

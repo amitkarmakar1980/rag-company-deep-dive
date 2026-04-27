@@ -37,18 +37,50 @@ export type PremiumPresentationViewModel = {
   personaBadges: string[];
 };
 
+type VisibleSectionKey = typeof VISIBLE_SECTION_ORDER[number];
+
 const GROUP_BY_SECTION_KEY: Record<string, string> = {
-  decision_memo: "Decision",
-  five_minute_brief: "Decision",
-  company_context: "Strategic Context",
-  candidate_fit: "Candidate Positioning",
-  how_to_win_this_process: "Interview Prep",
-  interview_prep: "Interview Prep",
-  company_role_strategy: "Strategic Context",
-  why_role_exists_now: "Strategic Context",
-  credibility_layer: "Credibility",
-  operations_and_cost: "Credibility",
+  decision_memo: "Candidate-Skill Match",
+  five_minute_brief: "Candidate-Skill Match",
+  company_context: "Company Deep Dive",
+  candidate_fit: "Candidate-Skill Match",
+  how_to_win_this_process: "Interview Preparation",
+  interview_prep: "Interview Preparation",
+  company_role_strategy: "Company Deep Dive",
+  why_role_exists_now: "About the Role",
+  credibility_layer: "Appendix",
+  operations_and_cost: "Appendix",
 };
+
+const TITLE_BY_SECTION_KEY: Record<string, string> = {
+  decision_memo: "Final Recommendation",
+  five_minute_brief: "5-Minute Brief",
+  company_context: "Company Overview",
+  company_role_strategy: "Products, Strategy, And Market",
+  why_role_exists_now: "About the Role",
+  candidate_fit: "Candidate-Skill Match",
+  how_to_win_this_process: "How To Position Yourself",
+  interview_prep: "Likely Interview Questions",
+};
+
+const VISIBLE_SECTION_ORDER = [
+  "company_context",
+  "company_role_strategy",
+  "why_role_exists_now",
+  "decision_memo",
+  "candidate_fit",
+  "five_minute_brief",
+  "how_to_win_this_process",
+  "interview_prep",
+] as const;
+
+const SECTION_ORDER_INDEX = new Map(VISIBLE_SECTION_ORDER.map((key, index) => [key, index]));
+
+function isVisibleSectionKey(value: string): value is VisibleSectionKey {
+  return SECTION_ORDER_INDEX.has(value as VisibleSectionKey);
+}
+
+const HIDDEN_SECTION_KEYS = new Set(["credibility_layer", "operations_and_cost"]);
 
 export function parsePremiumSectionContent(content: string): PremiumSectionContent | null {
   try {
@@ -71,15 +103,24 @@ export function buildPremiumPresentationViewModel(
       return [];
     }
 
+    if (HIDDEN_SECTION_KEYS.has(section.key)) {
+      return [];
+    }
+
     if (viewMode !== "full" && parsed.surface !== "both") {
       return [];
     }
 
     return [{
       ...section,
+      title: TITLE_BY_SECTION_KEY[section.key] ?? section.title,
       parsed,
       group: GROUP_BY_SECTION_KEY[section.key] ?? definition.group,
     } satisfies PremiumParsedViewSection];
+  }).sort((left, right) => {
+    const leftIndex = isVisibleSectionKey(left.key) ? SECTION_ORDER_INDEX.get(left.key)! : Number.MAX_SAFE_INTEGER;
+    const rightIndex = isVisibleSectionKey(right.key) ? SECTION_ORDER_INDEX.get(right.key)! : Number.MAX_SAFE_INTEGER;
+    return leftIndex - rightIndex;
   });
 
   const roleFamilyBadge = report.personaProfile?.isBlendedPersona

@@ -7,6 +7,7 @@ import {
   extractSearchResultLinks,
   getDomainSpecificSourceFallbackUrls,
   isFirecrawlQuotaError,
+  isSelectableResearchSourceUrl,
   isSearchResultsUrl,
   resetFirecrawlBypassForTest,
   resolveCanonicalSourceUrl,
@@ -34,6 +35,25 @@ test("planner candidate pool keeps high-confidence official pages and drops spec
   assert.ok(!urls.has("https://microsoft.com/investor-relations"));
   assert.ok(!urls.has("https://microsoft.com/engineering"));
   assert.ok(!urls.has("https://microsoft.com/newsroom"));
+});
+
+test("planner candidate pool normalizes recruiting domains to the corporate homepage before seeding research", () => {
+  const candidates = buildPlannerCandidatePool(
+    "Salesforce",
+    "Senior Manager, Global Partner Initiatives & Strategy",
+    "https://careers.salesforce.com/"
+  );
+
+  const urls = new Set(candidates.map((candidate) => candidate.url));
+
+  assert.ok(urls.has("https://salesforce.com/"));
+  assert.ok(urls.has("https://salesforce.com/careers"));
+  assert.ok(urls.has("https://salesforce.com/investors"));
+  assert.ok(urls.has("https://salesforce.com/about"));
+
+  assert.ok(!urls.has("https://careers.salesforce.com/investors"));
+  assert.ok(!urls.has("https://careers.salesforce.com/blog"));
+  assert.ok(!urls.has("https://careers.salesforce.com/about"));
 });
 
 test("planner candidate pool includes generic strategy-search seeds for deeper company analysis", () => {
@@ -73,9 +93,9 @@ test("rag source strategy prioritizes investor, culture, and leadership evidence
   assert.ok(strategy.requiredSourceClasses.includes("leadership_strategy"));
   assert.ok(strategy.requiredSourceClasses.includes("competitor_positioning"));
   assert.ok(strategy.recommendedSources.some((candidate) => /uber leadership interview podcast keynote strategy/i.test(decodeURIComponent(candidate.url)) || candidate.url === "https://www.uber.com/investors"));
-  assert.ok(strategy.recommendedSources.some((candidate) => /site:sec\.gov uber 10-k annual report/i.test(decodeURIComponent(candidate.url)) || /investor relations annual report earnings shareholder letter/i.test(decodeURIComponent(candidate.url))));
+  assert.ok(strategy.recommendedSources.some((candidate) => candidate.url === "https://www.uber.com/investors" || /site:sec\.gov uber 10-k annual report/i.test(decodeURIComponent(candidate.url)) || /investor relations annual report earnings shareholder letter/i.test(decodeURIComponent(candidate.url))));
   assert.ok(strategy.recommendedSources.some((candidate) => /uber competitors alternatives market share gartner forrester/i.test(decodeURIComponent(candidate.url)) || /competitive landscape search/i.test(candidate.label)));
-  assert.ok(strategy.recommendedSources.some((candidate) => /uber culture values operating principles/i.test(decodeURIComponent(candidate.url)) || /glassdoor interview culture employee reviews/i.test(decodeURIComponent(candidate.url))));
+  assert.ok(strategy.recommendedSources.some((candidate) => candidate.sourceClasses?.includes("governance_signals") || /uber culture values operating principles/i.test(decodeURIComponent(candidate.url)) || /glassdoor interview culture employee reviews/i.test(decodeURIComponent(candidate.url))));
   assert.ok(strategy.notes.some((note) => /competitor, analyst, and market-structure evidence/i.test(note)));
   assert.ok(strategy.notes.some((note) => /Build the source strategy before synthesis/i.test(note)));
 });
@@ -132,6 +152,14 @@ test("search-result detection distinguishes real results pages from article page
   assert.equal(isSearchResultsUrl("https://news.google.com/search?q=uber"), true);
   assert.equal(isSearchResultsUrl("https://news.google.com/articles/CBMiX2h0dHBzOi8vd3d3LnJlYXR1ZXJzLmNvbS8") , false);
   assert.equal(isSearchResultsUrl("https://www.uber.com/us/en/about/"), false);
+});
+
+test("final research-source filter rejects discovery wrappers and keeps concrete evidence pages", () => {
+  assert.equal(isSelectableResearchSourceUrl("https://www.google.com/search?q=salesforce+investor+relations"), false);
+  assert.equal(isSelectableResearchSourceUrl("https://maps.google.com/maps?output=search&q=salesforce+10-k"), false);
+  assert.equal(isSelectableResearchSourceUrl("https://www.g2.com/search?query=Salesforce"), false);
+  assert.equal(isSelectableResearchSourceUrl("https://www.sec.gov/Archives/edgar/data/1108524/000110852425000006/crm-20250131.htm"), true);
+  assert.equal(isSelectableResearchSourceUrl("https://www.salesforce.com/"), true);
 });
 
 test("domain-specific fallbacks provide accessible Uber alternatives for blocked investor and job pages", () => {

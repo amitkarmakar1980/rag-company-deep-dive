@@ -14,7 +14,7 @@ const ARTIFACT_PATHS = {
 
 const artifactCache = new Map<keyof typeof ARTIFACT_PATHS, Promise<string>>();
 const MAX_ARTIFACT_CHARS = 3500;
-const MAX_EVIDENCE_CHUNKS = 12;
+const MAX_EVIDENCE_CHUNKS = 18;
 const MAX_CHARS_PER_CHUNK = 1800;
 
 async function loadArtifact(key: keyof typeof ARTIFACT_PATHS): Promise<string> {
@@ -105,55 +105,65 @@ export async function getPremiumReportPromptV2(
     ),
   ].join("\n");
   const repairSection = repairInstructions?.length
-    ? `\nREPAIR PRIORITIES\n${repairInstructions.map((instruction, index) => `${index + 1}. ${instruction}`).join("\n")}\nTreat these as mandatory repair targets for this regeneration pass. Preserve any strong content that already exists, but fully rewrite the weak sections instead of making cosmetic edits. On a repair pass, company_context, company_role_strategy, and interview_prep must be expanded until they satisfy the structural and depth rules below or explicitly state what evidence is missing.\n`
+    ? `\nREPAIR PRIORITIES\n${repairInstructions.map((instruction, index) => `${index + 1}. ${instruction}`).join("\n")}\nTreat these as mandatory repair targets for this regeneration pass. Rewrite weak sections from scratch instead of padding or lightly editing them.\n`
     : "";
 
-  return `You are generating the default premium interview report.
+  return `You are generating a company deep dive plus interview prep report.
 
-Your governing constraints are the following artifacts, and you must follow them explicitly:
-- report_generation_spec.md
-- pipeline_architecture.md
-- cost_ledger_schema.json
-- premium_vscode_copilot_prompt.md
+The product has exactly 4 broad categories:
+1. Company Deep Dive
+2. About the Role
+3. Candidate-Skill Match
+4. Interview Preparation
 
-This is PREMIUM mode. Optimize for trust, evidence quality, specificity, candidate outcomes, premium insight density, and honest operational visibility.
+Keep the output concise, sharp, practical, and easy to scan.
+Avoid consultant fluff, generic writing, and repetitive phrasing.
+Prefer strong bullets and direct judgments over long paragraphs.
 
-Non-negotiable rules:
-- Do not fabricate metrics, org structures, reporting lines, stakeholder maps, timelines, or year-1 goals.
-- Do not generate why-this-role-exists-now, strategic importance, role leverage, KPI logic, or year-1 expectations from generic news search alone.
-- Use "INSUFFICIENT_EVIDENCE" when the evidence bar is not met.
-- Hide weak specificity rather than inventing certainty.
-- Separate verified fact, cited synthesis, informed inference, and unknowns.
-- Each section must add net-new value and must not repeat prior sections.
-- Candidate-fit content must stay generic if no candidate profile is provided.
-- Company strategy and role strategy are core differentiators of the premium product.
-- Interview prep must be interviewer-specific, theme-specific, and proof-oriented.
-- Generic PM coaching is a failure.
-- Generic Product-centric framing for clearly non-Product roles is a failure.
-- Generic competitor bullets are a failure.
-- Restating the JD as role strategy is a failure.
-- Use the inferred persona as the default retrieval, analysis, interview-prep, and reading-experience lens unless the evidence materially contradicts it.
-- Do not classify lead, senior, group, or principal product-manager titles as executive unless the JD explicitly shows business-unit, portfolio, org-design, or P&L authority.
-- Treat safety, trust, privacy, compliance, and risk language as domain modifiers, not automatic persona switches.
-- Candidate-fit scoring must evaluate transferability dimension by dimension; direct domain-specialist experience cannot dominate the score on its own.
-- Do not turn senior technical PM interview prep into engineering architecture theater unless the JD explicitly centers engineering-system interviews.
-- Keep section categories clean: company_context is company context, candidate_fit is candidate transferability, and interview_prep is interview proof strategy.
-- When making a claim grounded in retrieved evidence, append bracketed citations using the available source order, for example [1] or [2, 3].
-- Prefer bracketed citation style over prose like "Source 1".
-- Do not cite claims that are explicitly marked as insufficient evidence or unknown.
-- company_context must usually deliver at least 150 words of net-new interpretation when evidence quality is at least partial; if it cannot, say what evidence is missing.
-- company_role_strategy must usually deliver at least 300 words of net-new strategic analysis when evidence quality is at least partial; if it cannot, say what evidence is missing.
-- highlight vision, mission, and culture explicitly when evidence supports them; do not bury them in generic background copy.
-- treat culture as operating behavior, leadership signals, collaboration norms, or execution habits, not employer-brand fluff.
-- include a clearly labeled current-strategy read and a SWOT with 3 to 5 substantive bullets each for strengths, weaknesses, opportunities, and threats when evidence supports that specificity.
-- When the evidence supports it, strategy analysis must explicitly address some combination of capital allocation, margin or unit-economics logic, segment or product portfolio dynamics, marketplace structure, strategic priorities, and management tradeoffs. Do not settle for mission-plus-newsroom background if richer operating evidence exists in the prompt.
-- Company-facing strategy should read like an investor-grade or operator-grade briefing, not a brand summary. Explain what management appears to be optimizing for, where growth or margin appears to come from, and what tensions matter for this role.
-- On a repair pass, treat company-facing depth misses as hard failures. Do not return a compact rewrite for company_context or company_role_strategy.
-- When evidence quality is at least partial, the company sections must satisfy the block structure expected by the quality gate, not just mention the topics in passing.
-- For company_context and company_role_strategy, do not behave like an extractor that summarizes the company site. These sections must be LLM-generated strategy synthesis built from the enhanced RAG evidence set and deep research coverage.
-- Before writing the final company_context and company_role_strategy sections, internally create a comprehensive strategy report for interview preparation, then critique it through these lenses: Director of Product, VP of Product, Economist, External Strategist, Competitive Analyst, and Market Researcher.
-- Use those internal lenses to find missing logic, shallow analysis, unsupported leaps, missing market context, missing competitor context, missing economic logic, and missing role consequences. Then upgrade the report and output only the final improved version. Do not output the intermediate critiques.
-- The final company-facing sections should read like the result of deep research plus multi-perspective synthesis, not a stitched summary of retrieved snippets.
+Use these existing JSON sections as the implementation contract:
+- decision_memo + five_minute_brief + candidate_fit = Candidate-Skill Match
+- company_context + company_role_strategy = Company Deep Dive
+- why_role_exists_now = About the Role
+- interview_prep + how_to_win_this_process = Interview Preparation
+- credibility_layer = terse evidence notes only
+
+Hard rules:
+- Do not invent facts.
+- Use "INSUFFICIENT_EVIDENCE" when evidence is weak.
+- If the role is ambiguous, separate what is known from what is inferred.
+- Candidate match must depend on actual candidate evidence when a profile or resume is provided.
+- If no candidate profile is provided, say that clearly and do not fake personalization.
+- Use bracketed citations like [1] or [2, 3] for evidence-backed claims.
+- Do not write generic interview advice that could apply to another company or role.
+- Do not restate the JD and call it insight.
+- Do not write employee sentiment unless there is actual evidence for it.
+- When employee sentiment is weak or one-sided, say so.
+- Each section must add new value and not repeat the previous section.
+- Keep role, company, candidate fit, and interview prep cleanly separated.
+
+Company Deep Dive rules (company_context and company_role_strategy):
+- Prefer primary sources: company website, investor relations pages, annual report / 10-K, earnings call transcripts, shareholder letters, official newsroom, leadership interviews from official channels.
+- Use secondary sources (press, analysts, review sites) only to add perspective not available in primary sources.
+- Every SWOT bullet must name something specific to this company. Generic MBA bullets ("strong brand", "competitive market") are failures.
+- Strategic Bets must name actual named initiatives, product lines, or transformation programs — not abstract themes.
+- Market Position must name actual competitors, not generic "several competitors exist in this space."
+- Do not label an inference as a fact. If something is your interpretation of evidence, say so briefly.
+- Do not pad company sections with restatements of what the company does. Add insight, not description.
+
+What good output looks like:
+- grounded company analysis
+- realistic role interpretation
+- explicit strengths and gaps
+- interpretable candidate-fit scoring
+- interview questions tied to company context, role needs, and candidate background
+
+What bad output looks like:
+- generic PM coaching
+- shallow company summaries
+- unsupported claims
+- vague candidate praise
+- broad SWOT filler
+- likely interview questions with no reason, no story mapping, and no risk probe
 
 Company: ${companyName}
 Role: ${roleTitle}
@@ -237,43 +247,35 @@ Return exactly one valid JSON object with this schema and no extra text:
 }
 
 Section requirements:
-- decision_memo: be decisive; include strongest upside, strongest downside, what must be true, and what would change the recommendation.
-- five_minute_brief: 5 to 8 bullets max; every bullet should be usable immediately before an interview and should reflect the inferred role family and seniority.
-- company_context: include only the company-context subsections that can be supported. Prioritize key company insights, brief history or evolution, mission or vision interpretation, values or leadership principles, work culture, and cautious employee-review synthesis. Suppress weak subsections instead of writing filler. When evidence quality is at least partial, this section should usually exceed 150 words total and should use explicit blocks titled Company Snapshot, Vision And Mission, and Culture Signals unless a block must be suppressed for evidence reasons.
-- company_context: when scale, operating footprint, or leadership posture are visible in the evidence, interpret them. Do not list facts without explaining what they imply about how the company operates or decides.
-- company_context: generate this as the final upgraded version of a comprehensive strategy brief, not as raw extraction. It should synthesize first-party evidence, external validation, market context, leadership commentary, and operating signals into a role-relevant company read.
-- company_context: include what leadership appears to be optimizing for, what kind of operating cadence or decision style the company likely runs on, and where the company may be under pressure, even when those conclusions require careful synthesis across multiple sources.
-- why_role_exists_now: explain why now, not why ever. If the evidence threshold is not met, say so directly.
-- how_to_win_this_process: include what to lead with, what to prove, what not to overclaim, and which questions will create leverage. This must be persona-specific, not generic.
-- company_role_strategy: this must be deep and multi-block, not compressed into a summary. Include distinct blocks for business model deep dive, company strategic priorities, product / platform strategy context, market / industry context, competitor analysis, strategic tensions / tradeoffs, role mandate reconstruction, role leverage, scope and power, stakeholder / org map, metric tree logic, first-90-days / year-1 thesis, role risks / hidden constraints, and what would impress the hiring team. When evidence supports it, also cover capital allocation, unit economics or margin logic, portfolio or segment dynamics, and marketplace or structural advantages and constraints. This section should usually exceed 300 words total when evidence quality is at least partial. It must include an explicit Current Strategy block and explicit SWOT - Strengths, SWOT - Weaknesses, SWOT - Opportunities, and SWOT - Threats blocks, each with 3 to 5 substantive bullets when evidence supports that specificity. If evidence is weak, suppress the weak block instead of writing filler.
-- company_role_strategy: generate this as the final upgraded version of a comprehensive strategy report after internally gap-checking it through product leadership, economics, external strategy, competitive analysis, and market-research lenses. The final output should feel pressure-tested, not first-draft.
-- company_role_strategy: do not anchor this section mainly on company-site language. Use company-site material as one evidence stream, then strengthen it with investor, leadership, competitive, market, review, analyst, and external validation evidence whenever available.
-- candidate_fit: if no candidate profile exists, say that explicitly. If one exists, cover strengths to emphasize, likely objections, story-to-requirement mapping, and what would impress this hiring team.
-- interview_prep: this must read like a premium interview-preparation suite. Include the likely interview loop, interviewer agenda map by interviewer type, strategic themes to master, story-to-interview mapping, objection handling by interviewer type, role-specific mock questions, questions to ask grouped by purpose, what not to say, and concrete answer-quality scaffolding. Reject any output that could apply unchanged to a different role family or seniority band.
-- credibility_layer: include separate blocks for verified facts, cited synthesis, informed inferences, conflicts, and unknowns or insufficient evidence. Do not collapse them together.
+- decision_memo: one sharp summary plus callouts for final recommendation, strongest upside, strongest downside, and what would change the call.
+- five_minute_brief: 5 to 7 bullets max. Every bullet must be high signal and interview-usable.
+- company_context: This is the Company Snapshot subsection of the Company Deep Dive. Use exactly these blocks:
+  - "Company Snapshot": founding year, headquarters, employee count, revenue or valuation if known, ownership (public/private/PE-backed), core business model in 2–3 sentences. Facts only. No opinions.
+  - "Mission And Vision": the company's stated mission, vision, and values. Quote directly from official sources when available. If not found, write INSUFFICIENT_EVIDENCE.
+  - "Employee Sentiment": summarize what employees commonly praise and commonly complain about, based only on sourced evidence (Glassdoor, LinkedIn, public reviews). State limitations clearly. Do not overclaim. If no evidence, write INSUFFICIENT_EVIDENCE.
+  Facts in company_context must come from primary sources: company website, investor relations, annual report/10-K, earnings materials, official newsroom. Secondary sources may supplement but not replace primary sources.
 
-Hard structural contract for company-facing sections:
-- company_context: if evidence quality is partial or better, return a summary plus explicit blocks titled Company Snapshot, Vision And Mission, and Culture Signals. Each returned block must contain role-relevant interpretation, not just description. Vision And Mission must explain what leadership appears to be trying to accomplish. Culture Signals must explain how people likely decide, execute, collaborate, or escalate.
-- company_context: if a required block cannot be supported, keep the title and begin the block body with INSUFFICIENT_EVIDENCE: followed by the exact evidence gap. Do not replace the block with generic filler.
-- company_context: the section should reflect enhanced-RAG synthesis, not just official-company-source extraction. When external strategy, labor-market, customer, partner, analyst, or competitor evidence changes the interpretation, incorporate that into the final view.
-- company_role_strategy: if evidence quality is partial or better, return a summary plus explicit blocks titled Current Strategy, Strategic Tensions, SWOT - Strengths, SWOT - Weaknesses, SWOT - Opportunities, and SWOT - Threats.
-- company_role_strategy: each SWOT block must contain 3 to 5 differentiated bullets when evidence quality is partial or better. Bullets must be analytic, consequential for the role, and non-redundant.
-- company_role_strategy: the combined Current Strategy and Strategic Tensions bodies should explain the business model, present strategic priorities, current market pressure, management tradeoffs, and why those pressures shape this role now.
-- company_role_strategy: when the evidence supports it, the combined Current Strategy and Strategic Tensions bodies should also explain where growth appears to come from, where margin or monetization appears to come from, how management seems to allocate investment, and which portfolio or marketplace tensions are most relevant to the role.
-- company_role_strategy: the final section should show evidence of multi-lens gap-filling. It should not stop at product strategy; it should also include external market structure, competitor moves, economic logic, and strategic blind spots that matter for interview preparation.
-- company_role_strategy: if evidence is too weak for one of these required blocks, keep the block title and begin the body with INSUFFICIENT_EVIDENCE: followed by the missing evidence. Do not silently omit the block on a repair pass.
-- company_role_strategy: on a repair pass, do not return this section with fewer than 6 blocks unless the evidence object explicitly says the section is insufficient.
-- interview_prep: on a repair pass, prefer adding interviewer logic, proof expectations, likely objections, and mock-question specificity over compressing the section.
+- company_role_strategy: This is the strategic and market analysis subsection of the Company Deep Dive. Use exactly these blocks:
+  - "Product Lines": major product lines or business segments, how the company makes money from each, which segments are strategically most important. Be specific about revenue mix or segment priorities if evidence exists.
+  - "Strategic Bets": what the company is visibly investing in right now. Name specific initiatives, product directions, or transformation themes. Cite evidence. Do not write generic "investing in AI" unless a specific initiative is named.
+  - "Market Position": how the company sits in its industry. Who are the 2–4 most important competitors. What are the company's main advantages. What are the main market pressures or risks.
+  - "SWOT - Strengths": at least 3 specific, evidence-backed strength bullets. Each bullet must name a concrete asset, capability, or advantage — not a generic category. Bad example: "Strong brand." Good example: "Dominant share in mid-market HR software with 40%+ retention rates per public filings."
+  - "SWOT - Weaknesses": at least 3 specific, evidence-backed weakness bullets. Name actual limitations, not generic risks.
+  - "SWOT - Opportunities": at least 3 specific growth vectors or underexploited positions backed by evidence.
+  - "SWOT - Threats": at least 3 specific competitive, market, or regulatory threats backed by evidence.
+  If evidence for any SWOT block is insufficient, write INSUFFICIENT_EVIDENCE in the body and give only the bullets you can support. Do not pad with generic filler.
+- why_role_exists_now: this is the About the Role section. Explain which product line or business area the role likely belongs to, whether that area seems strategic, what is known versus inferred, why the role exists now, and what problem it is likely meant to solve.
+- candidate_fit: if candidate evidence exists, include strengths, gaps, match score, and final decision. Use facts for these exact scoring dimensions: Relevant Domain Experience, Scope And Seniority Match, Functional Skill Match, Strategic Context Match, Risks And Gaps, Match Score, Final Decision. Final Decision must be one of: Pursue Aggressively, Pursue Cautiously, Borderline, Do Not Pursue.
+- candidate_fit: the final decision must be based on role evidence, company context, and candidate evidence together.
+- how_to_win_this_process: keep this tactical. Include what to lead with, what to prove, what not to overclaim, and what questions create leverage.
+- interview_prep: generate likely interview questions based on company strategy, role needs, and candidate gaps or strengths. For each likely question include why this question is likely, what resume evidence is relevant, what story to prepare, and what weak point may get probed.
+- credibility_layer: keep this short. Use blocks titled Verified Facts, Inferences, and Evidence Gaps.
 
 Tone rules:
-- Director+ quality bar.
-- Anti-generic and anti-repetition.
-- Prefer omission over unsupported specificity.
-- Do not repeat the same claim across multiple sections.
-- Never invent precision to make the report feel complete.
-- Name strategic tensions and tradeoffs explicitly.
-- Explain what interviewers are trying to validate and what proof they need.
-- Make competitor analysis consequential for the role.
-- Make story guidance concrete enough that a real candidate could rehearse from it.
+- concise and high signal
+- strong bullets over long prose
+- practical interview usefulness over elegant writing
+- prefer explicit uncertainty over vague confidence
+- no filler, no padding, no generic coaching
 `;
 }

@@ -53,7 +53,7 @@ function buildFixtureReport(roleTitle: string, jobDescription: string) {
   };
 }
 
-test("engineering fixture preserves persisted technical ordering and persona badges", () => {
+test("presentation plan keeps company and role context ahead of candidate and interview sections", () => {
   const { report } = buildFixtureReport(
     "Staff Software Engineer, Infrastructure",
     "Lead architecture, reliability, and platform execution across multiple teams."
@@ -64,16 +64,16 @@ test("engineering fixture preserves persisted technical ordering and persona bad
   assert.deepEqual(
     viewModel.visibleSections.slice(0, 4).map((section) => section.title),
     [
-      "Decision Memo",
-      "5-Minute Brief",
-      "Company Context",
-      "Technical And Role Strategy",
+      "Company Overview",
+      "Products, Strategy, And Market",
+      "About the Role",
+      "Final Recommendation",
     ]
   );
   assert.deepEqual(viewModel.personaBadges, ["Engineering", "Staff / Principal / Architect", "Infrastructure"]);
 });
 
-test("executive fixture preserves mandate-first labels and differs from engineering order", () => {
+test("different personas keep the same simplified visible structure", () => {
   const engineering = buildFixtureReport(
     "Staff Software Engineer, Infrastructure",
     "Lead architecture, reliability, and platform execution across multiple teams."
@@ -87,14 +87,16 @@ test("executive fixture preserves mandate-first labels and differs from engineer
   const executiveView = buildPremiumPresentationViewModel(executive.report, "full");
 
   assert.deepEqual(
-    executiveView.visibleSections.slice(2, 5).map((section) => section.title),
+    executiveView.visibleSections.slice(0, 5).map((section) => section.title),
     [
-      "Company Context",
-      "Business And Role Strategy",
-      "Why This Leadership Mandate Exists Now",
+      "Company Overview",
+      "Products, Strategy, And Market",
+      "About the Role",
+      "Final Recommendation",
+      "Candidate-Skill Match",
     ]
   );
-  assert.notDeepEqual(
+  assert.deepEqual(
     executiveView.visibleSections.map((section) => section.title),
     engineeringView.visibleSections.map((section) => section.title)
   );
@@ -111,10 +113,31 @@ test("brief mode keeps only both-surface sections while preserving persisted per
   assert.deepEqual(
     viewModel.visibleSections.map((section) => section.key),
     [
+      "why_role_exists_now",
       "decision_memo",
       "five_minute_brief",
-      "why_role_exists_now",
       "how_to_win_this_process",
+    ]
+  );
+});
+
+test("full mode groups visible sections into the four main product categories", () => {
+  const { report } = buildFixtureReport(
+    "VP Product",
+    "Own portfolio strategy, org design, and executive decision making across the business."
+  );
+
+  const viewModel = buildPremiumPresentationViewModel(report, "full");
+
+  assert.ok(!viewModel.visibleSections.some((section) => section.key === "credibility_layer"));
+  assert.ok(!viewModel.visibleSections.some((section) => section.key === "operations_and_cost"));
+  assert.deepEqual(
+    Array.from(new Set(viewModel.visibleSections.map((section) => section.group))),
+    [
+      "Company Deep Dive",
+      "About the Role",
+      "Candidate-Skill Match",
+      "Interview Preparation",
     ]
   );
 });

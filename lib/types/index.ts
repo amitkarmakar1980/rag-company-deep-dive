@@ -227,6 +227,29 @@ export interface CandidateOverlayData {
     overall_fit: CandidateFitLevel;
     match_score: number; // 1–10
     rationale: string;
+    score_dimensions?: {
+      relevant_domain_experience: {
+        score: number;
+        rationale: string;
+      };
+      scope_and_seniority_match: {
+        score: number;
+        rationale: string;
+      };
+      functional_skill_match: {
+        score: number;
+        rationale: string;
+      };
+      strategic_context_match: {
+        score: number;
+        rationale: string;
+      };
+      risks_and_gaps: {
+        score: number;
+        rationale: string;
+      };
+    };
+    final_decision?: "Pursue Aggressively" | "Pursue Cautiously" | "Borderline" | "Do Not Pursue";
     key_alignments: CandidateAlignment[];
     key_gaps: string[];
   };

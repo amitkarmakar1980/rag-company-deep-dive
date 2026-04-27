@@ -1075,248 +1075,29 @@ export function formatPersonaForPrompt(persona: PremiumPersonaProfile): string {
 }
 
 export function getPremiumPresentationPlan(persona: PremiumPersonaProfile): PremiumPresentationPlan {
-  const blendKey = getBlendKey(persona.primaryRoleFamily, persona.secondaryRoleFamily);
+  void persona;
 
-  if (blendKey === "product:sales_gtm" || blendKey === "product:marketing") {
-    return {
-      sectionOrder: [
-        "decision_memo",
-        "five_minute_brief",
-        "company_context",
-        "company_role_strategy",
-        "why_role_exists_now",
-        "candidate_fit",
-        "how_to_win_this_process",
-        "interview_prep",
-        "credibility_layer",
-        "operations_and_cost",
-      ],
-      titleBySectionKey: {
-        company_role_strategy: "Strategy, GTM, And Role Context",
-        how_to_win_this_process: "How To Win The Product And GTM Loop",
-        interview_prep: "Product And GTM Interview Prep",
-      },
-    };
-  }
-
-  if (blendKey === "engineering:data_ml") {
-    return {
-      sectionOrder: [
-        "decision_memo",
-        "five_minute_brief",
-        "company_context",
-        "company_role_strategy",
-        "why_role_exists_now",
-        "how_to_win_this_process",
-        "interview_prep",
-        "candidate_fit",
-        "credibility_layer",
-        "operations_and_cost",
-      ],
-      titleBySectionKey: {
-        company_role_strategy: "Technical, Data / ML, And Role Strategy",
-        why_role_exists_now: "Why This Technical And Data Mandate Exists Now",
-        how_to_win_this_process: "How To Win The Engineering And ML Loop",
-        interview_prep: "Engineering And ML Interview Prep",
-      },
-    };
-  }
-
-  if (blendKey === "executive:product") {
-    return {
-      sectionOrder: [
-        "decision_memo",
-        "five_minute_brief",
-        "company_context",
-        "company_role_strategy",
-        "why_role_exists_now",
-        "candidate_fit",
-        "how_to_win_this_process",
-        "interview_prep",
-        "credibility_layer",
-        "operations_and_cost",
-      ],
-      titleBySectionKey: {
-        company_role_strategy: "Business, Portfolio, And Product Strategy",
-        why_role_exists_now: "Why This Leadership And Product Mandate Exists Now",
-        how_to_win_this_process: "How To Win The Executive And Product Process",
-        interview_prep: "Executive And Product Interview Prep",
-        candidate_fit: "Leadership And Product Fit",
-      },
-    };
-  }
-
-  switch (persona.primaryRoleFamily) {
-    case "engineering":
-      return {
-        sectionOrder: [
-          "decision_memo",
-          "five_minute_brief",
-          "company_context",
-          "company_role_strategy",
-          "why_role_exists_now",
-          "how_to_win_this_process",
-          "interview_prep",
-          "candidate_fit",
-          "credibility_layer",
-          "operations_and_cost",
-        ],
-        titleBySectionKey: {
-          company_role_strategy: "Technical And Role Strategy",
-          why_role_exists_now: "Why This Technical Mandate Exists Now",
-          how_to_win_this_process: "How To Win The Technical Loop",
-          interview_prep: "Technical Interview Prep",
-          candidate_fit: persona.seniority === "director" || persona.seniority === "senior_director_vp" || persona.seniority === "executive_gm_c_level" ? "Technical Leadership Fit" : "Technical Fit",
-        },
-      };
-    case "design":
-      return {
-        sectionOrder: [
-          "decision_memo",
-          "five_minute_brief",
-          "company_context",
-          "company_role_strategy",
-          "candidate_fit",
-          "why_role_exists_now",
-          "how_to_win_this_process",
-          "interview_prep",
-          "credibility_layer",
-          "operations_and_cost",
-        ],
-        titleBySectionKey: {
-          company_role_strategy: "Design And Role Context",
-          why_role_exists_now: "Why This Design Mandate Exists Now",
-          how_to_win_this_process: "How To Win The Design Loop",
-          interview_prep: "Design Interview Prep",
-          candidate_fit: "Design Fit",
-        },
-      };
-    case "data_ml":
-      return {
-        sectionOrder: [
-          "decision_memo",
-          "five_minute_brief",
-          "company_context",
-          "company_role_strategy",
-          "why_role_exists_now",
-          "candidate_fit",
-          "how_to_win_this_process",
-          "interview_prep",
-          "credibility_layer",
-          "operations_and_cost",
-        ],
-        titleBySectionKey: {
-          company_role_strategy: "Data / ML And Role Strategy",
-          why_role_exists_now: "Why This Data / ML Mandate Exists Now",
-          how_to_win_this_process: "How To Win The Data / ML Loop",
-          interview_prep: "Data / ML Interview Prep",
-          candidate_fit: "Analytical Fit",
-        },
-      };
-    case "marketing":
-      return {
-        sectionOrder: [
-          "decision_memo",
-          "five_minute_brief",
-          "company_context",
-          "why_role_exists_now",
-          "company_role_strategy",
-          "candidate_fit",
-          "how_to_win_this_process",
-          "interview_prep",
-          "credibility_layer",
-          "operations_and_cost",
-        ],
-        titleBySectionKey: {
-          company_role_strategy: "GTM And Role Strategy",
-          why_role_exists_now: "Why This GTM Mandate Exists Now",
-          how_to_win_this_process: "How To Win The GTM Loop",
-          interview_prep: "GTM Interview Prep",
-          candidate_fit: "Market Fit",
-        },
-      };
-    case "sales_gtm":
-      return {
-        sectionOrder: [
-          "decision_memo",
-          "five_minute_brief",
-          "company_context",
-          "company_role_strategy",
-          "why_role_exists_now",
-          "how_to_win_this_process",
-          "interview_prep",
-          "candidate_fit",
-          "credibility_layer",
-          "operations_and_cost",
-        ],
-        titleBySectionKey: {
-          company_role_strategy: "Revenue Motion And Role Strategy",
-          why_role_exists_now: "Why This Revenue Mandate Exists Now",
-          how_to_win_this_process: "How To Win The Revenue Loop",
-          interview_prep: "Revenue Interview Prep",
-          candidate_fit: "Sales Fit",
-        },
-      };
-    case "operations_program":
-      return {
-        sectionOrder: [
-          "decision_memo",
-          "five_minute_brief",
-          "company_context",
-          "company_role_strategy",
-          "why_role_exists_now",
-          "candidate_fit",
-          "how_to_win_this_process",
-          "interview_prep",
-          "credibility_layer",
-          "operations_and_cost",
-        ],
-        titleBySectionKey: {
-          company_role_strategy: "Operating Model And Role Strategy",
-          why_role_exists_now: "Why This Operating Mandate Exists Now",
-          how_to_win_this_process: "How To Win The Operating Rhythm Loop",
-          interview_prep: "Operating Rhythm Interview Prep",
-          candidate_fit: "Execution Fit",
-        },
-      };
-    case "executive":
-      return {
-        sectionOrder: [
-          "decision_memo",
-          "five_minute_brief",
-          "company_context",
-          "company_role_strategy",
-          "why_role_exists_now",
-          "candidate_fit",
-          "how_to_win_this_process",
-          "interview_prep",
-          "credibility_layer",
-          "operations_and_cost",
-        ],
-        titleBySectionKey: {
-          company_role_strategy: "Business And Role Strategy",
-          why_role_exists_now: "Why This Leadership Mandate Exists Now",
-          how_to_win_this_process: "How To Win The Executive Process",
-          interview_prep: "Executive Interview Prep",
-          candidate_fit: "Leadership Fit",
-        },
-      };
-    case "product":
-    default:
-      return {
-        sectionOrder: [
-          "decision_memo",
-          "five_minute_brief",
-          "company_context",
-          "why_role_exists_now",
-          "company_role_strategy",
-          "candidate_fit",
-          "how_to_win_this_process",
-          "interview_prep",
-          "credibility_layer",
-          "operations_and_cost",
-        ],
-        titleBySectionKey: {},
-      };
-  }
+  return {
+    sectionOrder: [
+      "company_context",
+      "company_role_strategy",
+      "why_role_exists_now",
+      "decision_memo",
+      "candidate_fit",
+      "five_minute_brief",
+      "how_to_win_this_process",
+      "interview_prep",
+      "credibility_layer",
+      "operations_and_cost",
+    ],
+    titleBySectionKey: {
+      decision_memo: "Final Recommendation",
+      company_context: "Company Overview",
+      company_role_strategy: "Products, Strategy, And Market",
+      why_role_exists_now: "About the Role",
+      candidate_fit: "Candidate-Skill Match",
+      how_to_win_this_process: "How To Position Yourself",
+      interview_prep: "Likely Interview Questions",
+    },
+  };
 }

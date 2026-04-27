@@ -438,6 +438,46 @@ function getBaseHostname(url: string): string | null {
   return parts.slice(-2).join(".");
 }
 
+function normalizeResearchCompanyUrl(companyUrl?: string): string | undefined {
+  const normalized = normalizeUrl(companyUrl ?? "");
+  if (!normalized) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    const labels = hostname.split(".").filter(Boolean);
+    const pathname = parsed.pathname.toLowerCase();
+    const recruitingPrefixes = new Set(["careers", "career", "jobs", "job", "apply", "join", "talent", "work", "workwithus"]);
+    const blockedApexDomains = new Set([
+      "greenhouse.io",
+      "greenhouse-job-boards.com",
+      "lever.co",
+      "myworkdayjobs.com",
+      "ashbyhq.com",
+      "smartrecruiters.com",
+      "jobvite.com",
+      "breezy.hr",
+    ]);
+
+    if (labels.length >= 3 && recruitingPrefixes.has(labels[0])) {
+      const apexDomain = labels.slice(-2).join(".");
+      if (!blockedApexDomains.has(apexDomain)) {
+        return `https://${apexDomain}/`;
+      }
+    }
+
+    if (/\/(careers?|jobs?|join-us|job-search)(?:\/|$)/.test(pathname)) {
+      return `${parsed.origin}/`;
+    }
+
+    return normalized;
+  } catch {
+    return normalized;
+  }
+}
+
 export function isSearchResultsUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -447,6 +487,59 @@ export function isSearchResultsUrl(url: string): boolean {
     }
 
     return parsed.pathname === "/search" || parsed.pathname === "/news/search";
+  } catch {
+    return false;
+  }
+}
+
+export function isSelectableResearchSourceUrl(url: string): boolean {
+  const normalized = normalizeUrl(url);
+  if (!normalized || isSearchResultsUrl(normalized)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
+    const pathname = parsed.pathname.toLowerCase();
+
+    if (["google.com", "news.google.com", "bing.com", "maps.google.com"].includes(hostname)) {
+      return false;
+    }
+
+    if (hostname === "crunchbase.com" && pathname.startsWith("/textsearch")) {
+      return false;
+    }
+
+    if (hostname === "theorg.com" && pathname.startsWith("/search")) {
+      return false;
+    }
+
+    if (hostname === "g2.com" && pathname.startsWith("/search")) {
+      return false;
+    }
+
+    if (hostname === "capterra.com" && pathname.startsWith("/search")) {
+      return false;
+    }
+
+    if (hostname === "glassdoor.com" && pathname.includes("/search/results")) {
+      return false;
+    }
+
+    if (hostname === "wikipedia.org" && pathname.startsWith("/w/index.php") && parsed.searchParams.has("search")) {
+      return false;
+    }
+
+    if (hostname === "techcrunch.com" && pathname.startsWith("/search/")) {
+      return false;
+    }
+
+    if (hostname === "finance.yahoo.com" && pathname === "/lookup") {
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }
@@ -1097,6 +1190,7 @@ export function buildPlannerCandidatePool(
   const encodedCompany = encodeURIComponent(companyName);
   const encodedRole = encodeURIComponent(`${companyName} ${roleTitle}`.trim());
   const companySlug = slugifyCompanyName(companyName);
+  const researchCompanyUrl = normalizeResearchCompanyUrl(companyUrl);
 
   const pushCandidate = (candidate: PlannerCandidate) => {
     const normalizedUrl = normalizeUrl(candidate.url);
@@ -1105,8 +1199,8 @@ export function buildPlannerCandidatePool(
     candidates.push({ ...candidate, url: normalizedUrl });
   };
 
-  if (companyUrl) {
-    const normalizedCompanyUrl = normalizeUrl(companyUrl);
+  if (researchCompanyUrl) {
+    const normalizedCompanyUrl = normalizeUrl(researchCompanyUrl);
     const companyUri = normalizedCompanyUrl ? new URL(normalizedCompanyUrl) : null;
     const companyHost = companyUri?.hostname.replace(/^www\./, "") ?? null;
     const companyOrigin = companyUri?.origin ?? null;
@@ -1202,7 +1296,7 @@ export function buildPlannerCandidatePool(
     pushCandidate(candidate);
   }
 
-  for (const candidate of buildGenericStrategySeedCandidates(companyName, roleTitle, companyUrl)) {
+  for (const candidate of buildGenericStrategySeedCandidates(companyName, roleTitle, researchCompanyUrl)) {
     pushCandidate(candidate);
   }
 
@@ -1523,7 +1617,7 @@ function applyCoverageGapSecondPass(args: {
     }
 
     const candidate = args.recommendedSources.find(
-      (option) => !args.seenUrls.has(option.url) && option.sourceClasses?.includes(sourceClass)
+      (option) => !args.seenUrls.has(option.url) && isSelectableResearchSourceUrl(option.url) && option.sourceClasses?.includes(sourceClass)
     );
     if (!candidate) {
       continue;
@@ -1671,19 +1765,20 @@ export async function buildTargetedSourceUrls(args: {
   enableHomepageDiscovery?: boolean;
 }): Promise<string[]> {
   const maxSources = args.maxSources ?? 6;
-  const discoveredCandidates = args.enableHomepageDiscovery === false ? [] : await discoverFirstPartyCandidates(args.companyUrl);
-  const candidatePool = buildPlannerCandidatePool(args.companyName, args.roleTitle, args.companyUrl, [], discoveredCandidates);
+  const researchCompanyUrl = normalizeResearchCompanyUrl(args.companyUrl);
+  const discoveredCandidates = args.enableHomepageDiscovery === false ? [] : await discoverFirstPartyCandidates(researchCompanyUrl);
+  const candidatePool = buildPlannerCandidatePool(args.companyName, args.roleTitle, researchCompanyUrl, [], discoveredCandidates);
   const prioritized = candidatePool
     .map((candidate) => scorePlannerCandidate({
       candidate,
       requiredSourceClasses: dedupeStrings(args.missingSourceClasses),
-      companyHost: args.companyUrl ? getHostname(args.companyUrl) : null,
+      companyHost: researchCompanyUrl ? getHostname(researchCompanyUrl) : null,
     }))
     .sort((left, right) => right.score - left.score || right.priority - left.priority);
   const selected: string[] = [];
 
   const pushUrl = (url: string | undefined) => {
-    if (!url || selected.includes(url)) {
+    if (!url || !isSelectableResearchSourceUrl(url) || selected.includes(url)) {
       return;
     }
 
@@ -1691,7 +1786,7 @@ export async function buildTargetedSourceUrls(args: {
   };
 
   for (const sourceClass of dedupeStrings(args.missingSourceClasses)) {
-    const preferredCandidate = prioritized.find((candidate) => candidateMatchesSourceClass(candidate, sourceClass) && !selected.includes(candidate.url));
+    const preferredCandidate = prioritized.find((candidate) => isSelectableResearchSourceUrl(candidate.url) && candidateMatchesSourceClass(candidate, sourceClass) && !selected.includes(candidate.url));
     pushUrl(preferredCandidate?.url);
     if (selected.length >= maxSources) {
       return selected;
@@ -1700,7 +1795,7 @@ export async function buildTargetedSourceUrls(args: {
 
   for (const sourceClass of dedupeStrings(args.missingSourceClasses)) {
     for (const candidate of prioritized) {
-      if (!candidateMatchesSourceClass(candidate, sourceClass) || selected.includes(candidate.url)) {
+      if (!isSelectableResearchSourceUrl(candidate.url) || !candidateMatchesSourceClass(candidate, sourceClass) || selected.includes(candidate.url)) {
         continue;
       }
 
@@ -1731,20 +1826,22 @@ async function planResearchTargets(
   jobDescription?: string,
   profileContext?: string
 ): Promise<ResearchPlan> {
-  const discoveredCandidates = await discoverFirstPartyCandidates(companyUrl);
-  const candidatePool = buildPlannerCandidatePool(companyName, roleTitle, companyUrl, customUrls, discoveredCandidates);
-  const companyDomain = companyUrl ? getHostname(companyUrl) : null;
+  const researchCompanyUrl = normalizeResearchCompanyUrl(companyUrl);
+  const discoveredCandidates = await discoverFirstPartyCandidates(researchCompanyUrl);
+  const candidatePool = buildPlannerCandidatePool(companyName, roleTitle, researchCompanyUrl, customUrls, discoveredCandidates);
+  const companyDomain = researchCompanyUrl ? getHostname(researchCompanyUrl) : null;
   const persona = inferPremiumPersona(roleTitle, jobDescription, profileContext);
   const sourceStrategy = buildRagSourceStrategy({
     companyName,
     roleTitle,
-    companyUrl,
+    companyUrl: researchCompanyUrl,
     jobDescription,
     profileContext,
     candidatePool,
   });
   const fallbackQueries = buildFallbackRetrievalQueries(companyName, roleTitle, jobDescription, profileContext);
   const fallbackSources = sourceStrategy.recommendedSources
+    .filter((source) => isSelectableResearchSourceUrl(source.url))
     .slice(0, MAX_RESEARCH_SOURCES)
     .map(({ label: _label, domain: _domain, signal: _signal, ...source }) => source);
 
@@ -1768,7 +1865,7 @@ Objectives:
 
 Company: ${companyName}
 Role: ${roleTitle}
-Company URL: ${companyUrl ?? "UNKNOWN"}
+Company URL: ${researchCompanyUrl ?? "UNKNOWN"}
 Job description excerpt: ${(jobDescription ?? "").slice(0, 1200) || "NONE"}
 
 ${formatPersonaForPrompt(persona)}
@@ -1831,6 +1928,7 @@ Return only valid JSON in this shape:
       const type = source?.type;
       if (!normalizedUrl || seenUrls.has(normalizedUrl)) continue;
       if (!type || !["company_homepage", "newsroom", "blog", "custom_url"].includes(type)) continue;
+      if (!isSelectableResearchSourceUrl(normalizedUrl)) continue;
       const matchedCandidate = scoredCandidatesByUrl.get(normalizedUrl);
       seenUrls.add(normalizedUrl);
       chosen.push({
@@ -1853,7 +1951,7 @@ Return only valid JSON in this shape:
         continue;
       }
 
-      const strategyCandidate = sourceStrategy.recommendedSources.find((candidate) => candidateMatchesSourceClass(candidate, sourceClass));
+      const strategyCandidate = sourceStrategy.recommendedSources.find((candidate) => isSelectableResearchSourceUrl(candidate.url) && candidateMatchesSourceClass(candidate, sourceClass));
       if (!strategyCandidate || seenUrls.has(strategyCandidate.url)) {
         continue;
       }
@@ -1888,7 +1986,7 @@ Return only valid JSON in this shape:
     if (externalDomains.size < MIN_EXTERNAL_SITES) {
       for (const candidate of candidatePool) {
         const host = getHostname(candidate.url);
-        if (!host || host === companyDomain || seenUrls.has(candidate.url)) continue;
+        if (!host || host === companyDomain || seenUrls.has(candidate.url) || !isSelectableResearchSourceUrl(candidate.url)) continue;
         chosen.push({
           url: candidate.url,
           type: candidate.type,
@@ -1908,8 +2006,8 @@ Return only valid JSON in this shape:
       }
     }
 
-    if (companyUrl) {
-      const normalizedCompanyUrl = normalizeUrl(companyUrl);
+    if (researchCompanyUrl) {
+      const normalizedCompanyUrl = normalizeUrl(researchCompanyUrl);
       if (normalizedCompanyUrl && !seenUrls.has(normalizedCompanyUrl)) {
         chosen.unshift({
           url: normalizedCompanyUrl,

@@ -29,29 +29,27 @@ export function getPremiumEvaluationPrompt(args: {
 
   return `You are the strict internal quality gate for a premium interview report.
 
-Do not praise the report. Do not be generous. Do not confuse polish with quality.
+Do not praise the report. Do not reward polish if the content is generic.
 
-You must judge whether this report is good enough to show a paying premium user.
+The product is only trying to do 4 things well:
+1. Company Deep Dive
+2. About the Role
+3. Candidate-Skill Match
+4. Interview Preparation
+
+Judge the report by usefulness, trust, and specificity for those 4 jobs.
 
 Hard rules:
-- polished nonsense must fail
-- weak evidence cannot be hidden by good writing
-- generic interview prep is a failure
-- generic company context is a failure
-- unsupported claims in critical sections are a failure
-- blended-role mush is a failure
-- employee reviews must never dominate company-context conclusions
-- content that describes but does not interpret should score poorly on depth
-- company_context and company_role_strategy must be judged as enhanced-RAG synthesis products, not as company-site extraction summaries
-- company-facing sections that simply restate first-party copy without integrating external validation, competitive context, market context, economic logic, or management tradeoffs should score poorly on depth and company_context
-- company-facing sections should feel pressure-tested through multiple lenses such as product leadership, economics, strategy, competition, and market research; if they read like an unrevised first-pass summary, score them down
-- wrong-archetype reports must fail even if the writing is polished
-- lead or senior product-manager roles must not be judged against an executive or GM bar without explicit business-ownership evidence
-- technical PM interview prep that drifts into engineering architecture theater must score poorly on interview_prep and persona_accuracy
-- candidate-fit scoring that ignores transferability and overweights narrow domain purity must score poorly on coherence and actionability
-- sections that answer the wrong question for their category must fail coherence
-- evidence-backed claims should use consistent bracketed citation style like [1] or [2, 3], not ad hoc "Source 1" references
-- if the report presents cited evidence but uses inconsistent or missing citation formatting, score coherence and premium_polish lower
+- weak evidence must lead to explicit uncertainty, not confident writing
+- generic company summaries must fail
+- generic interview advice must fail
+- unsupported candidate praise must fail
+- role ambiguity must be called out as known vs inferred
+- employee-review synthesis must stay cautious and must not dominate company conclusions
+- candidate-fit scoring must be interpretable and tied to actual candidate evidence when present
+- sections that answer the wrong question for their category must fail
+- evidence-backed claims should use consistent bracketed citation style like [1] or [2, 3]
+- if the report uses citations inconsistently, score coherence and premium_polish lower
 
 Report target:
 Company: ${args.companyName}
@@ -108,6 +106,18 @@ Prompt-improvement recommendation scope values:
 
 Review these report sections:
 ${sectionBundle}
+
+Section intent reminders:
+- company_context + company_role_strategy should work together as Company Deep Dive
+- why_role_exists_now should function as About the Role
+- decision_memo + five_minute_brief + candidate_fit should together support Candidate-Skill Match and the final pursue decision
+- interview_prep + how_to_win_this_process should together support Interview Preparation
+
+What to look for in each area:
+- Company Deep Dive: history, mission, vision, values, product lines, strategic bets, market position, SWOT, and cautious employee sentiment when supported
+- About the Role: product line or business area, strategic importance, what is known vs inferred, why the role exists, and what problem it likely solves
+- Candidate-Skill Match: aligned strengths, real gaps, interpretable score, and clear final decision grounded in role + company + candidate evidence
+- Interview Preparation: likely questions tied to company context, role needs, and candidate background; each question should imply a story to prepare and a risk to probe
 
 Return only valid JSON with this exact shape:
 {

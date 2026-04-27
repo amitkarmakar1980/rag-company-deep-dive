@@ -183,7 +183,6 @@ export function PremiumSectionCard({
   }
 
   const provenance = getProvenance(data, citations);
-  const evidenceBacked = data.evidence?.status === "met" || data.evidence?.status === "partial";
 
   return (
     <SectionShell
@@ -192,7 +191,6 @@ export function PremiumSectionCard({
       subtitle={data.question}
       provenance={provenance}
       onProvenanceClick={onProvenanceClick}
-      evidenceBacked={evidenceBacked}
       feedback={feedback}
       collapsible={data.surface === "full"}
     >
@@ -225,26 +223,6 @@ export function PremiumSectionCard({
 
         {renderPremiumBlocks(sectionKey, data, citations)}
 
-        {data.evidence ? (
-          <div className="rounded-[20px] border border-[#ddd4c8] bg-[#fffdfa] px-4 py-4">
-            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[#9c8d81]">Evidence state</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <div>
-                <p className="text-[0.68rem] uppercase tracking-[0.16em] text-[#9c8d81]">Threshold</p>
-                <p className="mt-1 text-sm text-[#4a3f36]">{renderCitationText(data.evidence.threshold, citations)}</p>
-              </div>
-              <div>
-                <p className="text-[0.68rem] uppercase tracking-[0.16em] text-[#9c8d81]">Status</p>
-                <p className="mt-1 text-sm text-[#4a3f36]">{data.evidence.status}</p>
-              </div>
-              <div>
-                <p className="text-[0.68rem] uppercase tracking-[0.16em] text-[#9c8d81]">Confidence</p>
-                <p className="mt-1 text-sm text-[#4a3f36]">{data.evidence.confidence}</p>
-              </div>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-[#6b5e52]">{renderCitationText(data.evidence.note, citations)}</p>
-          </div>
-        ) : null}
 
         {citations?.length ? <CitationList citations={citations} /> : null}
       </div>

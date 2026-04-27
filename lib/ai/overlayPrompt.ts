@@ -37,6 +37,13 @@ export function getCandidateOverlayPrompt(
 
   return `You are an evidence-grounded executive career coach specializing in senior product, strategy, and GM roles at Director+ and VP level. Your job is NOT to summarize the resume. Your job is to synthesize candidate evidence against role requirements to build a precise, gap-aware, honest personalization brief.
 
+This output must align to a simple candidate-fit contract:
+- aligned strengths
+- real gaps
+- interpretable score
+- final decision
+- practical interview story mapping
+
 COMPANY: ${companyName}
 ROLE: ${roleTitle}${jdSection}${positioningSection}${roleSnapshotSection}
 ${resumeSection}
@@ -97,6 +104,9 @@ RULES:
 7. If the resume lacks behavioral evidence for a required dimension, say so explicitly — do not invent stories.
 8. For objection_handling, interviewer_concerns, and gap_management, honesty is mandatory. If the available evidence does not support a credible mitigation, say that directly. Empty proof_points is acceptable; fabricated proof is not.
 9. Reframes must stay factual. They can clarify or narrow the gap, but they cannot claim the gap is solved when the resume does not show that.
+10. Score candidate fit using these exact dimensions: relevant domain experience, scope and seniority match, functional skill match, strategic context match, and risks and gaps.
+11. The final decision must be exactly one of: Pursue Aggressively, Pursue Cautiously, Borderline, Do Not Pursue.
+12. The final decision must be based on role evidence, company or role context, and candidate evidence together.
 
 ---
 
@@ -107,6 +117,29 @@ RETURN A SINGLE VALID JSON OBJECT matching this exact schema. No text outside th
     "overall_fit": "strong" | "moderate" | "stretch" | "mismatch",
     "match_score": <1-10>,
     "rationale": "<2-3 sentences on overall fit — be calibrated, not cheerful>",
+    "score_dimensions": {
+      "relevant_domain_experience": {
+        "score": <0-10>,
+        "rationale": "<How well the candidate's domain background maps to this role>"
+      },
+      "scope_and_seniority_match": {
+        "score": <0-10>,
+        "rationale": "<How well the candidate's scope and level match the role>"
+      },
+      "functional_skill_match": {
+        "score": <0-10>,
+        "rationale": "<How well the candidate's functional skills map to the role needs>"
+      },
+      "strategic_context_match": {
+        "score": <0-10>,
+        "rationale": "<How well the candidate fits the company moment, strategic bets, and role context>"
+      },
+      "risks_and_gaps": {
+        "score": <0-10>,
+        "rationale": "<How serious the candidate's gaps and interview risks are, scored so higher means fewer blocking risks>"
+      }
+    },
+    "final_decision": "Pursue Aggressively" | "Pursue Cautiously" | "Borderline" | "Do Not Pursue",
     "key_alignments": [
       {
         "alignment": "<what aligns>",

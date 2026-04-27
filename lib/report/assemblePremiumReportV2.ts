@@ -191,6 +191,31 @@ function dedupeStrings(values: string[]): string[] {
   return values.filter((value, index) => value.trim().length > 0 && values.indexOf(value) === index);
 }
 
+function buildCoreReportQueries(args: {
+  companyName: string;
+  roleTitle: string;
+  jobDescription?: string;
+  hasCandidateProfile: boolean;
+}): string[] {
+  const baseQueries = [
+    `${args.companyName} history mission vision values employee reviews culture`,
+    `${args.companyName} product lines platform pricing customers strategic bets`,
+    `${args.companyName} market position competitors strategic bets investor leadership`,
+    `${args.companyName} ${args.roleTitle} responsibilities scope mandate team product line`,
+    `${args.companyName} ${args.roleTitle} interview expectations hiring manager questions`,
+  ];
+
+  if (args.jobDescription?.trim()) {
+    baseQueries.push(`${args.companyName} ${args.roleTitle} job description responsibilities requirements success metrics`);
+  }
+
+  if (args.hasCandidateProfile) {
+    baseQueries.push(`${args.companyName} ${args.roleTitle} candidate strengths gaps transferability interview risks`);
+  }
+
+  return dedupeStrings(baseQueries);
+}
+
 function buildRetrievalContext(args: {
   reranked: ReturnType<typeof rerank>;
   sourceCount: number;
@@ -264,6 +289,7 @@ export function buildTargetedReretrievalQueries(args: {
       `${args.companyName} investor relations earnings shareholder letter strategy product priorities`,
       `${args.companyName} leadership interview strategy operating principles platform safety ${args.roleTitle}`,
       `${args.companyName} mission vision values culture operating principles leadership principles`,
+      `${args.companyName} employee reviews culture leadership values Glassdoor Comparably`,
       `${args.companyName} annual report shareholder letter strategic priorities moat tradeoffs ${args.roleTitle}`,
       `${args.companyName} competitors market share Gartner Forrester alternatives customer segments`,
       `${args.companyName} industry report market size growth rate analyst strategy Reuters`
@@ -826,10 +852,17 @@ export async function assemblePremiumReportV2(
   const initialQueryList = Array.isArray(researchPlanOrQueries)
     ? researchPlanOrQueries
     : researchPlanOrQueries?.retrievalQueries;
-  let normalizedQueries = (initialQueryList && initialQueryList.length > 0
-    ? initialQueryList
-    : buildPersonaAwareRetrievalQueries(companyName, request.role_title, request.job_description ?? undefined, persona)
-  ).filter((query, index, list) => query.trim().length > 0 && list.indexOf(query) === index);
+  let normalizedQueries = dedupeStrings([
+    ...buildCoreReportQueries({
+      companyName,
+      roleTitle: request.role_title,
+      jobDescription: request.job_description ?? undefined,
+      hasCandidateProfile: Boolean(request.profile_context?.trim()),
+    }),
+    ...(initialQueryList && initialQueryList.length > 0
+      ? initialQueryList
+      : buildPersonaAwareRetrievalQueries(companyName, request.role_title, request.job_description ?? undefined, persona)),
+  ]).slice(0, 10);
 
   let retrievalState = await buildPremiumRetrievalState({
     requestId,

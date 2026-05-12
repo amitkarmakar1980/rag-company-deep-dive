@@ -1,5 +1,7 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { PremiumSectionContent } from "@/lib/report/premiumTypes";
 import { normalizeHttpUrl } from "@/lib/report/sourceLinks";
 import { BulletList, ProseBlock, SectionShell, type ProvenanceType } from "@/components/report/SectionShell";
@@ -170,6 +172,46 @@ export function PremiumSectionCard({
   feedback?: React.ReactNode;
   onProvenanceClick?: (type: ProvenanceType) => void;
 }) {
+  // V3 markdown sections: render via ReactMarkdown with GFM (tables, bullets, bold)
+  if (sectionKey === "company_deep_dive_v3") {
+    return (
+      <SectionShell id={sectionKey} title={title} provenance="cited" onProvenanceClick={onProvenanceClick} feedback={feedback}>
+        <div className="
+          [&_h1]:text-lg [&_h1]:font-bold [&_h1]:text-[#2c2118] [&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:border-b [&_h1]:border-[#e5dbcf] [&_h1]:pb-1
+          [&_h2]:text-sm [&_h2]:font-bold [&_h2]:text-[#2c2118] [&_h2]:mt-7 [&_h2]:mb-2 [&_h2]:uppercase [&_h2]:tracking-wide
+          [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-[#4a3f36] [&_h3]:mt-4 [&_h3]:mb-1
+          [&_p]:text-sm [&_p]:leading-[1.75] [&_p]:text-[#4a3f36] [&_p]:mb-3
+          [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ul]:space-y-1.5
+          [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_ol]:space-y-1.5
+          [&_li]:text-sm [&_li]:leading-[1.7] [&_li]:text-[#4a3f36]
+          [&_table]:w-full [&_table]:text-xs [&_table]:border-collapse [&_table]:mb-4
+          [&_thead]:bg-[#f0e8dc]
+          [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:text-[#4a3f36] [&_th]:border [&_th]:border-[#e5dbcf]
+          [&_td]:border [&_td]:border-[#e5dbcf] [&_td]:px-3 [&_td]:py-2 [&_td]:align-top [&_td]:text-[#4a3f36]
+          [&_tr:nth-child(even)_td]:bg-[#faf6ef]
+          [&_blockquote]:border-l-3 [&_blockquote]:border-[#c9a96e] [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-[#7f7266] [&_blockquote]:my-3
+          [&_strong]:font-semibold [&_strong]:text-[#2c2118]
+          [&_em]:text-[#7f7266] [&_em]:not-italic
+          [&_hr]:border-[#e5dbcf] [&_hr]:my-4
+          [&_code]:text-xs [&_code]:bg-[#f0e8dc] [&_code]:px-1 [&_code]:rounded
+        ">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              h2({ children }) {
+                const text = typeof children === "string" ? children : String(children ?? "");
+                const id = `${sectionKey}__${text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+                return <h2 id={id}>{children}</h2>;
+              },
+            }}
+          >
+            {content}
+          </ReactMarkdown>
+        </div>
+      </SectionShell>
+    );
+  }
+
   let data: PremiumSectionContent | null = null;
 
   try {

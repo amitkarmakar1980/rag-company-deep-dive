@@ -14,10 +14,16 @@ import { formatDateTimeParts } from "@/lib/timezone";
 
 type ViewMode = PremiumViewMode;
 
+type TocSubsection = {
+  id: string;
+  label: string;
+};
+
 type TocItem = {
   id: string;
   label: string;
   group: string;
+  subsections?: TocSubsection[];
 };
 
 type ParsedPremiumSection = PremiumParsedViewSection;
@@ -25,6 +31,7 @@ type ParsedPremiumSection = PremiumParsedViewSection;
 type AssessmentSnapshotData = StructuredReport["assessment_snapshot"];
 
 interface PremiumReportViewProps {
+  requestId: string;
   report: {
     id: string;
     recommendation: RecommendationType;
@@ -86,6 +93,25 @@ const GROUP_DESCRIPTIONS: Record<string, string> = {
   Overview: "Decision-critical orientation points and quick jumps for the report.",
   Appendix: "Reference material preserved with the report for later review.",
 };
+
+/** Converts a heading text to a DOM-safe anchor id. */
+function headingToId(sectionKey: string, text: string): string {
+  return `${sectionKey}__${text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
+
+/**
+ * Extracts `## Heading` lines from V3 markdown content as subsection TOC entries.
+ * Skips the document-level `# Company Deep Dive: …` title.
+ */
+function extractMarkdownSubsections(sectionKey: string, content: string): TocSubsection[] {
+  return content
+    .split("\n")
+    .filter((line) => /^## /.test(line))
+    .map((line) => {
+      const label = line.replace(/^## /, "").trim();
+      return { id: headingToId(sectionKey, label), label };
+    });
+}
 
 const PROVENANCE_EXPLAINERS: Record<ProvenanceType, { description: string }> = {
   cited: {
@@ -492,6 +518,62 @@ function SectionGroupLabel({ title, description }: { title: string; description:
   );
 }
 
+const COMING_SOON_SECTIONS = [
+  {
+    id: "candidate-role-analysis",
+    title: "Candidate — Role Analysis",
+    group: "Candidate Intelligence",
+    description: "Structured analysis of how your background maps to the role's requirements, hidden expectations, and likely evaluation criteria.",
+  },
+  {
+    id: "interview-preparation",
+    title: "Interview Preparation",
+    group: "Interview Intelligence",
+    description: "Likely interview structure, question themes, hiring committee concerns, and how to position your experience for this specific role.",
+  },
+];
+
+function ComingSoonCard({ id, title, description }: { id: string; title: string; description: string }) {
+  return (
+    <section id={id} className="rounded-[24px] border border-dashed border-[#d3c7b9] bg-[#fdfaf5] px-5 py-6 sm:px-7 sm:py-7">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[#f0e8dc]">
+          <svg className="h-3.5 w-3.5 text-[#9c8d81]" fill="none" viewBox="0 0 16 16">
+            <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M8 5v3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            <circle cx="8" cy="11" r="0.7" fill="currentColor" />
+          </svg>
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="text-[1.02rem] font-semibold tracking-[-0.02em] text-[#4a3f36]">{title}</h2>
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#f0e8dc] px-2.5 py-0.5 text-[0.67rem] font-semibold uppercase tracking-[0.16em] text-[#9c8d81]">
+              Coming soon
+            </span>
+          </div>
+          <p className="mt-1.5 max-w-xl text-sm leading-[1.65] text-[#7a6d63]">{description}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ComingSoonGroup() {
+  return (
+    <div className="mt-9 space-y-3 sm:mt-10">
+      <SectionGroupLabel
+        title="Candidate Intelligence"
+        description="Personalised analysis layers — coming soon. Upload a resume to be notified when these sections launch."
+      />
+      <div className="space-y-3">
+        {COMING_SOON_SECTIONS.map((s) => (
+          <ComingSoonCard key={s.id} id={s.id} title={s.title} description={s.description} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BackToTopButton({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -528,19 +610,6 @@ function ViewModeToggle({ mode, onChange }: { mode: ViewMode; onChange: (mode: V
   );
 }
 
-function TocButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`group ml-2 flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 ${active ? "text-[#1a4a3a]" : "text-[#6b5e52] hover:text-[#1c1713]"}`}
-      aria-current={active ? "location" : undefined}
-    >
-      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full transition-colors ${active ? "bg-[#1a4a3a]" : "bg-[#d4ccc4] group-hover:bg-[#9c8d81]"}`} aria-hidden />
-      <span className={`text-[0.73rem] leading-[1.1rem] ${active ? "font-semibold" : "font-medium"}`}>{label}</span>
-    </button>
-  );
-}
 
 function MobileJumpMenu({
   items,
@@ -690,11 +759,28 @@ function ProvenanceModal({
   );
 }
 
-export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) {
+export function PremiumReportView({ requestId, report, timeZone }: PremiumReportViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [activeSectionId, setActiveSectionId] = useState("brief-overview");
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [desktopTocFloating, setDesktopTocFloating] = useState(false);
   const [mobileTocOpen, setMobileTocOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+
+  const handleRegenerate = useCallback(async () => {
+    if (regenerating) return;
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/deep-dive/${requestId}/regenerate`, { method: "POST" });
+      if (res.ok) {
+        window.location.href = `/deep-dive/${requestId}`;
+      } else {
+        setRegenerating(false);
+      }
+    } catch {
+      setRegenerating(false);
+    }
+  }, [requestId, regenerating]);
   const [activeProvenance, setActiveProvenance] = useState<ProvenanceType | null>(null);
 
   const scrollReportToTop = useCallback(() => {
@@ -856,20 +942,22 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
     ]
   );
 
-  const tocItems = useMemo(
-    () => [
-      { id: "brief-overview", label: "Overview", group: "Overview" },
-      ...(report.jobDescription ? [{ id: "job-description", label: "Job Description", group: "Overview" }] : []),
-      { id: "assessment_snapshot", label: "Assessment Snapshot", group: "Decision" },
-      ...orderedVisibleSections.map((section) => ({
-        id: section.key,
-        label: section.title,
-        group: section.group,
-      })),
-      ...(report.researchPlan ? [{ id: "source-strategy-catalog", label: "Source Strategy Catalog", group: "Appendix" }] : []),
-    ],
-    [orderedVisibleSections, report.jobDescription, report.researchPlan]
-  );
+  const tocItems = useMemo((): TocItem[] => [
+    { id: "brief-overview", label: "Overview", group: "Overview", subsections: [] },
+    ...(report.jobDescription ? [{ id: "job-description", label: "Job Description", group: "Overview", subsections: [] }] : []),
+    { id: "assessment_snapshot", label: "Assessment Snapshot", group: "Decision", subsections: [] },
+    ...orderedVisibleSections.map((section): TocItem => ({
+      id: section.key,
+      label: section.title,
+      group: section.group,
+      subsections:
+        section.key === "company_deep_dive_v3"
+          ? extractMarkdownSubsections(section.key, section.content)
+          : [],
+    })),
+    ...COMING_SOON_SECTIONS.map((s) => ({ id: s.id, label: s.title, group: s.group, subsections: [] })),
+    ...(report.researchPlan ? [{ id: "source-strategy-catalog", label: "Source Strategy Catalog", group: "Appendix", subsections: [] }] : []),
+  ], [orderedVisibleSections, report.jobDescription, report.researchPlan]);
 
   const currentTocItem = tocItems.find((item) => item.id === activeSectionId) ?? tocItems[0] ?? null;
   const recommendationMeta = RECOMMENDATION_META[report.recommendation] ?? RECOMMENDATION_META.need_more_signal;
@@ -884,8 +972,14 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
   }, []);
 
   useEffect(() => {
+    // Observe top-level report sections (section[id])
     const observedSections = Array.from(document.querySelectorAll<HTMLElement>("section[id]"));
-    if (observedSections.length === 0) return;
+    // Also observe V3 subsection headings (h2[id^="company_deep_dive_v3__"])
+    const observedHeadings = Array.from(
+      document.querySelectorAll<HTMLElement>('h2[id^="company_deep_dive_v3__"]')
+    );
+    const allTargets = [...observedSections, ...observedHeadings];
+    if (allTargets.length === 0) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -904,7 +998,7 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
       }
     );
 
-    observedSections.forEach((section) => observer.observe(section));
+    allTargets.forEach((el) => observer.observe(el));
 
     return () => observer.disconnect();
   }, [viewMode, visibleSections.length, report.jobDescription]);
@@ -954,18 +1048,69 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
               <nav className="relative pl-3 pr-1" aria-label="Report table of contents">
                 <div className="absolute bottom-0 left-0 top-0 w-px bg-[linear-gradient(180deg,rgba(201,191,180,0.18),rgba(201,191,180,0.88)_16%,rgba(201,191,180,0.88)_84%,rgba(201,191,180,0.18))]" aria-hidden />
                 <div className={`transition-all duration-300 ${desktopTocFloating ? "py-1.5" : "py-0.5"}`}>
-                  <div className="space-y-1.5">
+                  <div className="space-y-0.5">
                     {tocItems.map((item, index) => {
                       const showGroupLabel = index === 0 || tocItems[index - 1].group !== item.group;
+                      const hasSubsections = (item.subsections?.length ?? 0) > 0;
+                      const isCollapsed = collapsedSections.has(item.id);
+                      const isActive = activeSectionId === item.id ||
+                        (item.subsections?.some((s) => s.id === activeSectionId) ?? false);
 
                       return (
-                        <div key={item.id} className="space-y-0">
+                        <div key={item.id}>
                           {showGroupLabel ? (
-                            <p className="px-1.5 pb-1 pt-7 text-[0.68rem] font-bold uppercase leading-none tracking-[0.2em] text-[#9c8d81] first:pt-2">
+                            <p className="px-1.5 pb-1 pt-7 text-[0.65rem] font-bold uppercase leading-none tracking-[0.2em] text-[#9c8d81] first:pt-2">
                               {item.group}
                             </p>
                           ) : null}
-                          <TocButton label={item.label} active={activeSectionId === item.id} onClick={() => scrollToSection(item.id)} />
+
+                          {/* Section row — scroll + optional collapse toggle */}
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => scrollToSection(item.id)}
+                              className={`group flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-[5px] text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30 ${isActive ? "text-[#1a4a3a]" : "text-[#6b5e52] hover:text-[#1c1713]"}`}
+                              aria-current={activeSectionId === item.id ? "location" : undefined}
+                            >
+                              <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full transition-colors ${isActive ? "bg-[#1a4a3a]" : "bg-[#d4ccc4] group-hover:bg-[#9c8d81]"}`} aria-hidden />
+                              <span className={`truncate text-[0.73rem] leading-[1.1rem] ${isActive ? "font-semibold" : "font-medium"}`}>{item.label}</span>
+                            </button>
+
+                            {hasSubsections && (
+                              <button
+                                type="button"
+                                onClick={() => setCollapsedSections((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(item.id)) next.delete(item.id);
+                                  else next.add(item.id);
+                                  return next;
+                                })}
+                                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-[#9c8d81] transition-colors hover:bg-[#ede8e1] hover:text-[#4a3f36] focus:outline-none focus-visible:ring-1 focus-visible:ring-[#1a4a3a]/30"
+                                aria-label={isCollapsed ? "Expand subsections" : "Collapse subsections"}
+                              >
+                                <svg className={`h-3 w-3 transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`} fill="none" viewBox="0 0 10 6">
+                                  <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Subsection list */}
+                          {hasSubsections && !isCollapsed && (
+                            <div className="ml-5 mt-0.5 space-y-0.5 border-l border-[#e5dbcf] pl-2">
+                              {item.subsections!.map((sub) => (
+                                <button
+                                  key={sub.id}
+                                  type="button"
+                                  onClick={() => scrollToSection(sub.id)}
+                                  className={`block w-full rounded px-1.5 py-[3px] text-left text-[0.68rem] leading-[1.2rem] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#1a4a3a]/30 ${activeSectionId === sub.id ? "font-semibold text-[#1a4a3a]" : "font-medium text-[#9c8d81] hover:text-[#4a3f36]"}`}
+                                  aria-current={activeSectionId === sub.id ? "location" : undefined}
+                                >
+                                  {sub.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -997,6 +1142,22 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
                       <div className="hidden xl:block">
                         <ViewModeToggle mode={viewMode} onChange={setViewMode} />
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleRegenerate}
+                        disabled={regenerating}
+                        className="flex items-center gap-1.5 rounded-lg border border-[#d3c7b9] bg-white px-3 py-1.5 text-[0.76rem] font-medium text-[#4a3f36] shadow-sm transition-all hover:border-[#b8a99a] hover:bg-[#faf6ef] hover:text-[#1c1713] disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1a4a3a]/30"
+                        title="Regenerate this report with the same inputs"
+                      >
+                        <svg
+                          className={`h-3.5 w-3.5 flex-shrink-0 ${regenerating ? "animate-spin" : ""}`}
+                          viewBox="0 0 16 16" fill="none" aria-hidden
+                        >
+                          <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                          <path d="M8 1v3l2.5-1.5L8 1Z" fill="currentColor" />
+                        </svg>
+                        {regenerating ? "Regenerating…" : "Regenerate"}
+                      </button>
                     </div>
                   </div>
 
@@ -1150,6 +1311,8 @@ export function PremiumReportView({ report, timeZone }: PremiumReportViewProps) 
               </section>
 
               <div className="mt-9 space-y-1.5 sm:mt-10">{groupedContent}</div>
+
+              <ComingSoonGroup />
 
               {report.researchPlan ? (
                 <div className="mt-9 sm:mt-10">

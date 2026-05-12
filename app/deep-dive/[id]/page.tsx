@@ -695,7 +695,10 @@ function getSimpleStepProgress(step: Pick<ProcessingStep, "key" | "state">, elap
     return Math.max(10, Math.min(95, Math.round(((progress?.completedSections ?? 0) / total) * 100)));
   }
 
-  return 24 + ((elapsedSeconds * 5) % 48);
+  // Asymptotic curve: starts ~8%, approaches 92%, never decreases.
+  // Half-life tuned per step so the bar feels responsive without stalling early.
+  const halfLifeSeconds = step.key === "rag" ? 25 : 55;
+  return Math.round(8 + 84 * (1 - Math.exp(-elapsedSeconds / halfLifeSeconds)));
 }
 
 function buildRagSiteSteps(
@@ -1387,8 +1390,8 @@ export default function ReportPage() {
     );
   }
 
-  if (report.reportFamily === "premium" || report.reportFormat === "premium_v1" || report.reportFormat === "premium_v2") {
-    return <PremiumReportView report={report} timeZone={timeZone} />;
+  if (report.reportFamily === "premium" || report.reportFormat === "premium_v1" || report.reportFormat === "premium_v2" || report.reportFormat === "premium_v3") {
+    return <PremiumReportView requestId={requestId} report={report} timeZone={timeZone} />;
   }
 
   // ─── Report ready ─────────────────────────────────────────────────────────

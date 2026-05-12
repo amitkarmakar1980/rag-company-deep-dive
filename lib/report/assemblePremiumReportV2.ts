@@ -11,7 +11,8 @@ import { supabaseAdmin } from "@/lib/db/supabase";
 import { generatePremiumEvaluation, generatePremiumReport } from "@/lib/ai/openai";
 import { getPremiumEvaluationPrompt } from "@/lib/ai/premiumEvaluationPrompt";
 import { getPremiumReportPromptV2 } from "@/lib/ai/premiumPromptsV2";
-import { buildTargetedSourceUrls, type ResearchPlan } from "@/lib/ingestion/firecrawl";
+import { getPremiumReportPromptV3 } from "@/lib/ai/premiumPromptsV3";
+import { buildTargetedSourceUrls, type ResearchPlan, type PlannedSource } from "@/lib/ingestion/firecrawl";
 import { multiTopicSearch, rerank } from "@/lib/retrieval/search";
 import { Report, ReportTokenUsage, RetrievalContext, RecommendationType } from "@/lib/types";
 import {
@@ -40,6 +41,12 @@ import {
   PremiumEvaluationModelOutput,
   PremiumQualityGateResult,
 } from "@/lib/report/premiumQualityGate";
+
+type PremiumRuntimeConfig = {
+  reportFormat: "premium_v2" | "premium_v3";
+  generatorVersion: "premium_v2_default" | "premium_v3_default";
+  promptBuilder: typeof getPremiumReportPromptV2;
+};
 
 function getHostname(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -612,13 +619,14 @@ export async function buildPremiumDraft(args: {
   profileContext?: string;
   persona: ReturnType<typeof inferPremiumPersona>;
   qualityGate: PremiumQualityGateResult | null;
+  promptBuilder?: PremiumRuntimeConfig["promptBuilder"];
 }): Promise<{
   data: PremiumReportModelOutput;
   usage: ReportTokenUsage["calls"][number];
   wrappedSections: Record<string, PremiumSectionContent>;
   personaQa: ReturnType<typeof assessPremiumPersonaQa>;
 }> {
-  const prompt = await getPremiumReportPromptV2(
+  const prompt = await (args.promptBuilder ?? getPremiumReportPromptV2)(
     args.retrievalState.context,
     args.companyName,
     args.roleTitle,
@@ -663,8 +671,14 @@ export async function persistPremiumReportArtifacts(args: {
   targetedRetrievalLoops: number;
   assemblyStartedAt: number;
   runId?: string;
+  runtime?: PremiumRuntimeConfig;
 }): Promise<Report> {
   const runId = args.runId ?? randomUUID();
+  const runtime: PremiumRuntimeConfig = args.runtime ?? {
+    reportFormat: "premium_v2",
+    generatorVersion: "premium_v2_default",
+    promptBuilder: getPremiumReportPromptV2,
+  };
   const resolvedQualityGate = resolveQualityGateForPersistence(args.qualityGate, args.wrappedSections);
   const gatedSections = ensureRequiredSectionsForPersistence({
     sections: applyQualityGateToSections(args.wrappedSections, resolvedQualityGate),
@@ -691,9 +705,9 @@ export async function persistPremiumReportArtifacts(args: {
     scores,
     {
       token_usage: tokenUsage,
-      report_format: "premium_v2",
+      report_format: runtime.reportFormat,
       report_family: "premium",
-      generator_version: "premium_v2_default",
+      generator_version: runtime.generatorVersion,
       evidence_quality: args.retrievalState.evidenceQuality,
       source_coverage: args.retrievalState.coverage,
       persona_qa: args.personaQa,
@@ -718,7 +732,7 @@ export async function persistPremiumReportArtifacts(args: {
       ).size,
     },
     {
-      report_format: "premium_v2",
+      report_format: runtime.reportFormat,
       report_family: "premium",
     }
   );
@@ -774,9 +788,9 @@ export async function persistPremiumReportArtifacts(args: {
   const persistenceDurationMs = Date.now() - persistenceStartedAt;
   await updateReportSummaryJson(report.id, {
     token_usage: tokenUsage,
-    report_format: "premium_v2",
+    report_format: runtime.reportFormat,
     report_family: "premium",
-    generator_version: "premium_v2_default",
+    generator_version: runtime.generatorVersion,
     evidence_quality: args.retrievalState.evidenceQuality,
     source_coverage: args.retrievalState.coverage,
     persona_qa: args.personaQa,
@@ -821,9 +835,10 @@ export async function persistPremiumReportArtifacts(args: {
   return report;
 }
 
-export async function assemblePremiumReportV2(
+async function assemblePremiumReportVersioned(
   requestId: string,
-  researchPlanOrQueries?: ResearchPlan | string[]
+  researchPlanOrQueries: ResearchPlan | string[] | undefined,
+  runtime: PremiumRuntimeConfig
 ): Promise<Report | null> {
   const assemblyStartedAt = Date.now();
   const runId = randomUUID();
@@ -894,6 +909,7 @@ export async function assemblePremiumReportV2(
       profileContext: request.profile_context ?? undefined,
       persona,
       qualityGate,
+      promptBuilder: runtime.promptBuilder,
     });
     llmCalls.push(draft.usage);
     totalSynthesisDurationMs += Date.now() - synthesisStartedAt;
@@ -931,7 +947,7 @@ export async function assemblePremiumReportV2(
       personaQa,
       alreadyReranRetrieval: usedTargetedReretrieval,
     })) {
-      const targetedQueries = buildTargetedReretrievalQueries({
+      const nextQueries = buildTargetedReretrievalQueries({
         companyName,
         roleTitle: request.role_title,
         persona,
@@ -939,41 +955,26 @@ export async function assemblePremiumReportV2(
         qualityGate,
         personaQa,
       });
+      const nextSourceUrls = await buildTargetedReretrievalSourceUrls({
+        companyName,
+        roleTitle: request.role_title,
+        companyUrl: request.company_url ?? undefined,
+        qualityGate,
+        coverage: retrievalState.coverage,
+        enableHomepageDiscovery: true,
+      });
 
-      usedTargetedReretrieval = true;
-      targetedRetrievalLoops += 1;
-
-      const shouldRefreshSources = retrievalState.coverage.persona_source_class_audit.missingMandatory.length > 0 || retrievalState.coverage.total_sources < 4;
-      if (shouldRefreshSources) {
-        await updateDeepDiveStatus(requestId, "fetching_sources");
-        const { ingestSources } = await import("@/lib/ingestion/ingest");
-        const targetedSourceUrls = await buildTargetedReretrievalSourceUrls({
-          companyName,
-          roleTitle: request.role_title,
-          companyUrl: request.company_url ?? undefined,
-          qualityGate,
-          coverage: retrievalState.coverage,
-        });
-        const ingestResult = await ingestSources(
-          requestId,
-          request.company_id,
-          companyName,
-          request.role_title,
-          request.company_url ?? undefined,
-          targetedSourceUrls,
-          request.job_description ?? undefined,
-          request.profile_context ?? undefined
-        );
-
-        if (ingestResult.success) {
-          latestResearchPlan = ingestResult.researchPlan;
-          normalizedQueries = dedupeStrings([...targetedQueries, ...ingestResult.researchPlan.retrievalQueries]);
-        }
-        await updateDeepDiveStatus(requestId, "generating_report");
-      } else {
-        normalizedQueries = targetedQueries;
-      }
-
+      latestResearchPlan = latestResearchPlan
+        ? {
+            ...latestResearchPlan,
+            retrievalQueries: dedupeStrings([...(latestResearchPlan.retrievalQueries ?? []), ...nextQueries]),
+            selectedSources: [
+              ...(latestResearchPlan.selectedSources ?? []),
+              ...nextSourceUrls.map((url): PlannedSource => ({ url, type: "custom_url", priority: 5 })),
+            ],
+          }
+        : null;
+      normalizedQueries = nextQueries;
       retrievalState = await buildPremiumRetrievalState({
         requestId,
         queries: normalizedQueries,
@@ -982,6 +983,8 @@ export async function assemblePremiumReportV2(
         persona,
       });
       totalRetrievalDurationMs += retrievalState.retrievalDurationMs;
+      targetedRetrievalLoops += 1;
+      usedTargetedReretrieval = true;
       continue;
     }
 
@@ -1013,5 +1016,28 @@ export async function assemblePremiumReportV2(
     targetedRetrievalLoops,
     assemblyStartedAt,
     runId,
+    runtime,
+  });
+}
+
+export async function assemblePremiumReportV2(
+  requestId: string,
+  researchPlanOrQueries?: ResearchPlan | string[]
+): Promise<Report | null> {
+  return assemblePremiumReportVersioned(requestId, researchPlanOrQueries, {
+    reportFormat: "premium_v2",
+    generatorVersion: "premium_v2_default",
+    promptBuilder: getPremiumReportPromptV2,
+  });
+}
+
+export async function assemblePremiumReportV3(
+  requestId: string,
+  researchPlanOrQueries?: ResearchPlan | string[]
+): Promise<Report | null> {
+  return assemblePremiumReportVersioned(requestId, researchPlanOrQueries, {
+    reportFormat: "premium_v3",
+    generatorVersion: "premium_v3_default",
+    promptBuilder: getPremiumReportPromptV3,
   });
 }

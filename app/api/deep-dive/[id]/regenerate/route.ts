@@ -92,19 +92,24 @@ export async function POST(
 
           // Stage 2: premium report generation
           await updateDeepDiveStatus(requestId, "generating_report");
-          const { assemblePremiumReportV2 } = await import("@/lib/report/assemblePremiumReportV2");
-          await assemblePremiumReportV2(requestId, plannerResearchPlan ?? plannerQueries);
+          const { assemblePremiumReportV3 } = await import("@/lib/report/assemblePremiumReportV3");
+          const regenReport = await assemblePremiumReportV3(requestId, plannerResearchPlan ?? plannerQueries);
           await updateDeepDiveStatus(requestId, "completed");
-          console.log(`[Regenerate] Complete for requestId=${requestId}`);
+          console.log(`[Regenerate] Complete for requestId=${requestId}, report=${regenReport?.id}`);
         } catch (err) {
-          console.error("[Regenerate] Pipeline error:", err);
-          await updateDeepDiveStatus(
-            requestId,
-            "failed",
-            err instanceof Error ? err.message : String(err)
-          );
+          const msg = err instanceof Error ? err.message : JSON.stringify(err) ?? String(err);
+          const stack = err instanceof Error ? err.stack : undefined;
+          console.error("[Regenerate] Pipeline error:", msg, stack ?? "");
+          try {
+            await updateDeepDiveStatus(requestId, "failed");
+          } catch (statusErr) {
+            console.error("[Regenerate] Could not set failed status:", statusErr);
+          }
         }
-      })()
+      })().catch((unhandled) => {
+        const msg = unhandled instanceof Error ? unhandled.message : String(unhandled);
+        console.error("[Regenerate] Unhandled after() error:", msg);
+      })
     );
 
     return NextResponse.json({ requestId, status: "pending" });

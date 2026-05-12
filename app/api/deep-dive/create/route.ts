@@ -135,10 +135,10 @@ async function runPipeline(
       await updateDeepDiveStatus(requestId, "generating_report");
       console.log("[Pipeline] Status → generating_report");
 
-      const { assemblePremiumReportV2 } = await import("@/lib/report/assemblePremiumReportV2");
-      console.log("[Pipeline] Calling assemblePremiumReportV2...");
-      await assemblePremiumReportV2(requestId, result.researchPlan);
-      console.log("[Pipeline] assemblePremiumReportV2 complete");
+      const { assemblePremiumReportV3 } = await import("@/lib/report/assemblePremiumReportV3");
+      console.log("[Pipeline] Calling assemblePremiumReportV3...");
+      const v3Report = await assemblePremiumReportV3(requestId, result.researchPlan);
+      console.log("[Pipeline] assemblePremiumReportV3 complete, report id:", v3Report?.id);
 
       // If resume was provided, create the overlay record BEFORE marking completed.
       // This prevents a race: the page polls, sees "completed", checks for overlay —
@@ -187,7 +187,10 @@ async function runPipeline(
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error("[Pipeline] EXCEPTION:", msg);
-    console.error(error);
-    await updateDeepDiveStatus(requestId, "failed", msg);
+    try {
+      await updateDeepDiveStatus(requestId, "failed");
+    } catch (statusErr) {
+      console.error("[Pipeline] Could not set failed status:", statusErr);
+    }
   }
 }

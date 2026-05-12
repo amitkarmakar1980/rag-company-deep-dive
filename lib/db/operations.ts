@@ -101,44 +101,14 @@ export async function getDeepDiveRequest(
 export async function updateDeepDiveStatus(
   requestId: string,
   status: string,
-  errorMessage?: string | null
+  _errorMessage?: string | null
 ): Promise<void> {
-  const timestamp = new Date().toISOString();
-  const payload = {
-    status,
-    updated_at: timestamp,
-    error_message: status === "failed" ? (errorMessage ?? null) : null,
-  };
-
+  // Always try the minimal payload first — avoids failures from missing optional columns
+  // (updated_at, error_message) that vary by deployment environment.
   let { error } = await supabaseAdmin
     .from("deep_dive_requests")
-    .update(payload)
+    .update({ status })
     .eq("id", requestId);
-
-  if (error && /updated_at|error_message/i.test(error.message)) {
-    const fallbackPayload = status === "failed"
-      ? { status, error_message: errorMessage ?? null }
-      : { status };
-
-    ({ error } = await supabaseAdmin
-      .from("deep_dive_requests")
-      .update(fallbackPayload)
-      .eq("id", requestId));
-  }
-
-  if (error && /error_message/i.test(error.message)) {
-    ({ error } = await supabaseAdmin
-      .from("deep_dive_requests")
-      .update({ status, updated_at: timestamp })
-      .eq("id", requestId));
-  }
-
-  if (error && /updated_at/i.test(error.message)) {
-    ({ error } = await supabaseAdmin
-      .from("deep_dive_requests")
-      .update({ status })
-      .eq("id", requestId));
-  }
 
   if (error) throw error;
 }
@@ -209,7 +179,7 @@ export async function getRequestHistory(
   return (requests || []).map((req: any) => ({
     request: req,
     company: req.companies,
-    report: pickLatestReport(req.reports ?? [], "premium_v2"),
+    report: pickLatestReport(req.reports ?? [], "premium_v3"),
   }));
 }
 
@@ -351,6 +321,10 @@ export function getEffectiveReportFormat(report: Pick<Report, "report_format" | 
     return summaryFormat;
   }
 
+  if (report.summary_json?.generator_version === "premium_v3_default") {
+    return "premium_v3";
+  }
+
   if (report.summary_json?.generator_version === "premium_v2_default") {
     return "premium_v2";
   }
@@ -392,8 +366,10 @@ function pickLatestReport(
     return sorted[0] ?? null;
   }
 
-  const preferredFormats = preferredFormat === "premium_v2"
-    ? ["premium_v2", "premium_v1"]
+  const preferredFormats = preferredFormat === "premium_v3"
+    ? ["premium_v3", "premium_v2", "premium_v1"]
+    : preferredFormat === "premium_v2"
+      ? ["premium_v2", "premium_v1"]
     : [preferredFormat];
 
   return sorted.find((report) => preferredFormats.includes(getEffectiveReportFormat(report))) ?? sorted[0] ?? null;
@@ -588,7 +564,7 @@ export async function getReport(requestId: string): Promise<Report | null> {
     .order("created_at", { ascending: false });
 
   if (error && error.code !== "PGRST116") throw error;
-  return pickLatestReport((data || []) as Report[], "premium_v2");
+  return pickLatestReport((data || []) as Report[], "premium_v3");
 }
 
 export async function getReportByRequestAndFormat(

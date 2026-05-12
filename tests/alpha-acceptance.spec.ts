@@ -49,7 +49,7 @@ test.describe('Alpha Acceptance Suite', () => {
     const reportResponse = await page.request.get(`/api/report/${persistedReportId}`);
     expect(reportResponse.ok()).toBeTruthy();
     const reportJson = await reportResponse.json();
-    expect(reportJson.reportFormat).toBe('premium_v2');
+    expect(reportJson.reportFormat).toBe('premium_v3');
     expect(reportJson.reportFamily).toBe('premium');
 
     // Verify in history

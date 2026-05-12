@@ -50,6 +50,7 @@ const GROUP_BY_SECTION_KEY: Record<string, string> = {
   why_role_exists_now: "About the Role",
   credibility_layer: "Appendix",
   operations_and_cost: "Appendix",
+  company_deep_dive_v3: "Company Deep Dive",
 };
 
 const TITLE_BY_SECTION_KEY: Record<string, string> = {
@@ -61,6 +62,7 @@ const TITLE_BY_SECTION_KEY: Record<string, string> = {
   candidate_fit: "Candidate-Skill Match",
   how_to_win_this_process: "How To Position Yourself",
   interview_prep: "Likely Interview Questions",
+  company_deep_dive_v3: "Company Deep Dive",
 };
 
 const VISIBLE_SECTION_ORDER = [
@@ -95,15 +97,27 @@ export function buildPremiumPresentationViewModel(
   report: PremiumPresentationReportInput,
   viewMode: PremiumViewMode
 ): PremiumPresentationViewModel {
+  const V3_MARKDOWN_SECTIONS = new Set(["company_deep_dive_v3"]);
+
   const sectionDefinitionByKey = new Map(PREMIUM_SECTION_DEFINITIONS.map((definition) => [definition.key, definition]));
   const visibleSections = report.sections.flatMap((section) => {
-    const definition = sectionDefinitionByKey.get(section.key as typeof PREMIUM_SECTION_DEFINITIONS[number]["key"]);
-    const parsed = parsePremiumSectionContent(section.content);
-    if (!definition || !parsed) {
+    if (HIDDEN_SECTION_KEYS.has(section.key)) {
       return [];
     }
 
-    if (HIDDEN_SECTION_KEYS.has(section.key)) {
+    // V3 markdown sections: passthrough without requiring a PREMIUM_SECTION_DEFINITIONS entry or JSON parse.
+    if (V3_MARKDOWN_SECTIONS.has(section.key)) {
+      return [{
+        ...section,
+        title: TITLE_BY_SECTION_KEY[section.key] ?? section.title,
+        parsed: { schema: "premium_section_v1", surface: "both", content: section.content } as unknown as PremiumSectionContent,
+        group: GROUP_BY_SECTION_KEY[section.key] ?? "Company Deep Dive",
+      } satisfies PremiumParsedViewSection];
+    }
+
+    const definition = sectionDefinitionByKey.get(section.key as typeof PREMIUM_SECTION_DEFINITIONS[number]["key"]);
+    const parsed = parsePremiumSectionContent(section.content);
+    if (!definition || !parsed) {
       return [];
     }
 

@@ -1,6 +1,7 @@
 import {
   createReport,
   createReportSection,
+  deleteReportForRequest,
   getDeepDiveRequest,
 } from "@/lib/db/operations";
 import { supabaseAdmin } from "@/lib/db/supabase";
@@ -76,6 +77,9 @@ export async function assemblePremiumReportV3(
 
   const totalTokens = usages.reduce((sum, u) => sum + u.input_tokens + u.output_tokens, 0);
   const totalCost = usages.reduce((sum, u) => sum + u.estimated_cost_usd, 0);
+
+  // ── Delete any prior report for this request (unique constraint on request_id) ─
+  await deleteReportForRequest(requestId);
 
   // ── Create report record ───────────────────────────────────────────────────
   const report = await createReport(

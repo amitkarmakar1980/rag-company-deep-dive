@@ -58,7 +58,7 @@ function getPrimaryReport(value: HistoryMetricReport | HistoryMetricReport[] | n
 
   return sorted.find((report) => {
     const format = getEffectiveReportFormat(report);
-    return format === "premium_v2" || format === "premium_v1";
+    return format === "premium_v3" || format === "premium_v2" || format === "premium_v1";
   }) ?? sorted[0] ?? null;
 }
 

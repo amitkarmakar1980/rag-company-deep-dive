@@ -1,4 +1,4 @@
-import type { CompanyDeepDiveV3, SwotItem } from "./schema";
+import type { CompanyDeepDiveV3, SwotItem, Citation } from "./schema";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -321,5 +321,45 @@ ${weakAreas ? `\n**Weakest Evidence Areas**\n\n${weakAreas}` : ""}
 ${openQs ? `\n**Unresolved Questions**\n\n${openQs}` : ""}`);
   }
 
+  // ── 20. Sources & Citations ───────────────────────────────────────────────────
+  const allCitations = collectAllCitations(d);
+  if (allCitations.length) {
+    const citationLines = allCitations.map((c, i) => {
+      const label = c.title && c.title !== c.url ? c.title : c.source_type;
+      const date = c.accessed_at ? ` *(accessed ${c.accessed_at})*` : "";
+      return `${i + 1}. [${label}](${c.url})${date}`;
+    });
+    sections.push(`## Sources & Citations\n\n${citationLines.join("\n")}`);
+  }
+
   return `# Company Deep Dive: ${d.company_name}\n\n` + sections.join("\n\n---\n\n");
+}
+
+// ── Citation collector ────────────────────────────────────────────────────────
+
+function collectAllCitations(d: CompanyDeepDiveV3): Citation[] {
+  const seen = new Set<string>();
+  const result: Citation[] = [];
+
+  function add(c: Citation) {
+    if (!c?.url || seen.has(c.url)) return;
+    seen.add(c.url);
+    result.push(c);
+  }
+
+  function walk(obj: unknown) {
+    if (!obj || typeof obj !== "object") return;
+    if (Array.isArray(obj)) { obj.forEach(walk); return; }
+    const rec = obj as Record<string, unknown>;
+    if ("url" in rec && "source_type" in rec && typeof rec.url === "string") {
+      add(rec as unknown as Citation);
+    }
+    Object.values(rec).forEach(walk);
+  }
+
+  // Strongest sources first, then sweep the rest of the document
+  (d.evidence_quality?.strongest_sources ?? []).forEach(add);
+  walk(d);
+
+  return result;
 }

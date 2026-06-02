@@ -8,8 +8,15 @@ import {
   updateDeepDiveRequestMetadata,
 } from "@/lib/db/operations";
 import { supabaseAdmin } from "@/lib/db/supabase";
+import { ENRICHMENT_FETCH_PLAN, type EnrichmentResult } from "./enrichmentSources";
+import {
+  getCachedSources,
+  storeCachedSource,
+  getCacheAge,
+} from "./sourceCache";
 
 const SOURCE_PROCESSING_CONCURRENCY = 3;
+const ENRICHMENT_CONCURRENCY = 2; // run at most 2 platform fetchers in parallel
 
 export interface SourceInput {
   type:
@@ -18,7 +25,12 @@ export interface SourceInput {
     | "newsroom"
     | "blog"
     | "custom_url"
-    | "profile_text";
+    | "profile_text"
+    | "linkedin_company"
+    | "glassdoor_company"
+    | "levels_fyi"
+    | "built_in"
+    | "indeed_company";
   content: string;
   title: string;
   url?: string;
@@ -58,7 +70,8 @@ export async function ingestSources(
 
   try {
     console.log(`[Ingest] START requestId=${requestId} jd=${!!jobDescription} profile=${!!profileContext} companyUrl=${companyUrl}`);
-    // Assemble sources to fetch
+
+    // ── Static sources (job description, profile) ──────────────────────────
     if (jobDescription) {
       sources.push({
         type: "job_description",
@@ -77,7 +90,7 @@ export async function ingestSources(
       });
     }
 
-    // Fetch web sources
+    // ── Primary web sources (firecrawl / company site) ─────────────────────
     const researchPlan = await buildSourceUrls(
       companyName,
       roleTitle,
@@ -86,29 +99,22 @@ export async function ingestSources(
       jobDescription,
       profileContext
     );
-    await updateDeepDiveRequestMetadata(requestId, {
-      research_plan: researchPlan,
-    });
+    await updateDeepDiveRequestMetadata(requestId, { research_plan: researchPlan });
     console.log(`[Ingest] Research plan: ${researchPlan.strategySummary}`);
     console.log(`[Ingest] Planned web sources=${researchPlan.selectedSources.length} retrievalQueries=${researchPlan.retrievalQueries.length}`);
 
-    // Fetch all web sources in parallel
     const fetchResults = await Promise.allSettled(
       researchPlan.selectedSources.map((urlSource) => fetchResolvedPlannedSource(urlSource))
     );
 
     const seenFetchedUrls = new Set<string>();
-
     for (const result of fetchResults) {
       if (result.status === "rejected") continue;
       for (const resolvedSource of result.value) {
-        if (seenFetchedUrls.has(resolvedSource.url)) {
-          continue;
-        }
-
+        if (seenFetchedUrls.has(resolvedSource.url)) continue;
         seenFetchedUrls.add(resolvedSource.url);
         sources.push({
-          type: resolvedSource.type as any,
+          type: resolvedSource.type as SourceInput["type"],
           content: resolvedSource.content,
           title: resolvedSource.title,
           url: resolvedSource.url,
@@ -117,8 +123,13 @@ export async function ingestSources(
       }
     }
 
-    console.log(`[Ingest] ${sources.length} sources to process`);
+    // ── Enrichment sources (LinkedIn, Glassdoor, Levels.fyi, Built In, Indeed) ─
+    const enrichmentSources = await fetchEnrichmentSources(companyId, companyName);
+    sources.push(...enrichmentSources);
 
+    console.log(`[Ingest] ${sources.length} total sources to process (${enrichmentSources.length} enrichment)`);
+
+    // ── Process all sources: chunk + embed + store ─────────────────────────
     await runWithConcurrency(sources, SOURCE_PROCESSING_CONCURRENCY, async (source) => {
       console.log(`[Ingest] Processing source: type=${source.type} title="${source.title}"`);
       const sourceStats = await processSource(requestId, companyId, source);
@@ -128,10 +139,7 @@ export async function ingestSources(
     });
 
     console.log(`[Ingest] COMPLETE sources=${stats.sourcesCreated} chunks=${stats.chunksCreated}`);
-    return {
-      ...stats,
-      researchPlan,
-    };
+    return { ...stats, researchPlan };
   } catch (error) {
     console.error("[Ingest] ERROR:", error instanceof Error ? error.message : error);
     console.error(error);
@@ -144,6 +152,93 @@ export async function ingestSources(
     };
   }
 }
+
+// ── Enrichment orchestrator with cache ──────────────────────────────────────
+
+async function fetchEnrichmentSources(
+  companyId: string,
+  companyName: string
+): Promise<SourceInput[]> {
+  const results: SourceInput[] = [];
+
+  await runWithConcurrency(
+    ENRICHMENT_FETCH_PLAN,
+    ENRICHMENT_CONCURRENCY,
+    async (plan) => {
+      const cacheAge = await getCacheAge(companyId, plan.sourceType);
+      const cacheHit = cacheAge !== null && cacheAge < CACHE_TTL_HOURS;
+
+      if (cacheHit) {
+        // ── Cache hit: reuse stored content, skip HTTP fetch ─────────────
+        console.log(
+          `[Enrichment] ${plan.label} cache hit (${cacheAge}h old) for company=${companyId}`
+        );
+        const cached = await getCachedSources(companyId, plan.sourceType);
+        for (const entry of cached) {
+          results.push({
+            type: plan.sourceType,
+            content: entry.cleaned_content,
+            title: entry.title,
+            url: entry.url ?? undefined,
+            priority: 3,
+          });
+        }
+        return;
+      }
+
+      // ── Cache miss / expired: fetch fresh ───────────────────────────────
+      console.log(`[Enrichment] ${plan.label} fetching fresh for "${companyName}"`);
+      let fetched: EnrichmentResult[] = [];
+      try {
+        fetched = await plan.fetch(companyName);
+      } catch (err) {
+        console.warn(
+          `[Enrichment] ${plan.label} fetch error:`,
+          err instanceof Error ? err.message : err
+        );
+        return;
+      }
+
+      console.log(`[Enrichment] ${plan.label} got ${fetched.length} results`);
+
+      for (const item of fetched) {
+        if (!item.content || item.content.length < 150) continue;
+
+        const rawContent = sanitizeTextForStorage(item.content);
+        const cleanedContent = cleanContent(rawContent);
+        if (!cleanedContent.trim()) continue;
+
+        const contentHash = calculateContentHash(cleanedContent);
+
+        // Store in cache (non-blocking — errors logged inside)
+        await storeCachedSource({
+          companyId,
+          sourceType: plan.sourceType,
+          url: item.url,
+          title: item.title,
+          rawContent,
+          cleanedContent,
+          contentHash,
+        });
+
+        results.push({
+          type: plan.sourceType,
+          content: cleanedContent,
+          title: item.title,
+          url: item.url,
+          priority: 3,
+        });
+      }
+    }
+  );
+
+  return results;
+}
+
+// 7 days in hours — matches CACHE_TTL_DAYS in sourceCache.ts
+const CACHE_TTL_HOURS = 7 * 24;
+
+// ── Source processor ─────────────────────────────────────────────────────────
 
 async function processSource(
   requestId: string,
@@ -160,7 +255,6 @@ async function processSource(
 
   const contentHash = calculateContentHash(cleanedContent);
 
-  // Create source record
   const source = await createSource(
     companyId,
     requestId,
@@ -174,14 +268,10 @@ async function processSource(
     0.8 + (sourceInput.priority || 0) * 0.02
   );
 
-  // Chunk content
   const chunks = chunkContent(cleanedContent);
-
-  // Generate embeddings for all chunks
   const chunkTexts = chunks.map((c) => c.text);
   const embeddings = await generateEmbeddings(chunkTexts);
 
-  // Store chunks in parallel, then batch-insert embeddings
   const dbChunks = await dbCreateChunks(
     source.id,
     chunks.map((chunk) => ({
@@ -196,23 +286,19 @@ async function processSource(
     embedding: embeddings[i],
   }));
 
-  // Batch insert all embeddings in one DB call
   await supabaseAdmin.from("embeddings").insert(embeddingRows);
 
-  return {
-    sourcesCreated: 1,
-    chunksCreated: dbChunks.length,
-  };
+  return { sourcesCreated: 1, chunksCreated: dbChunks.length };
 }
+
+// ── Concurrency helper ───────────────────────────────────────────────────────
 
 async function runWithConcurrency<T>(
   items: T[],
   concurrency: number,
   worker: (item: T) => Promise<void>
 ): Promise<void> {
-  if (items.length === 0) {
-    return;
-  }
+  if (items.length === 0) return;
 
   let currentIndex = 0;
   const workerCount = Math.min(concurrency, items.length);

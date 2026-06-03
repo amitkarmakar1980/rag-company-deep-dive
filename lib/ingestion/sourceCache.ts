@@ -7,7 +7,8 @@ export type EnrichmentSourceType =
   | "glassdoor_company"
   | "levels_fyi"
   | "built_in"
-  | "indeed_company";
+  | "indeed_company"
+  | "clearbit_company";
 
 export interface CachedSource {
   id: string;

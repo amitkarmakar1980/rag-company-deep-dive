@@ -30,7 +30,8 @@ export interface SourceInput {
     | "glassdoor_company"
     | "levels_fyi"
     | "built_in"
-    | "indeed_company";
+    | "indeed_company"
+    | "clearbit_company";
   content: string;
   title: string;
   url?: string;

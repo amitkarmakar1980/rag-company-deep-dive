@@ -17,6 +17,7 @@ import axios from "axios";
 import type { EnrichmentSourceType } from "./sourceCache";
 
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY;
+const CLEARBIT_API_KEY = process.env.CLEARBIT_API_KEY;
 const FIRECRAWL_BASE_URL = "https://api.firecrawl.dev/v1";
 const SCRAPE_TIMEOUT_MS = 30_000;
 const SEARCH_TIMEOUT_MS = 45_000;
@@ -294,6 +295,69 @@ export async function fetchIndeed(companyName: string): Promise<EnrichmentResult
   return dedupeByUrl(results).slice(0, 4);
 }
 
+/**
+ * Clearbit / HubSpot Breeze: structured firmographic data (headcount, revenue
+ * range, industry, tech stack, founding year, HQ, public/private status).
+ * Requires CLEARBIT_API_KEY. Lookup is by company domain extracted from companyName
+ * context — caller should pass the domain when available via the company URL.
+ */
+export async function fetchClearbit(
+  companyName: string,
+  domain?: string
+): Promise<EnrichmentResult[]> {
+  if (!CLEARBIT_API_KEY) return [];
+
+  const lookupDomain = domain ?? toSlug(companyName) + ".com";
+  const apiUrl = `https://company.clearbit.com/v2/companies/find?domain=${encodeURIComponent(lookupDomain)}`;
+  const citationUrl = `https://clearbit.com/companies/${encodeURIComponent(lookupDomain)}`;
+
+  try {
+    const res = await axios.get(apiUrl, {
+      headers: { Authorization: `Bearer ${CLEARBIT_API_KEY}` },
+      timeout: 15_000,
+    });
+    const c = res.data;
+    if (!c || !c.name) return [];
+
+    const lines: string[] = [
+      `# ${c.name} — Firmographic Profile (Clearbit)`,
+      "",
+      c.description ? `**Description:** ${c.description}` : "",
+      c.foundedYear ? `**Founded:** ${c.foundedYear}` : "",
+      c.employees ? `**Employees:** ${c.employees.toLocaleString()}` : "",
+      c.employeesRange ? `**Employee Range:** ${c.employeesRange}` : "",
+      c.estimatedAnnualRevenue ? `**Est. Annual Revenue:** ${c.estimatedAnnualRevenue}` : "",
+      c.type ? `**Ownership:** ${c.type}` : "",
+      c.ticker ? `**Ticker:** ${c.ticker}` : "",
+      c.industry ? `**Industry:** ${c.industry}` : "",
+      c.sector ? `**Sector:** ${c.sector}` : "",
+      c.geo?.city && c.geo?.country ? `**Headquarters:** ${c.geo.city}, ${c.geo.stateCode ?? ""} ${c.geo.country}`.trim() : "",
+      c.tags?.length ? `**Technologies / Tags:** ${(c.tags as string[]).join(", ")}` : "",
+      c.phone ? `**Phone:** ${c.phone}` : "",
+      c.domain ? `**Domain:** ${c.domain}` : "",
+    ].filter(Boolean);
+
+    const content = lines.join("\n");
+    if (content.length < 100) return [];
+
+    return [
+      {
+        sourceType: "clearbit_company" as EnrichmentSourceType,
+        title: `Clearbit: ${c.name} Firmographics`,
+        url: citationUrl,
+        content,
+      },
+    ];
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      console.warn(`[Enrichment] Clearbit: no record found for domain=${lookupDomain}`);
+    } else {
+      console.warn("[Enrichment] Clearbit fetch error:", err instanceof Error ? err.message : err);
+    }
+    return [];
+  }
+}
+
 // ── Orchestrator ─────────────────────────────────────────────────────────────
 
 export interface EnrichmentFetchPlan {
@@ -304,7 +368,8 @@ export interface EnrichmentFetchPlan {
 
 /** All enrichment sources in priority order. */
 export const ENRICHMENT_FETCH_PLAN: EnrichmentFetchPlan[] = [
-  { sourceType: "linkedin_company", label: "LinkedIn",   fetch: fetchLinkedIn },
+  { sourceType: "clearbit_company",  label: "Clearbit",  fetch: (name) => fetchClearbit(name) },
+  { sourceType: "linkedin_company",  label: "LinkedIn",  fetch: fetchLinkedIn },
   { sourceType: "glassdoor_company", label: "Glassdoor", fetch: fetchGlassdoor },
   { sourceType: "levels_fyi",        label: "Levels.fyi", fetch: fetchLevelsFyi },
   { sourceType: "built_in",          label: "Built In",  fetch: fetchBuiltIn },

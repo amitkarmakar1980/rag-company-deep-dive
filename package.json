@@ -15,7 +15,9 @@
     "setup-db": "node setup-db.mjs",
     "check-schema": "node check-schema.mjs",
     "docs:update": "node scripts/update-product-docs.mjs",
-    "eval:selftest": "npx tsx lib/v2/evals/selftest.ts"
+    "eval:selftest": "npx tsx lib/v2/evals/selftest.ts",
+    "trace:selftest": "npx tsx lib/v2/trace/selftest.ts",
+    "eval:all": "npm run eval:selftest && npm run trace:selftest"
   },
   "keywords": [],
   "author": "",

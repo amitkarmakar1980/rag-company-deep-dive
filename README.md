@@ -113,7 +113,7 @@ B14/B15).
 | Reasoning models | Claude (Opus 5 / Sonnet 5) | — |
 | Cheap-path models | Haiku 4.5 / `gpt-4o-mini` | — |
 | Evals | Promptfoo + custom TS scorers | LangSmith, Braintrust, Ragas, DeepEval |
-| Tracing | Langfuse | — |
+| Tracing | Own interface; Langfuse as an optional exporter | Langfuse as the foundation |
 | Reranking | Claude Haiku listwise (MVP) | Cohere Rerank v3 (deferred to measure) |
 | Store | Existing Supabase + pgvector | — |
 | Validation | zod 4 | — |
@@ -128,6 +128,7 @@ B14/B15).
 | [`lib/v2/contract/factOwnership.ts`](lib/v2/contract/factOwnership.ts) | Canonical fact ownership rules, ambiguity flagging |
 | [`lib/v2/contract/style-contract.md`](lib/v2/contract/style-contract.md) | Binding prose constraints, checkable vs judgment |
 | [`lib/v2/config/devTarget.ts`](lib/v2/config/devTarget.ts) | Pinned dev target (Microsoft) and its caveats |
+| [`lib/v2/trace/`](lib/v2/trace/) | Tracing: spans, sinks, and the queries evals read |
 | [`lib/v2/evals/scorers/`](lib/v2/evals/scorers/) | Seven deterministic scorers, absolute thresholds |
 | [`lib/v2/evals/selftest.ts`](lib/v2/evals/selftest.ts) | Proves each scorer catches its own defect |
 | [`lib/v2/evals/rubrics/`](lib/v2/evals/rubrics/) | Human scoring rubrics, one per section |

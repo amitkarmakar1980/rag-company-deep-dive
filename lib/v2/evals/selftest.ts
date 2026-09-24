@@ -1,4 +1,4 @@
-import * as fx from "./fixtures/companySnapshot";
+import * as fx from "./fixtures/layerA";
 import { allViolations, scoreReport } from "./scorers";
 
 /**
@@ -53,7 +53,7 @@ const cases: Case[] = [
   },
   {
     name: "missing required coverage element is caught by coverage",
-    expectCode: "coverage.missing.C3",
+    expectCode: "coverage.missing.BF3",
     run: () => score(fx.broken_missingCoverage()),
   },
   {

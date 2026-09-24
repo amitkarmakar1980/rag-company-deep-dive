@@ -32,42 +32,56 @@ interface CoverageElement {
 export const COVERAGE_REQUIREMENTS: Partial<
   Record<SectionId, CoverageElement[]>
 > = {
-  company_snapshot: [
+  business_fundamentals: [
     {
-      id: "C1",
+      id: "BF1",
       label: "Founding, ownership, current stage",
       satisfiedBy: ["ownership", "history"],
       required: true,
     },
     {
-      id: "C2",
-      label: "Scale — revenue or ARR, headcount, customers",
-      satisfiedBy: ["scale", "financials"],
+      id: "BF2",
+      label: "Scale — headcount, customers, geography",
+      satisfiedBy: ["scale"],
       required: true,
     },
     {
-      id: "C3",
+      id: "BF3",
       label: "Business model — how money is actually made",
       satisfiedBy: ["product", "pricing"],
       required: true,
     },
     {
-      id: "C4",
-      label: "Trajectory — growing, flat, or contracting",
+      id: "BF4",
+      label: "Named leadership and tenure",
+      satisfiedBy: ["leadership"],
+      required: false,
+    },
+  ],
+  trajectory_and_health: [
+    {
+      id: "TH1",
+      label: "Revenue scale and direction",
+      satisfiedBy: ["financials"],
+      required: true,
+    },
+    {
+      id: "TH2",
+      label: "Trajectory — growing, flat, or contracting, with evidence",
       satisfiedBy: ["financials", "market"],
       required: true,
     },
     {
-      id: "C5",
+      id: "TH3",
       label: "Recent material events (last ~18 months)",
       satisfiedBy: ["event"],
-      required: false,
+      required: true,
     },
     {
-      id: "C6",
-      label: "Financial health signal",
+      id: "TH4",
+      label: "Financial health signal — burn, profitability, runway, margin",
       satisfiedBy: ["financials", "risk"],
-      required: false,
+      required: true,
     },
   ],
 };

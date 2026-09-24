@@ -93,12 +93,88 @@ compact handoffs may crowd out its own retrieved evidence.
 **Watch:** strategy-module quality against handoff token count. Fix if needed is
 a relevance filter on inherited claims, not a smaller graph.
 
+## Deferred — later phases
+
+### B14. Layer B — interview preparation
+**Deferred.** Layer A (company intelligence + role analysis) is a complete
+product on its own; shipping it before adding surface area is the whole reason
+the section count came down from V1's 19.
+
+Two agents when built, both tier 5, both downstream of the full Layer A DAG:
+
+| Section | Depends on |
+|---|---|
+| `interview_agenda` — what interviewers will validate, worry about, need to see | `role_scope`, `role_origin`, `company_swot` |
+| `questions_to_ask` — must-ask and good questions, with strong/weak answer signals | `interview_agenda`, open questions, both SWOTs |
+
+V1's "Unknowns to Validate Live" is **not** an agent here — it is a derived view
+over `open_question` claims, which the schema already makes first-class.
+
+**Prerequisite:** Layer A scored on the golden set and holding its thresholds.
+Starting Layer B earlier means tuning prompts against an unstable foundation.
+
+### B15. Layer C — candidate positioning
+**Deferred, and deliberately last.** Requires a resume, which makes it the only
+part of the system handling PII.
+
+Four agents when built, consolidating V1's seven:
+
+| Section | Depends on | Consolidates from V1 |
+|---|---|---|
+| `candidate_match` — fit level, alignments, gaps | `role_scope`, `role_origin` | Candidate–Role Match |
+| `positioning_evidence` — strengths and stories mapped to role needs | `candidate_match`, `role_scope`, `interview_agenda` | Strengths to Emphasize + Story Recommendations |
+| `objections_and_gaps` — hardest objections, interviewer concerns, how to handle | `candidate_match`, `interview_agenda` | Objections + Interviewer Concerns + Gap Management |
+| `positioning_narrative` — headline, arc, "tell me about yourself" | all of Layer C | Positioning Strategy |
+
+Each V1 trio was one research problem split three ways, which guaranteed
+overlap and contradiction between them.
+
+**Open decisions, to settle when this phase starts:**
+- **Separate artifact or one document?** V1 bolted positioning onto the same
+  report. It is a different reader moment, and it is the only part containing
+  PII — which argues for a separate document with its own retention rules.
+- **Resume as a source.** The `Claim` contract works unchanged (a resume is a
+  source like any other), but grounding shifts from web evidence to the
+  candidate's own document, and the rubrics differ accordingly.
+- **PII handling.** Retention, store location, and whether resume chunks share
+  the pgvector store with public evidence. Needs deciding before any resume text
+  is persisted, not after.
+
+### B16. Derived views
+**Not agents.** Six of V1's sections discovered nothing — they were views over
+findings established elsewhere: executive summary, decision summary, assessment
+snapshot, 5-minute brief, unknowns to validate, risks & red flags.
+
+V1 generated each with its own model call, which is the direct cause of a bug it
+had to paper over: `getCanonicalRecommendation()` exists to reconcile
+"conflicting signals from report, executive summary, pursuit stance, and
+interview recommendation." Four independently generated summaries of the same
+evidence disagreed, and V1 needed a tiebreaker.
+
+In V2 these are computed from claims, so they cannot disagree. Built after the
+Layer A sections exist, since a view needs something to be a view of.
+
+| View | Derived from |
+|---|---|
+| Executive summary | section summaries, ranked by claim confidence and `soWhat` |
+| Decision summary | `company_swot` + `role_swot` + `role_scope` |
+| Assessment snapshot | claim counts, confidence distribution, coverage sufficiency per dimension |
+| 5-minute brief | highest-`soWhat` canonical claims, capped |
+| Unknowns to validate | every `open_question` claim, ranked, with `resolvesWith` |
+| Risks & red flags | `company_swot` weaknesses + threats, `risk` and `event` claims, severity-ranked |
+
 ## Open scope
 
-### B6. Sections beyond `company_snapshot`
-Golden set and rubric are being defined one section at a time, by Amit.
-Order after snapshot: TBD. Each section ships only when its rubric eval beats
-v1 on the golden set.
+### B6. Rubrics for the remaining Layer A sections
+Written and scored one section at a time, by Amit. Done:
+`business_fundamentals`, `trajectory_and_health`. Remaining: `stated_direction`,
+`operating_culture`, `product_and_customers`, `competitive_landscape`,
+`product_teardown`, `role_origin`, `company_swot`, `role_scope`, `role_swot`,
+`strategy_pov`.
+
+Each section ships only when it holds its absolute rubric thresholds. Ten
+rubrics is the real cost of Layer A, and human scoring is the bottleneck — see
+the note in README §7.
 
 ### B7. Cross-section contradiction handling
 Decided in principle: the prose pass must not paper over conflicting facts by

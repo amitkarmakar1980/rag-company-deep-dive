@@ -18,20 +18,20 @@ export type { FactType };
  * An empty or exhausted list means "ambiguous" — flagged, never guessed.
  */
 const OWNERSHIP_ORDER: Record<FactType, SectionId[]> = {
-  financials: ["company_snapshot", "swot"],
-  scale: ["company_snapshot"],
-  ownership: ["company_snapshot"],
-  history: ["company_snapshot", "vision_and_values"],
-  leadership: ["vision_and_values", "company_snapshot"],
-  culture: ["vision_and_values", "role_fit"],
+  financials: ["trajectory_and_health", "business_fundamentals", "company_swot"],
+  scale: ["business_fundamentals", "trajectory_and_health"],
+  ownership: ["business_fundamentals"],
+  history: ["business_fundamentals", "stated_direction"],
+  leadership: ["stated_direction", "business_fundamentals"],
+  culture: ["operating_culture", "role_scope"],
   product: ["product_and_customers", "product_teardown"],
   pricing: ["product_and_customers", "competitive_landscape"],
-  competitor: ["competitive_landscape", "swot"],
-  market: ["competitive_landscape", "strategy_module"],
-  strategy: ["strategy_module", "vision_and_values"],
-  risk: ["swot", "company_snapshot"],
-  event: ["company_snapshot", "swot"],
-  role: ["role_fit", "product_teardown"],
+  competitor: ["competitive_landscape", "company_swot"],
+  market: ["competitive_landscape", "strategy_pov"],
+  strategy: ["stated_direction", "strategy_pov"],
+  risk: ["trajectory_and_health", "company_swot", "role_swot"],
+  event: ["trajectory_and_health", "business_fundamentals", "role_origin"],
+  role: ["role_scope", "role_origin", "product_teardown"],
 };
 
 export interface FactCluster {

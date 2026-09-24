@@ -147,16 +147,38 @@ export const Claim = z
   });
 export type Claim = z.infer<typeof Claim>;
 
-/** Analytical dimensions. Each maps to one writer agent and one rubric. */
+/**
+ * Analytical dimensions. Each maps to one agent and one rubric.
+ *
+ * Layer A only — company intelligence and role analysis, which stands alone as
+ * a product. Interview prep (Layer B) and candidate positioning (Layer C) are
+ * deferred; see BACKLOG B14 / B15.
+ *
+ * Note what is absent: executive summary, decision summary, assessment
+ * snapshot, 5-minute brief, unknowns to validate, risks & red flags. None of
+ * those discover anything — they are views over claims established here, and
+ * they are derived deterministically rather than written by an agent. V1
+ * generated each with its own model call, which is why it needed
+ * `getCanonicalRecommendation()` to reconcile four summaries of the same
+ * evidence that disagreed with each other. A derived view cannot disagree.
+ */
 export const SectionId = z.enum([
-  "company_snapshot",
-  "vision_and_values",
+  // Tier 1 — foundational, parallel, no dependencies
+  "business_fundamentals",
+  "trajectory_and_health",
+  "stated_direction",
+  "operating_culture",
   "product_and_customers",
-  "product_teardown",
+  // Tier 2
   "competitive_landscape",
-  "swot",
-  "role_fit",
-  "strategy_module",
+  "product_teardown",
+  "role_origin",
+  // Tier 3
+  "company_swot",
+  "role_scope",
+  // Tier 4
+  "role_swot",
+  "strategy_pov",
 ]);
 export type SectionId = z.infer<typeof SectionId>;
 

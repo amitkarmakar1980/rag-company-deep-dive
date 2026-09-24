@@ -40,11 +40,11 @@ quote, and confidence. Prose is generated from claims at the end. A claim can be
 checked against the chunk it cites; a paragraph cannot.
 
 **2. One agent, one task — and sections are the agents.**
-Each of the eight sections is an agent owning one analytical responsibility. It
+Each of the twelve sections is an agent owning one analytical responsibility. It
 runs its own research loop, writes claims, verifies them, and hands its verified
 conclusions to the sections that depend on it. They are arranged as a dependency
 DAG ([`sectionGraph.ts`](lib/v2/contract/sectionGraph.ts)), so the report builds
-an argument instead of producing eight independent essays.
+an argument instead of producing twelve independent essays.
 
 **3. Agentic retrieval instead of one static pass.**
 The researcher runs a real loop: search the evidence store, judge whether the
@@ -71,23 +71,27 @@ restatements that must justify themselves.
 
 ## Architecture at a glance
 
-Sections are agents arranged as a dependency DAG. Each runs its own
+Twelve sections are agents arranged as a dependency DAG. Each runs its own
 research → write → verify loop, then hands its verified conclusions down to the
-sections that build on it.
+sections that build on it. This is Layer A — company intelligence and role
+analysis; interview prep and candidate positioning are later phases (BACKLOG
+B14/B15).
 
 ```
-        TIER 1              TIER 2              TIER 3          TIER 4
-   ┌──────────────┐
-   │   snapshot   │────┬──►┌─────────────┐──┬─►┌──────┐
-   ├──────────────┤    │   │ competitive │  │  │ swot │───┬────►┌──────────┐
-   │ vision/values│──┐ │   └─────────────┘  │  └──────┘   │     │ strategy │
-   ├──────────────┤  │ │                    │             │     └──────────┘
-   │ product/cust │──┼─┴──►┌─────────────┐──┘             │          ▲
-   └──────────────┘  │     │  teardown   │──┬─────────────┘          │
-                     │     └─────────────┘  │                        │
-                     └────────►┌──────────┐◄┘                        │
-                               │ role fit │───────────────────────────┘
-                               └──────────┘
+   TIER 1 (parallel)          TIER 2              TIER 3         T4        T5
+ ┌──────────────────────┐
+ │ business_fundamentals│──┬──►┌──────────────┐
+ │ trajectory_and_health│──┤   │ competitive_ │──┐
+ │ stated_direction     │──┤   │ landscape    │  │
+ │ operating_culture    │──┤   └──────────────┘  ├─►┌─────────────┐
+ │ product_and_customers│──┤   ┌──────────────┐  │  │ company_swot│─┬──►┌──────────┐
+ └──────────────────────┘  ├──►│product_tear- │──┤  └─────────────┘ │   │role_swot │──┐
+                           │   │down          │──┤                  │   └──────────┘  │
+                           │   └──────────────┘  │  ┌─────────────┐ │        ▲        ▼
+                           └──►┌──────────────┐──┼─►│ role_scope  │─┼────────┘   ┌──────────┐
+                               │ role_origin  │──┘  └─────────────┘ │            │strategy_ │
+                               └──────────────┘                     └───────────►│pov       │
+                                                                                 └──────────┘
 
    each node:  research loop ──► write claims ──► verify ──► handoff
                     ▲   │                          │  │
@@ -96,6 +100,7 @@ sections that build on it.
 
    then once:  reconcile ──► prose (1 call, whole doc) ──► check ──► render
                 (safety net)                              (audit)   (code)
+               plus 6 derived views, computed from claims — no agent, no prompt
 
    all of it under a deterministic state machine: persisted, resumable, costed
 ```
@@ -121,7 +126,10 @@ sections that build on it.
 | [`lib/v2/contract/sectionGraph.ts`](lib/v2/contract/sectionGraph.ts) | Section dependency DAG, tiers, handoff contract |
 | [`lib/v2/contract/factOwnership.ts`](lib/v2/contract/factOwnership.ts) | Canonical fact ownership rules, ambiguity flagging |
 | [`lib/v2/contract/style-contract.md`](lib/v2/contract/style-contract.md) | Binding prose constraints, checkable vs judgment |
-| [`lib/v2/evals/rubrics/company-snapshot.md`](lib/v2/evals/rubrics/company-snapshot.md) | First section's human scoring rubric |
+| [`lib/v2/config/devTarget.ts`](lib/v2/config/devTarget.ts) | Pinned dev target (Microsoft) and its caveats |
+| [`lib/v2/evals/scorers/`](lib/v2/evals/scorers/) | Seven deterministic scorers, absolute thresholds |
+| [`lib/v2/evals/selftest.ts`](lib/v2/evals/selftest.ts) | Proves each scorer catches its own defect |
+| [`lib/v2/evals/rubrics/`](lib/v2/evals/rubrics/) | Human scoring rubrics, one per section |
 | [`BACKLOG.md`](BACKLOG.md) | Deferred decisions, each with its decision criterion |
 
 ---
@@ -209,10 +217,11 @@ Ordering is **analytical, not incidental** — see
 
 | Tier | Sections | Depends on |
 |---|---|---|
-| 1 | snapshot, vision & values, product & customers | — |
-| 2 | product teardown, competitive landscape | tier 1 |
-| 3 | SWOT, role fit | tiers 1–2 |
-| 4 | strategy module | everything |
+| 1 | `business_fundamentals`, `trajectory_and_health`, `stated_direction`, `operating_culture`, `product_and_customers` | — |
+| 2 | `competitive_landscape`, `product_teardown`, `role_origin` | tier 1 |
+| 3 | `company_swot`, `role_scope` | tiers 1–2 |
+| 4 | `role_swot` | tier 3 |
+| 5 | `strategy_pov` | everything |
 
 An earlier draft had all eight writers run in parallel, blind to each other,
 with redundancy cleaned up afterwards. That was wrong. The dependencies are not
@@ -320,11 +329,11 @@ The prose pass is **one call over all sections**, not one per section.
 The obvious reason is voice consistency. The stronger reason is **cross-section
 redundancy**, which per-section calls cannot fix even in principle:
 
-> A layoff appears in `company_snapshot` as a recent event, in `swot` as a
-> weakness, in `strategy_module` as context, and in `competitive_landscape` as
-> relative position. Four sections, all legitimately citing it.
+> A layoff appears in `trajectory_and_health` as a recent event, in
+> `company_swot` as a weakness, in `role_origin` as the reason the seat exists,
+> and in `strategy_pov` as context. Four sections, all legitimately citing it.
 
-Eight isolated calls each write it fresh, and the reader meets the same fact four
+Isolated calls each write it fresh, and the reader meets the same fact four
 times. No section is wrong; the document is repetitive and feels padded. That is
 invisible at section level by construction.
 

@@ -8,10 +8,16 @@ import { build, type ReportScorer, type Violation } from "./types";
  * `fabrication.ts`, which checks that the prose invents nothing; this scorer
  * checks how the prose sounds.
  *
- * Score: 1 minus the violation rate per 1,000 words, floored at 0. Chosen so a
- * long report is not penalised for length — two banned phrases in 8,000 words is
- * a different situation from two in 400.
+ * Score: 1 minus a fixed deduction per violation — 0.10 fatal, 0.02 warn —
+ * floored at 0.
+ *
+ * An earlier version scored `1 - violationsPer1000Words`, which the self-test
+ * exposed as unusable: one warning in a 250-word fixture scored 0.0, and one
+ * warning in an 8,000-word report scored 0.875, still below the 0.95 threshold.
+ * A rate-based score makes the pass mark mean something different at every
+ * document length, which is the opposite of what a threshold is for.
  */
+const DEDUCTION: Record<"fatal" | "warn", number> = { fatal: 0.1, warn: 0.02 };
 
 /** §5 — banned language. The rule behind the list: no adjective a number could
  *  replace. */
@@ -168,13 +174,13 @@ export function styleScorer(opts: StyleScorerOptions = {}): ReportScorer {
       });
     }
 
-    const per1k = (violations.length / Math.max(words, 1)) * 1000;
-    const score = Math.max(0, 1 - per1k);
+    const deducted = violations.reduce((sum, v) => sum + DEDUCTION[v.severity], 0);
+    const score = Math.max(0, 1 - deducted);
 
     return build("style", violations, score, {
       words,
       violations: violations.length,
-      violationsPer1kWords: Number(per1k.toFixed(2)),
+      fatal: violations.filter((v) => v.severity === "fatal").length,
     });
   };
 }

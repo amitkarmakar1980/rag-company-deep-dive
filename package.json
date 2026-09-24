@@ -14,7 +14,8 @@
     "lint": "next lint",
     "setup-db": "node setup-db.mjs",
     "check-schema": "node check-schema.mjs",
-    "docs:update": "node scripts/update-product-docs.mjs"
+    "docs:update": "node scripts/update-product-docs.mjs",
+    "eval:selftest": "npx tsx lib/v2/evals/selftest.ts"
   },
   "keywords": [],
   "author": "",

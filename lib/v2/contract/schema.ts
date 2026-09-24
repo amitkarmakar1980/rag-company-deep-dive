@@ -55,9 +55,36 @@ export const ClaimRole = z.enum([
 ]);
 export type ClaimRole = z.infer<typeof ClaimRole>;
 
+/**
+ * What kind of thing a claim is about. A cheap mechanical label assigned at
+ * claim time — not a judgment about importance.
+ *
+ * Does double duty: drives canonical ownership (see `factOwnership.ts`) and
+ * makes rubric coverage checkable without a model call, since "does this
+ * section establish the company's scale" reduces to "is there a `scale` claim".
+ */
+export const FactType = z.enum([
+  "financials", // revenue, margin, burn, valuation, funding
+  "scale", // headcount, customer count, geography
+  "ownership", // public/private, investors, cap structure
+  "history", // founding, milestones, past pivots
+  "leadership", // named executives, org structure, tenure
+  "culture", // stated values, operating principles, employee signal
+  "product", // what is sold, to whom, how it works
+  "pricing", // packaging, tiers, contract shape
+  "competitor", // rival positioning, share, differentiation
+  "market", // category size, growth, structural dynamics
+  "strategy", // stated bets, investments, roadmap direction
+  "risk", // headwinds, litigation, regulatory, concentration
+  "event", // layoffs, M&A, restructuring — dated occurrences
+  "role", // scope, charter, reporting line, success measures
+]);
+export type FactType = z.infer<typeof FactType>;
+
 export const Claim = z
   .object({
     id: z.string(),
+    factType: FactType,
     /**
      * Canonical identity of the underlying fact, shared by every claim that
      * asserts it. Claims with the same factKey form one cluster.

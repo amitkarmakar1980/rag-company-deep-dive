@@ -1,4 +1,6 @@
-import type { SectionId } from "./schema";
+import type { FactType, SectionId } from "./schema";
+
+export type { FactType };
 
 /**
  * Canonical ownership rules for facts asserted by more than one section.
@@ -8,26 +10,6 @@ import type { SectionId } from "./schema";
  * and each human ruling becomes a new rule here. The rule set grows from real
  * ambiguity instead of speculation about it.
  */
-
-/**
- * What kind of thing a fact is about. Assigned by the section writer at claim
- * time — a cheap, mechanical label, not a judgment about importance.
- */
-export type FactType =
-  | "financials" // revenue, margin, burn, valuation, funding
-  | "scale" // headcount, customer count, geography
-  | "ownership" // public/private, investors, cap structure
-  | "history" // founding, milestones, past pivots
-  | "leadership" // named executives, org structure, tenure
-  | "culture" // stated values, operating principles, employee signal
-  | "product" // what is sold, to whom, how it works
-  | "pricing" // packaging, tiers, contract shape
-  | "competitor" // rival positioning, share, differentiation
-  | "market" // category size, growth, structural dynamics
-  | "strategy" // stated bets, investments, roadmap direction
-  | "risk" // headwinds, litigation, regulatory, concentration
-  | "event" // layoffs, M&A, restructuring, outage — dated occurrences
-  | "role"; // scope, charter, reporting line, success measures
 
 /**
  * Preference order per fact type: first section present in the report wins

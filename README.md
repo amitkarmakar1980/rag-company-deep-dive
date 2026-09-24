@@ -5,10 +5,11 @@ role. Given a company, a role, and a job description, it produces a grounded
 intelligence brief: what the company actually is, where it is going, what the
 role really owns, and whether it is worth pursuing.
 
-> **Status.** V1 is the shipping pipeline and still generates every report
-> today. V2 is a ground-up rearchitecture, currently at the contract layer with
-> no model code written. Both live in this repo; V2 will take over only when it
-> beats V1 on measured evals. V1 documentation is preserved at
+> **Status.** Under rearchitecture. V1 produced reports of inadequate quality
+> and is being replaced outright, not kept as a fallback — its generation
+> pipeline will be deleted once V2 works end to end (see §9 for what is reused).
+> V2 is currently at the contract layer with no model code written. V1 remains
+> in history, tagged `v1-legacy`, documented at
 > [docs/v1-README.md](docs/v1-README.md).
 
 ---
@@ -491,10 +492,12 @@ architecture makes quality measurable; it does not make it automatic.
 
 ## 8. Build order
 
-Each step ships only when its eval beats the V1 baseline.
+Each step ships only when it clears its **absolute rubric thresholds**. V1 is
+not a baseline to beat — it is being replaced, not competed with (see §10).
 
 1. **Contract + rubrics** ← current
-2. **Baseline harness against V1** — without a baseline, "better" is unfalsifiable
+2. **Eval harness with absolute thresholds** — Promptfoo plus custom scorers,
+   scoring against the rubrics directly. No V1 comparison run.
 3. **Retrieval layer** — hybrid BM25 + vector, Haiku rerank, coverage index;
    evaluated in isolation on recall@k. Retrieval caps everything downstream, so
    it precedes every agent.
@@ -503,12 +506,32 @@ Each step ships only when its eval beats the V1 baseline.
    consumes its handoffs. One section at a time, each with its own verifier loop.
 6. **Reconciliation + orchestrator + renderer** — deterministic
 7. **Prose pass + checker**
-8. **Flip the flag** when end-to-end evals beat V1
+8. **Cut over** — V2 becomes the only pipeline; V1 generation is deleted
 
-## 9. Contributing to this rearchitecture
+## 9. Reuse vs replacement
 
-- V1 code is frozen, not deleted. `lib/v2/` is additive; the Next.js app,
-  Supabase schema, auth, and Firecrawl ingestion are reused as-is.
+V1's report generation is being discarded, not maintained behind a flag. Its
+application shell is not — that part works, and rebuilding it would be waste.
+
+| Reused as-is | Discarded |
+|---|---|
+| Next.js app, routing, auth | `lib/report/*` — assemblers, personas, quality gate |
+| Supabase schema, pgvector store | `lib/ai/prompts.ts` — the mega-prompts |
+| Firecrawl ingestion and crawling | `lib/retrieval/search.ts` — fixed-query retrieval |
+| Admin, history, diagnostics surfaces | V1 report page rendering |
+
+V1 stays in git history, tagged `v1-legacy` on `master`, and is deleted from
+this branch once V2 produces a report end to end. Keeping it runnable in
+parallel was considered and rejected: a fallback nobody should use is
+maintenance cost with no upside, and it distorts the eval plan into a
+comparison against something already known to be inadequate.
+
+**Consequence for evals.** With no baseline to beat, thresholds are absolute
+and set by the rubrics: coverage elements present, quality dimensions at or
+above 3, zero automatic failures. Regression testing compares V2 against *its
+own* previous scored run, not against V1.
+
+## 10. Contributing to this rearchitecture
 - Deferred decisions belong in [`BACKLOG.md`](BACKLOG.md) with a decision
   criterion, not in comments. An item without a way to settle it is an argument,
   not a backlog entry.

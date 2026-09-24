@@ -1,341 +1,515 @@
 # Company Deep Dive Engine
 
-An AI-powered interview decision-support and candidate-positioning tool for senior product, strategy, and GM candidates at Director+ and VP level.
+Research tooling for senior product leaders evaluating a specific company and
+role. Given a company, a role, and a job description, it produces a grounded
+intelligence brief: what the company actually is, where it is going, what the
+role really owns, and whether it is worth pursuing.
 
-Rather than producing a generic research report, the engine answers one question: **should you pursue this role, and if so, how do you win the interview?**
-
-## Current Highlights
-
-- **Canonical recommendation engine** — unified `getCanonicalRecommendation()` resolves conflicting signals from report, executive summary, pursuit stance, and interview recommendation into a single authoritative level (0–4), with candidate fit score as a floor veto
-- **Prompt injection hardening** — all user-supplied text (company URL, JD, profile context, resume) is sanitized through `sanitizeSingleLineText` / `sanitizeMultiLineText` / `sanitizeHttpUrl` before reaching any LLM prompt; suspicious instruction-injection patterns are stripped and injected content is wrapped in `<<<BEGIN_*>>>` / `<<<END_*>>>` delimiters
-- **Overhauled report page** — new layout, richer section rendering, and tighter component contracts across all 14 report sections + overlay
-- **Overhauled history view** — enriched history cards with recommendation label, scores, and company metadata
-- Admin dashboard with tracked OpenAI spend/tokens, Firecrawl remaining credits, and Supabase row-count visibility
-- Admin user and activity views enriched with resolved auth names and emails for clearer attribution
-- Branded app icon and social preview metadata for link unfurls and browser surfaces
+> **Status.** V1 is the shipping pipeline and still generates every report
+> today. V2 is a ground-up rearchitecture, currently at the contract layer with
+> no model code written. Both live in this repo; V2 will take over only when it
+> beats V1 on measured evals. V1 documentation is preserved at
+> [docs/v1-README.md](docs/v1-README.md).
 
 ---
 
-## What It Does
+# Summary
 
-### For every company + role, it generates:
+## Why V2 exists
 
-- **Interview Decision Summary** — Pursue recommendation (Aggressive / Selective / Cautious / Pass), positioning angle, top 3 questions, red flag to validate
-- **5-Minute Brief** — Skimmable pre-interview card set with smart questions
-- **Executive Summary** — Overall opportunity narrative with pursuit stance
-- **Assessment Snapshot** — Scored across 5 dimensions (company momentum, org clarity, role leverage, execution risk, candidate fit)
-- **Strategic Importance of This Role** — Classification of strategic weight, evidence, what could disprove it, career upside
-- **Likely Interview Agenda** — What interviewers validate, worry about, and need to see per dimension
-- **Questions to Ask** — Must Ask (top 3 with follow-ups) + Good Questions, each with strong/weak answer signals
-- **Risks & Red Flags** — Evidence-grounded, severity-ranked
-- **Unknowns to Validate Live** — Live interview questions with reassuring vs. concerning answer patterns
-- **Company Snapshot + SWOT** — Min 5 items per quadrant, all evidence-linked
-- **Role Snapshot + SWOT** — Charter, success metrics, Y1 expectations, structural risks
-- **Why This Role Exists Now** — Original thesis on what changed to create this hire
+V1 produced reports of poor and unpredictable quality. Extended debugging did
+not fix it, because the problems were architectural rather than defects:
 
-### When a resume is uploaded, it also generates:
+| Problem | Root cause |
+|---|---|
+| Shallow, generic analysis | One mega-prompt wrote the entire report in a single pass |
+| Missing or wrong facts | Retrieval was 8 hardcoded queries, one pass, embeddings only, no gap detection |
+| Confident fabrication | Nothing distinguished a sourced fact from a model guess |
+| Fixes that didn't stick | No evals — every change was a guess, every regression invisible |
+| Hard to change safely | 25k LOC with generation, analysis, and rendering entangled |
 
-- **Candidate–Role Match** — Fit level (strong / moderate / stretch / mismatch), 1–10 score, alignments with resume evidence, gaps
-- **Strengths to Emphasize** — Resume-grounded, mapped to what this hiring manager actually cares about
-- **Objections You Must Overcome** — The 3–5 hardest objections with how to respond, proof points, what not to say
-- **Likely Interviewer Concerns** — Severity-ranked worries + the probing questions they'll ask
-- **Gap Management** — Real gaps named honestly, reframes, verbatim talking points
-- **Story Recommendations** — Specific resume stories fleshed out + mapped to JD requirements
-- **Positioning Strategy** — Headline, narrative arc, and a ready-to-use Tell Me About Yourself
+The through-line: **V1 could not be measured, so it could not be improved.**
 
----
+## What changes in V2
 
-## Architecture
+**1. Reports are structured data, not prose.**
+The model emits `Claim` objects — one assertion each, with a label
+(`fact` / `inference` / `open_question`), cited evidence, a verbatim supporting
+quote, and confidence. Prose is generated from claims at the end. A claim can be
+checked against the chunk it cites; a paragraph cannot.
 
-### Two-tier LLM pipeline (parallel)
+**2. One agent, one task — and sections are the agents.**
+Each of the eight sections is an agent owning one analytical responsibility. It
+runs its own research loop, writes claims, verifies them, and hands its verified
+conclusions to the sections that depend on it. They are arranged as a dependency
+DAG ([`sectionGraph.ts`](lib/v2/contract/sectionGraph.ts)), so the report builds
+an argument instead of producing eight independent essays.
 
-Report generation fires two LLM calls simultaneously and merges the results:
+**3. Agentic retrieval instead of one static pass.**
+The researcher runs a real loop: search the evidence store, judge whether the
+question is actually answered, and if not, fetch new sources, index them, and
+try again — budget-capped. V1's fixed queries capped report quality at whatever
+those eight embeddings happened to return.
 
-| Tier | Model | Sections |
+**4. Evals first, and they gate merges.**
+Promptfoo plus custom scorers, layered as unit (claim), component (section), and
+integration (whole document). A golden set of 12–15 companies, human-scored
+against per-section rubrics. No prompt change ships unless the suite holds.
+
+**5. Enforcement in the type system, not the prompt.**
+A `fact` with no evidence does not parse. An `inference` with no stated
+reasoning does not parse. An `open_question` that cites a source does not parse.
+These are schema invariants, not instructions a model can drift away from.
+
+**6. Redundancy handled where it arises.**
+Because upstream conclusions flow downstream, a section *knows* what has already
+been established and references it instead of restating it. A reconciliation
+pass remains as a safety net for same-tier collisions, assigning one canonical
+owner per fact and demoting the rest to cross-references — or to deliberate
+restatements that must justify themselves.
+
+## Architecture at a glance
+
+Sections are agents arranged as a dependency DAG. Each runs its own
+research → write → verify loop, then hands its verified conclusions down to the
+sections that build on it.
+
+```
+        TIER 1              TIER 2              TIER 3          TIER 4
+   ┌──────────────┐
+   │   snapshot   │────┬──►┌─────────────┐──┬─►┌──────┐
+   ├──────────────┤    │   │ competitive │  │  │ swot │───┬────►┌──────────┐
+   │ vision/values│──┐ │   └─────────────┘  │  └──────┘   │     │ strategy │
+   ├──────────────┤  │ │                    │             │     └──────────┘
+   │ product/cust │──┼─┴──►┌─────────────┐──┘             │          ▲
+   └──────────────┘  │     │  teardown   │──┬─────────────┘          │
+                     │     └─────────────┘  │                        │
+                     └────────►┌──────────┐◄┘                        │
+                               │ role fit │───────────────────────────┘
+                               └──────────┘
+
+   each node:  research loop ──► write claims ──► verify ──► handoff
+                    ▲   │                          │  │
+                    └───┘                          └──┘
+              (agentic, budget-capped)        (bounded, max 2 rounds)
+
+   then once:  reconcile ──► prose (1 call, whole doc) ──► check ──► render
+                (safety net)                              (audit)   (code)
+
+   all of it under a deterministic state machine: persisted, resumable, costed
+```
+
+## Stack decisions
+
+| Layer | Choice | Rejected |
 |---|---|---|
-| Deep Analysis | `o4-mini` (fallback: `gpt-4o`) | company_swot, role_swot, strategic_bet_analysis, why_role_exists_now, risks_red_flags |
-| Interview Layer | `gpt-4o-mini` | executive_summary, assessment_snapshot, likely_interview_agenda, questions_to_ask, unknowns_to_validate, company_snapshot, role_snapshot, interview_decision_summary, five_minute_brief |
-| Candidate Overlay | `gpt-4o` | All 7 resume-personalization sections |
+| Framework | None — plain TypeScript | LangChain, LlamaIndex |
+| Reasoning models | Claude (Opus 5 / Sonnet 5) | — |
+| Cheap-path models | Haiku 4.5 / `gpt-4o-mini` | — |
+| Evals | Promptfoo + custom TS scorers | LangSmith, Braintrust, Ragas, DeepEval |
+| Tracing | Langfuse | — |
+| Reranking | Claude Haiku listwise (MVP) | Cohere Rerank v3 (deferred to measure) |
+| Store | Existing Supabase + pgvector | — |
+| Validation | zod 4 | — |
 
-`o4-mini` handles sections requiring multi-step strategic reasoning and non-obvious SWOT synthesis. `gpt-4o-mini` handles synthesis and formatting. Both base calls run in parallel via `Promise.all` — latency is bounded by the slower of the two, not their sum. If `o4-mini` fails, the pipeline automatically retries with `gpt-4o`.
+## Built so far
 
-### Ingestion pipeline
-
-```
-URL / JD input
-  → LLM research planner — selects up to 10 sources and targets at least 5 external websites beyond the company domain when possible
-  → Firecrawl (v2 scrape API, axios fallback) — scrape planned sources
-    → cleanContent()  — strip HTML, boilerplate, normalize
-    → chunkContent()  — semantic + token-based, ~500 tokens/chunk, 50-token overlap
-    → generateEmbeddings()  — OpenAI text-embedding-3-small, 1536 dims
-    → Supabase (bulk chunk insert + pgvector embeddings)
-    Sources processed with concurrency=3 (not sequentially)
-```
-
-### Retrieval
-
-```
-Planner-selected topic query embedding
-    → semanticSearch()  — Supabase RPC (cosine distance, ivfflat index)
-    → rerank()  — recency boost, source type weights, strategic keyword density,
-                  company/role name mentions
-    → Top 18 chunks → RetrievalContext (batch DB queries, not sequential)
-```
-
-### Stack
-
-| Layer | Technology |
+| File | Purpose |
 |---|---|
-| Framework | Next.js 16 (App Router) |
-| Language | TypeScript |
-| Styling | Tailwind CSS |
-| Database | Supabase PostgreSQL + pgvector |
-| Auth | Supabase Auth (email/password + Google OAuth) |
-| LLM | OpenAI-compatible providers with automatic fallback (`o3`, `o4-mini`, `gpt-4o`, `gpt-4o-mini`, `text-embedding-3-small`) |
-| Web scraping | Firecrawl v2 API (axios fallback) |
-| File parsing | pdf-parse (v1), mammoth (DOCX/DOC) |
-| Resume persistence | localStorage (`useResumeStore` hook) |
+| [`lib/v2/contract/schema.ts`](lib/v2/contract/schema.ts) | Claim / Section / Report contract and invariants |
+| [`lib/v2/contract/sectionGraph.ts`](lib/v2/contract/sectionGraph.ts) | Section dependency DAG, tiers, handoff contract |
+| [`lib/v2/contract/factOwnership.ts`](lib/v2/contract/factOwnership.ts) | Canonical fact ownership rules, ambiguity flagging |
+| [`lib/v2/contract/style-contract.md`](lib/v2/contract/style-contract.md) | Binding prose constraints, checkable vs judgment |
+| [`lib/v2/evals/rubrics/company-snapshot.md`](lib/v2/evals/rubrics/company-snapshot.md) | First section's human scoring rubric |
+| [`BACKLOG.md`](BACKLOG.md) | Deferred decisions, each with its decision criterion |
 
 ---
 
-## Project Structure
+# Details
+
+## 1. Where the agency actually is
+
+"Agentic" is worth being precise about, because most of this pipeline is
+deliberately **not** agentic.
+
+### Genuinely agentic
+
+**The researcher loop** — the one component with real autonomy, and the highest-
+value addition in V2. Per research question:
 
 ```
-app/
-  icon.svg                         # App icon used by Next metadata
-  page.tsx                         # Homepage with resume panel
-  admin/page.tsx                   # Admin dashboard for usage and activity monitoring
-  auth/page.tsx                    # Email/password + Google OAuth
-  deep-dive/
-    new/page.tsx                   # New deep dive form
-    [id]/page.tsx                  # Report page (polling, overlay, view modes)
-  history/page.tsx                 # User's last 20 deep dives
-  api/
-    admin/
-      activity/                    # Recent report activity with user identity + model usage
-      stats/                       # Aggregate usage and adoption metrics
-      usage/                       # OpenAI spend, Firecrawl credits, Supabase row counts
-      users/                       # Paginated user list with resolved profile details
-    deep-dive/
-      create/                      # Create request + fire async pipeline
-      status/                      # Poll processing status
-      extract-jd/                  # Extract JD fields from a URL
-      [id]/regenerate/             # Re-run full pipeline
-    cron/
-      retry-queue/                 # Vercel Cron (every 5 min) — retry stuck/failed requests
-    report/[id]/                   # Fetch report + sections + token usage
-    overlay/[requestId]/           # Poll overlay status + data
-    resume/
-      upload/                      # Upload resume → trigger overlay
-      parse/                       # Client-side file → text extraction
-    feedback/                      # Per-section useful/not_useful
-    history/                       # User report history
-
-lib/
-  types/index.ts                   # All domain types + LLMCallUsage + ReportTokenUsage
-  ai/
-    openai.ts                      # generateDeepAnalysis (o3) + generateInterviewLayer (mini) + generateCandidateOverlay (4o)
-    prompts.ts                     # getDeepAnalysisPrompt + getInterviewLayerPrompt
-    overlayPrompt.ts               # getCandidateOverlayPrompt (7 sections)
-    embeddings.ts                  # generateEmbedding / generateEmbeddings
-    untrustedInput.ts              # sanitizeSingleLineText / sanitizeMultiLineText / sanitizeHttpUrl / formatUntrustedTextBlock
-  db/
-    supabase.ts                    # Admin client
-    operations.ts                  # ~40 CRUD functions for all entities
-  ingestion/
-    ingest.ts                      # Main ingestion orchestrator
-    firecrawl.ts                   # URL fetch + buildSourceUrls
-    clean.ts                       # HTML cleaning + content hash
-    chunk.ts                       # Semantic chunking
-  retrieval/
-    search.ts                      # semanticSearch + rerank
-  report/
-    assembleReport.ts              # Parallel LLM calls → merge → store
-    generateOverlay.ts             # Candidate overlay generation
-    recommendation.ts              # getCanonicalRecommendation - unified recommendation resolver (levels 0-4)
-  hooks/
-    useResumeStore.ts              # localStorage resume persistence
-
-components/
-  DeepDiveForm.tsx                 # Multi-step form with inline resume panel
-  ReportSectionCard.tsx            # Section dispatcher → typed renderer
-  HomepageResumePanel.tsx          # Homepage resume upload/display
-  report/
-    InterviewDecisionSummary.tsx   # Color-coded pursue recommendation card
-    FiveMinuteBrief.tsx            # 6-card skimmable brief
-    StrategicImportanceCard.tsx    # Strategic bet classification
-    LikelyInterviewAgenda.tsx      # Accordion interview dimensions
-    QuestionsCard.tsx              # Must Ask + Good Questions
-    UnknownsToValidate.tsx         # Amber accordion with answer signals
-    CandidateOverlaySections.tsx   # Base overlay section renderers (6)
-    ObjectionHandling.tsx          # Red accordion objection handling
-    TokenUsagePanel.tsx            # Collapsible API usage + cost breakdown
-    SourcesPanel.tsx               # Evidence sources with citations
-    SectionShell.tsx               # Collapsible section wrapper
-
-database/
-  schema.sql                       # Full schema + pgvector + RPC function
-
-docs/
-  product-brief.md                 # Auto-generated feature list + customer journeys
-
-public/
-  social-preview.svg               # Open Graph / Twitter preview image
-
-scripts/
-  update-product-docs.mjs          # Regenerates docs/product-brief.md from source files
+search evidence store
+   │
+   ├── judge: is this question actually answered?
+   │      │
+   │      ├── yes ──► record answer + coverage, stop
+   │      │
+   │      └── no ──► decide what is missing
+   │                 choose a tool (web search / crawl / filings / job boards)
+   │                 fetch, chunk, embed, index
+   │                 └──► loop (budget-capped: N iterations, $ ceiling)
+   │
+   └── exhausted ──► record as unresolved, mark coverage thin
 ```
 
----
+This is an agent by any reasonable definition: it selects tools, decides its own
+trajectory, evaluates its own progress, and chooses when to stop. Crucially it
+can also **fail honestly** — an unresolved question becomes `thin` coverage
+rather than an invitation to fabricate.
 
-## Database Schema
+V1 had no equivalent. It retrieved once against fixed queries and wrote whatever
+those chunks supported. If the eight queries missed something, the report simply
+did not know it, and nothing in the system noticed.
 
-```
-users
-companies
-deep_dive_requests    status: pending → fetching_sources → indexing → generating_report → completed | failed
-sources               source_type: job_description | company_homepage | newsroom | blog | custom_url | profile_text
-chunks
-embeddings            vector(1536), ivfflat index, cosine distance
-reports               5 scores + recommendation + summary_json (token usage)
-report_sections       14 section keys, content stored as JSON string
-candidate_resumes
-candidate_overlays    overlay_json JSONB, status: pending | generating | completed | failed
-feedback_events
-```
+**Two bounded revision loops** — the verifier returns rejected claims to their
+writer, and the prose checker returns violations to the prose writer. Max two
+rounds each. Genuine feedback loops, deliberately small: the failure modes are
+known and enumerable, so unbounded exploration buys nothing.
 
-Custom PostgreSQL function:
-```sql
-search_embeddings(query_embedding vector, request_id uuid, match_count int, similarity_threshold float)
-```
+### Deliberately not agentic
 
----
-
-## Setup
-
-### Prerequisites
-
-- Node.js 18+
-- Supabase project (pgvector enabled)
-- OpenAI API key
-- Firecrawl API key (optional — falls back to axios)
-
-### Environment variables
-
-```bash
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
-# OpenAI
-OPENAI_API_KEY=
-OPENAI_BASE_URL=
-OPENAI_FALLBACK_API_KEY=
-OPENAI_FALLBACK_BASE_URL=
-
-# Firecrawl (optional)
-FIRECRAWL_API_KEY=
-
-# Optional site metadata base URL
-NEXT_PUBLIC_APP_URL=
-# or
-NEXT_PUBLIC_SITE_URL=
-
-# Cron job protection (set to any secret string)
-CRON_SECRET=
-```
-
-### Database setup
-
-Run `database/schema.sql` in your Supabase SQL editor. This enables the pgvector extension, creates all tables and indexes, and sets up the `search_embeddings` RPC function.
-
-### Install and run
-
-```bash
-npm install
-npm run dev
-# → http://localhost:3000
-```
-
----
-
-## Key Behaviors
-
-### Report page view modes
-
-| Mode | Sections shown |
+| Step | Why fixed |
 |---|---|
-| **Full Report** | All 14 sections + overlay + sources + token usage |
-| **5-Minute Brief** | `interview_decision_summary`, `five_minute_brief`, `assessment_snapshot` only |
+| Orchestration | A state machine is resumable, traceable, and costable. An agent deciding its own pipeline order is unobservable and unrepeatable. |
+| Fact reconciliation | A rules table (`factOwnership.ts`) — the same inputs must always produce the same ownership, or eval numbers stop meaning anything. |
+| Rendering | Plain code. Verified claims are known-good; handing them back to a model to "write up nicely" reintroduces fabrication at the last step. |
+| Schema validation | zod. Not a judgment call. |
 
-Toggle is in the page header. Brief mode shows an amber banner with a link back to full.
+### The principle
 
-### Admin dashboard
+**Agency where judgment is required; determinism everywhere else.**
 
-Admins get a dedicated dashboard at `/admin` with four server-backed views:
+Part of what went wrong in V1 was the inverse — non-deterministic where it
+should have been fixed (report structure varied run to run), and rigid where
+judgment was needed (retrieval could not adapt to what it found). V2 inverts
+both.
 
-- Overview totals for users, requests, completed reports, tracked AI spend, and total token usage
-- API usage cards for OpenAI tracked spend, Firecrawl remaining credits, and Supabase table row counts
-- Paginated user table with resolved auth profile name/email plus request and completion counts
-- Recent activity feed showing company, role, recommendation, token usage, and per-model call details
+### One agent, one task
 
-### Resume handling
+| Agent | Single job | Sees |
+|---|---|---|
+| Planner | Research questions per dimension | company, role, JD |
+| Researcher | Answer one question, or declare it unanswerable | one question, the store, fetch tools |
+| Section agent ×8 | Own one analytical dimension end to end | its own evidence + upstream handoffs |
+| Verifier | Does this claim's quote support it? Is the label right? | one claim, one chunk |
+| Prose writer | Render verified claims as prose | all claims, style contract |
+| Prose checker | Does the prose add anything not in the claims? | prose + claims |
 
-- Accepted: PDF, DOCX, DOC, TXT
-- Parsed client-side via `/api/resume/parse` → stored in localStorage
-- Persists across sessions via `useResumeStore`
-- Auto-triggers overlay on report load if resume already on file
-- Available on homepage, both form steps, and report page
+No agent holds two responsibilities, and no agent sees more context than its job
+requires.
 
-### Token usage panel
+### Sections as agents, arranged as a DAG
 
-Every report shows a collapsible breakdown of:
-- Per-call: model name, purpose, input/output/reasoning tokens, estimated cost, token bar
-- Totals: tokens this report, cost per report, estimated 100-reports/month cost
-- Pricing reference table (o3, gpt-4o, gpt-4o-mini, gpt-4-turbo)
+A section agent is the unit of responsibility. It owns one dimension and runs
+its own loop: research → write claims → verify → revise → hand off.
 
-### Auto-updating product docs
+Ordering is **analytical, not incidental** — see
+[`sectionGraph.ts`](lib/v2/contract/sectionGraph.ts):
 
-```bash
-npm run docs:update
-```
+| Tier | Sections | Depends on |
+|---|---|---|
+| 1 | snapshot, vision & values, product & customers | — |
+| 2 | product teardown, competitive landscape | tier 1 |
+| 3 | SWOT, role fit | tiers 1–2 |
+| 4 | strategy module | everything |
 
-Reads 8 source-of-truth files, calls `gpt-4o` to regenerate `docs/product-brief.md` (feature list + 5 customer journeys). The pre-commit hook at `.git/hooks/pre-commit` runs this automatically when feature-defining files are staged and adds the result to the commit. Fails gracefully if `OPENAI_API_KEY` is unavailable.
+An earlier draft had all eight writers run in parallel, blind to each other,
+with redundancy cleaned up afterwards. That was wrong. The dependencies are not
+about duplicated facts — they are about **analytical build-up**. A SWOT written
+blind to the competitive analysis is a worse SWOT. A strategy module written
+blind to the SWOT is much worse. Eight blind writers structurally cannot produce
+a report that builds an argument; they produce eight essays that happen to share
+a subject.
 
----
+It also answers the objection that sank the earlier sequential proposal. "Whichever
+section runs first owns the fact is arbitrary" holds only when the order is
+incidental. When the order is a deliberate dependency graph, foundational
+sections own foundational facts *because they are foundational*. That is correct,
+not arbitrary.
 
-## Data Flow
+**Handoffs are deliberately compact.** A dependent receives the upstream
+section's summary, its canonical claim statements with ids, its open questions,
+and its coverage sufficiency — not its evidence bodies. Tier 4 depends on all
+seven upstream sections; passing full evidence would bloat context and dilute
+attention exactly where synthesis matters most. Downstream sections reference an
+upstream claim by id rather than re-citing its chunks, which is what stops the
+same fact being stated four times.
 
-```
-Form submit
-  → POST /api/deep-dive/create
-      → createDeepDiveRequest()
-      → setImmediate(() => runPipeline())    ← non-blocking
-      ← { requestId }
+Each dependency edge carries a `usesUpstreamFor` string that goes into the
+agent's prompt. A dependency with no stated purpose is decoration, and would just
+be context bloat.
 
-runPipeline()
-  → ingestSources()
-      → Firecrawl × N URLs → clean → chunk → embed → store
-  → assembleReport()
-      → semanticSearch() + rerank()
-      → Promise.all([
-          generateDeepAnalysis(o4-mini),      ← SWOT + strategy + risks
-          generateInterviewLayer(gpt-4o-mini) ← prep + synthesis sections
-        ])
-      → merge StructuredReport
-      → store 14 report_sections + token_usage
-  → if resume: generateOverlay(gpt-4o)
-      → store overlay_json in candidate_overlays
+**Tradeoffs accepted:**
 
-Frontend
-  → poll GET /api/deep-dive/status every 3s until completed
-  → fetch GET /api/report/[id]
-  → poll GET /api/overlay/[requestId] every 3s (if resume present)
-```
+- *Latency — accepted by design.* The critical path is four tiers deep instead of
+  one parallel batch. This is not a real-time system and does not need to be: a
+  more accurate report is worth the wait, and slowness is handled as a UI
+  expectation rather than by trimming the architecture. The corollary is that
+  defaults lean generous throughout — research iterations, verification rounds,
+  retrieval depth are set by sufficiency and recall, not by speed. Cost per run
+  remains a hard ceiling; an unterminated loop is still a bug.
+- *Error propagation.* A wrong tier-1 conclusion poisons everything downstream —
+  a risk V1's single pass did not have. Mitigated by verifying **before**
+  handoff: a section's claims are ground-checked and its labels audited before
+  any dependent sees them. This is why verification sits inside each section's
+  loop rather than running once globally after all writing.
+- *Upstream thinness compounds.* A dependent receives `sufficiency` and must
+  temper its confidence when upstream coverage was thin, rather than treating a
+  weakly-supported upstream conclusion as settled fact.
 
----
+## 2. The claim contract
 
-## License
+The central decision, from which everything else follows.
 
-ISC
+V1 emitted prose:
+
+> Acme has grown rapidly, driven by strong enterprise adoption and a successful
+> pivot to AI-first products, though margin pressure remains a concern.
+
+Four fused assertions, two unfalsifiable adjectives, no way to tell sourced from
+invented. When a report like this is wrong, you cannot locate *where*.
+
+V2 emits claims, each independently checkable. Three properties follow:
+
+**Fabrication becomes mechanically detectable.** Every `EvidenceRef` carries a
+verbatim `quote`. The verifier checks that exact string occurs in the cited
+chunk — a substring test, no model call, near-zero cost. An invented number has
+no quote to find.
+
+**Epistemic honesty becomes a schema constraint.** See
+[`schema.ts`](lib/v2/contract/schema.ts) `superRefine`: an unsourced `fact` fails
+validation, an `inference` without explicit reasoning fails validation, an
+`open_question` citing evidence fails validation. Not prompt instructions — the
+data does not parse.
+
+**Quality becomes a number.** "Is the report good?" is unanswerable. "Of 47
+claims, 44 quotes verify, 3 facts should have been inferences, 2 of 8 dimensions
+have no coverage" moves when a prompt changes.
+
+### What this does not catch
+
+A claim can be perfectly grounded in a real quote and still be the wrong thing
+to tell a candidate, or a correct quote read out of context. The schema handles
+mechanical failure; the human rubrics handle judgment. This boundary is
+deliberate — automation covers what it can verify, and human attention goes
+where it is irreplaceable.
+
+## 3. Structure vs voice
+
+A false start worth recording. The first proposal was to choose per section
+between deterministic rendering and LLM prose. That was wrong: a report where
+one section is terse bullets and the next is flowing narrative reads like two
+documents stapled together, which is worse than either mode used consistently.
+
+The correct axis is two independent decisions:
+
+- **Structure** — tables, timelines, ranked lists, comparison grids. *Varies by
+  section.* Deterministic code, always.
+- **Voice** — who writes the sentences. *Never varies.* One pass, one style
+  contract, whole document.
+
+This is how analyst reports already work: an equity research note mixes tables,
+charts, and narrative on one page in a single voice, and nobody reads it as
+inconsistent.
+
+## 4. One prose pass for the whole document
+
+The prose pass is **one call over all sections**, not one per section.
+
+The obvious reason is voice consistency. The stronger reason is **cross-section
+redundancy**, which per-section calls cannot fix even in principle:
+
+> A layoff appears in `company_snapshot` as a recent event, in `swot` as a
+> weakness, in `strategy_module` as context, and in `competitive_landscape` as
+> relative position. Four sections, all legitimately citing it.
+
+Eight isolated calls each write it fresh, and the reader meets the same fact four
+times. No section is wrong; the document is repetitive and feels padded. That is
+invisible at section level by construction.
+
+Only a document-level pass can avoid restating what the reader just read, thread
+forward references, and build an arc rather than eight independent essays. It is
+also 1 call instead of 8.
+
+**Tradeoffs accepted:**
+
+- *Uneven treatment.* A single long pass tends to write early sections fully and
+  thin out toward the end. Detected by prose-to-claim ratio per section, which
+  should be flat. Fallback is a lightweight global outline pass first
+  ([`BACKLOG.md`](BACKLOG.md) B5).
+- *Blast radius.* One bad number should not force regenerating the document. The
+  checker reports per passage and triggers a targeted revision.
+
+**The testing analogy that settled it:** claim-level checks are unit tests,
+section rubrics are component tests, and the properties that actually make a
+long report readable — no redundancy, consistent voice, coherent flow, no
+internal contradictions — are only observable at integration level. Per-section
+prose would have left that layer permanently unmeasurable, which is the V1
+failure mode relocated rather than fixed.
+
+## 5. Redundancy: resolved in data, not prose
+
+First proposal: catch redundancy in the prose pass. Rejected as too late — by
+then eight sections have each committed structure around a fact they may not
+keep.
+
+Second proposal: writers stay parallel and blind, with a global reconciliation
+pass afterwards. Also rejected — parallel blind writers cannot build an argument
+(see §1).
+
+Chosen: the **dependency DAG handles most of it structurally.** A downstream
+section receives upstream conclusions in its handoff, so it already knows what
+has been established and can reference rather than restate. This is redundancy
+prevented at the point it would arise, not cleaned up afterwards.
+
+Reconciliation remains, reduced to a **safety net** for what the DAG cannot
+catch: two sections in the *same tier* independently asserting the same fact,
+with no edge between them to inform either one. It runs over all claims before
+prose.
+
+1. Cluster claims asserting the same fact — cheap, because claims are structured:
+   shared evidence chunk plus semantic match.
+2. Assign the **canonical owner**: the section where the fact carries most weight.
+3. Demote the rest.
+
+| Role | Renders as |
+|---|---|
+| `canonical` | stated in full, with evidence |
+| `reference` | short callback — "the FY24 layoffs noted above" |
+| `reinforce` | restated from a *different angle*, with required justification |
+
+`reinforce` encodes the standing rule: **repetition is acceptable only where it
+serves continuity, otherwise drop it.** Mirroring how an `inference` must state
+its reasoning, a `reinforce` must state what the restatement adds — and without
+that justification the schema rejects it. The rule is enforced, not merely
+documented.
+
+### Ownership: fixed rules, grown from real cases
+
+[`factOwnership.ts`](lib/v2/contract/factOwnership.ts) maps 14 fact types to a
+section preference order. Deliberately thin. When no rule covers a cluster,
+`resolveOwner` returns `ambiguous` with candidates and a reason — **it never
+guesses.** Those surface for a human ruling, and each ruling becomes a new rule.
+
+A complete table written up front would encode invented ambiguity. Growing it
+from flagged cases means every rule traces to a case that actually occurred. A
+model-based assignment is deferred ([`BACKLOG.md`](BACKLOG.md) B3) until the
+fixed table is shown to be visibly wrong often enough to justify it.
+
+## 6. Voice: the four choices and one real tension
+
+Settled in [`style-contract.md`](lib/v2/contract/style-contract.md):
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| Register | **Opinionated advisor** | A report that lists facts and leaves the reader to assemble meaning has failed. Willing to say the uncomfortable thing. |
+| Epistemic markers | **Explicit** | Inferences visually tagged with their basis. Costs some flow; buys auditability and makes the label taxonomy visible to the reader, not just the eval. |
+| Reader address | **Impersonal** | Opinionated about the company, never presumptuous about the reader's circumstances. |
+| Length | **Comprehensive, 6,000+** | A reference document across an interview process, not a single-sitting read. |
+
+### The tension
+
+**Opinionated writing draws its force from selectivity. 6,000+ words dilutes
+it.** A long document buries its positions in analysis — close to how V1 reads.
+
+Resolved by constraint rather than by shortening:
+
+- Every section leads with its conclusion, so the document works for a reader
+  who reads only the openings.
+- Load-bearing inferences are marked **The call —**, so positions are findable by
+  scanning.
+- Prose-to-claim ratio is capped, so length can only come from *more evidence*,
+  never more words per claim.
+
+Tracked as [`BACKLOG.md`](BACKLOG.md) B8 with a falsifiable test: can a
+golden-set reader state the report's top three positions after skimming? If not,
+the fix is a front-matter verdict block, not a shorter report.
+
+### Checkable vs judgment
+
+The style contract separates rules enforced mechanically (no second person,
+every inference marked, every number traceable to a claim, every quantitative
+claim dated, banned phrases absent, prose-to-claim ratio in band) from rules
+scored by rubric (sentence variation, paragraph discipline, conclusion-first
+ordering). Without that split, "good writing" stays an aspiration.
+
+The banned-phrase list has one rule behind it: **no adjective a number could
+replace.** "Rapidly growing" is banned not for being a cliché but because it is
+a number the report failed to find.
+
+## 7. Evals
+
+Built **before** the agents, not after. This is the single biggest process
+change from V1, where prompts were tuned against impressions.
+
+### Tooling
+
+**Promptfoo** for the harness and CI gate — MIT, Node-native, config-driven,
+with built-in RAG assertions (`llm-rubric`, `context-faithfulness`,
+`context-recall`). **Langfuse** for tracing, because the researcher loop is
+useless if its trajectory is invisible.
+
+Domain-specific scorers Promptfoo has no opinion about — per-claim grounding,
+fact/inference label accuracy, dimension coverage — are plain TS functions
+invoked as `javascript:` assertions. Standard harness, custom metrics, no
+homegrown runner.
+
+Rejected: **LangSmith** (hosted, free only on a small personal tier — and
+LangChain is not an eval framework, a point worth stating since it is commonly
+assumed); **Braintrust** (excellent, paid); **Ragas** and **DeepEval**
+(Python-only, would split the stack for no gain).
+
+### Layers
+
+| Layer | Unit | Catches |
+|---|---|---|
+| Unit | one claim | ungrounded quote, wrong label, fabricated number |
+| Component | one section | missing coverage, thin evidence, weak so-what |
+| Integration | whole report | redundancy, voice drift, broken flow, contradictions |
+
+### The golden set
+
+12–15 companies, spanning failure modes rather than sampled for convenience:
+
+- 3 large public — dense filings; tests synthesis, not retrieval
+- 3 mid-size private — thin coverage; tests honesty about gaps
+- 3 recently distressed — tests whether it says the hard thing
+- 3 low-profile / non-US — sparse web presence; tests the researcher's floor
+- 2–3 known firsthand — the only bucket where a plausible-but-wrong answer is
+  reliably caught
+
+Scored by hand, one section at a time, against per-section rubrics: coverage
+booleans, quality scores 1–5, automatic failures, plus free-text notes on the
+single best and single worst claim. **The free-text notes are the highest-signal
+input for prompt iteration** — more useful in practice than the scores.
+
+### Honest constraint
+
+Human scoring is the bottleneck of this plan, and it cannot be delegated to the
+model being evaluated. If it does not happen, V2 drifts exactly as V1 did. The
+architecture makes quality measurable; it does not make it automatic.
+
+## 8. Build order
+
+Each step ships only when its eval beats the V1 baseline.
+
+1. **Contract + rubrics** ← current
+2. **Baseline harness against V1** — without a baseline, "better" is unfalsifiable
+3. **Retrieval layer** — hybrid BM25 + vector, Haiku rerank, coverage index;
+   evaluated in isolation on recall@k. Retrieval caps everything downstream, so
+   it precedes every agent.
+4. **Researcher loop** — highest-value new component
+5. **Section agents, in tier order** — tier 1 first, since everything downstream
+   consumes its handoffs. One section at a time, each with its own verifier loop.
+6. **Reconciliation + orchestrator + renderer** — deterministic
+7. **Prose pass + checker**
+8. **Flip the flag** when end-to-end evals beat V1
+
+## 9. Contributing to this rearchitecture
+
+- V1 code is frozen, not deleted. `lib/v2/` is additive; the Next.js app,
+  Supabase schema, auth, and Firecrawl ingestion are reused as-is.
+- Deferred decisions belong in [`BACKLOG.md`](BACKLOG.md) with a decision
+  criterion, not in comments. An item without a way to settle it is an argument,
+  not a backlog entry.
+- No prompt change merges on a quality argument. Run the evals.

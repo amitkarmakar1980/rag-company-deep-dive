@@ -106,6 +106,46 @@ silently picking one. A contradiction that exists *in the evidence* is a
 finding a candidate wants. Still to build: the checker distinguishing
 writer-introduced contradictions from evidence-level ones.
 
+### B12. Delete V1 residue
+**Timing:** after the first section is built end to end and produces a report
+for the dev target. Not before — V1 is the only runnable pipeline until then,
+and deleting it early means debugging V2 with no reference point for what the
+app expects.
+
+**Delete:**
+- `lib/report/` — `assemblePremiumReport{,V2,V3}.ts`, `assembleReport.ts`,
+  `premiumPersona.ts`, `premiumQualityGate.ts`, `premiumTelemetry.ts`,
+  `premiumPresentationViewModel.ts`, `premiumTypes.ts`, `recommendation.ts`,
+  `generateOverlay.ts`, `citationMetadata.ts`, `sourceLinks.ts`, `v3/`
+- `lib/ai/prompts.ts` — the mega-prompts
+- `lib/retrieval/search.ts` — fixed-query retrieval
+- V1-only report page rendering in `app/deep-dive/[id]/page.tsx` (2,358 lines)
+- `app/api/overlay/`, and V1-only branches in `app/api/deep-dive/*`
+- Root-level schema scripts superseded by `supabase/`: `check-schema.*`,
+  `create-schema.mjs`, `execute-schema.mjs`, `setup-schema.mjs`,
+  `show-schema.mjs`, `schema-ready-to-copy.sql`
+
+**Keep:** Next.js app and routing, auth, Supabase schema and pgvector store,
+Firecrawl ingestion, admin/history/diagnostics surfaces, `lib/db/`.
+
+**Also delete at cutover:** `lib/v2/config/devTarget.ts` and any hardcoded
+target it is wired into.
+
+**Method:** one commit that only deletes, after a green `npm run build`, so the
+removal is trivially revertible and separable from feature work. V1 remains
+recoverable at tag `v1-legacy` regardless.
+
+### B13. Dev target is the easy case
+**Now:** Microsoft, hardcoded, for the whole build-out
+(`lib/v2/config/devTarget.ts`).
+**Why it is not sufficient:** dense filings and an enormous web footprint mean
+almost any query returns something usable. It never exercises the researcher
+loop's failure branch, and as a conglomerate it invites holding-company
+altitude — competent-reading output that is useless for one specific role,
+which is the exact failure V1 shipped.
+**Decide by:** running the sparse-footprint and mid-size-private golden-set
+buckets before declaring any section done.
+
 ## Graduated
 
 _(empty — nothing measured yet)_

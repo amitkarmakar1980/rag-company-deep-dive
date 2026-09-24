@@ -1,3 +1,5 @@
+import { assertRenderOrderComplete } from "@/lib/v2/contract/renderOrder";
+import { resolveTiers } from "@/lib/v2/contract/sectionGraph";
 import * as fx from "./fixtures/layerA";
 import { allViolations, scoreReport } from "./scorers";
 
@@ -105,6 +107,17 @@ function main(): number {
   log("");
   log("Scorer self-test");
   log("");
+
+  // ── Contract integrity: the graph and the reading order must agree. ──
+  // Cheap, and it fails loudly rather than dropping a section from the report.
+  try {
+    resolveTiers();
+    assertRenderOrderComplete();
+    log("  PASS  section graph is acyclic and fully covered by the reading order");
+  } catch (err) {
+    failures++;
+    log(`  FAIL  contract integrity: ${(err as Error).message}`);
+  }
 
   // ── Obligation 1: the clean fixture passes everything. ──
   const clean = score(fx.CLEAN_REPORT, fx.CLEAN_PROSE, fx.CLEAN_WORDS);

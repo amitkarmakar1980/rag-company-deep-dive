@@ -124,6 +124,7 @@ B14/B15).
 |---|---|
 | [`lib/v2/contract/schema.ts`](lib/v2/contract/schema.ts) | Claim / Section / Report contract and invariants |
 | [`lib/v2/contract/sectionGraph.ts`](lib/v2/contract/sectionGraph.ts) | Section dependency DAG, tiers, handoff contract |
+| [`lib/v2/contract/renderOrder.ts`](lib/v2/contract/renderOrder.ts) | Reading order and narrative blocks, independent of the DAG |
 | [`lib/v2/contract/factOwnership.ts`](lib/v2/contract/factOwnership.ts) | Canonical fact ownership rules, ambiguity flagging |
 | [`lib/v2/contract/style-contract.md`](lib/v2/contract/style-contract.md) | Binding prose constraints, checkable vs judgment |
 | [`lib/v2/config/devTarget.ts`](lib/v2/config/devTarget.ts) | Pinned dev target (Microsoft) and its caveats |
@@ -266,6 +267,26 @@ be context bloat.
 - *Upstream thinness compounds.* A dependent receives `sufficiency` and must
   temper its confidence when upstream coverage was thin, rather than treating a
   weakly-supported upstream conclusion as settled fact.
+
+### Reading order is not execution order
+
+Two separate files, deliberately:
+
+| File | Question it answers | Kind of question |
+|---|---|---|
+| `sectionGraph.ts` | what does this section need in order to be written? | analytical — has right and wrong answers |
+| `renderOrder.ts` | what order should a reader meet these in? | editorial — has no dependency implications |
+
+Conflating them is a trap: it would mean improving the reading flow by weakening
+a section's inputs. Kept apart, reading order is free to change with no
+regeneration, because rendering is deterministic code over claims that already
+exist.
+
+The report reads in four narrative blocks — the company, the company verdict,
+the role, the recommendation — so a reader who stops early still gets a complete
+thought. Reading position and dependency depth are unrelated: `role_origin`
+reads ninth but executes at tier 2, and `company_swot` reads eighth but executes
+at tier 3.
 
 ## 2. The claim contract
 

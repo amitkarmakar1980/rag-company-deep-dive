@@ -95,6 +95,39 @@ a relevance filter on inherited claims, not a smaller graph.
 
 ## Deferred — later phases
 
+### B17. Iteration 1 is accuracy-first — an intentional trade
+**Decided.** For the first working version, correctness beats speed and beats
+call count. Every knob below is set the expensive way on purpose.
+
+| Knob | Iteration 1 | The cheap alternative, deferred |
+|---|---|---|
+| Verifier batching | **unbatched** — one call per claim | batch ~10 claims per call, ~10× cheaper |
+| Verifier model | **strong** (Sonnet 5) | Haiku 4.5 |
+| Claim writer model | **Opus 5** | Sonnet 5 |
+| Planner model | **Sonnet 5** | Haiku 4.5 |
+| Researcher iterations | capped by evidence sufficiency | capped by a fixed low number |
+| Revision rounds | 2 | 1, or none |
+| Retrieval candidate set | wide, deep rerank | narrow top-k |
+
+**The ordering principle: start expensive, downgrade with evidence.** The
+reverse cannot work. If a cheap configuration produces a bad section, nothing
+distinguishes a model that was too weak from a prompt that was wrong, and the
+usual response is to rewrite a prompt that was fine. Starting strong makes a
+failure attributable to the prompt or the design, which is the only kind of
+failure worth debugging. Each downgrade then becomes its own measured
+experiment against a known-good result.
+
+Unbatched verification has a second reason beyond model strength: ten claims in
+one call are graded in each other's context, which is exactly how a weak claim
+gets carried by a strong neighbour. One claim, one chunk, no cross-contamination.
+
+**Still bounded.** Speed is relaxed; cost is not unbounded and loops must
+terminate. A per-run ceiling stays, and an unterminated researcher loop is a
+bug, not thoroughness. See B9.
+
+**Revisit when:** Layer A holds its rubric thresholds on the golden set. Then
+each downgrade is tried one at a time, and kept only if scores hold.
+
 ### B14. Layer B — interview preparation
 **Deferred.** Layer A (company intelligence + role analysis) is a complete
 product on its own; shipping it before adding surface area is the whole reason
